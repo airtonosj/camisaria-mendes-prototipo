@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#050607">
+    <meta name="description" content="Protótipo visual da plataforma Camisaria Mendes.">
+    <title>Camisaria Mendes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0,0" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+
+    <header class="site-header" id="site-header">
+      <div class="container header-inner">
+        <button class="brand brand-button" type="button" data-go="home" aria-label="Voltar para o início">
+          <img src="assets/logo-mendes.png" alt="">
+          <span>Camisaria Mendes</span>
+        </button>
+
+        <nav class="desktop-nav" aria-label="Navegação principal">
+          <button class="nav-link active" type="button" data-go="home">Início</button>
+          <button class="nav-link" type="button" data-scroll="campanhas">Campanhas</button>
+          <button class="nav-link" type="button" data-scroll="como-funciona">Como funciona</button>
+        </nav>
+
+        <button class="button button-outline header-admin" type="button" data-go="admin-login">
+          Acesso da camisaria
+        </button>
+
+        <button class="icon-button menu-toggle" id="menu-toggle" type="button" aria-label="Abrir menu" aria-expanded="false">
+          <span class="material-symbols-rounded">menu</span>
+        </button>
+      </div>
+
+      <nav class="mobile-nav" id="mobile-nav" aria-label="Navegação mobile">
+        <button type="button" data-go="home">Início</button>
+        <button type="button" data-scroll="campanhas">Campanhas</button>
+        <button type="button" data-scroll="como-funciona">Como funciona</button>
+        <button type="button" data-go="admin-login">Acesso da camisaria</button>
+      </nav>
+    </header>
+
+    <main id="conteudo">
+      <section class="view active" id="view-home" data-view="home">
+        <section class="hero">
+          <div class="container hero-grid">
+            <div class="hero-copy">
+              <p class="eyebrow">Camisetas que representam sua história</p>
+              <h1>A camisa da sua turma, <span>do seu jeito.</span></h1>
+              <p class="hero-description">Escolha o modelo, informe seu tamanho e faça seu pedido de maneira rápida e segura.</p>
+              <div class="hero-actions">
+                <button class="button button-primary" type="button" data-scroll="campanhas">
+                  Ver campanhas
+                  <span class="material-symbols-rounded">arrow_forward</span>
+                </button>
+                <button class="button button-secondary" type="button" data-go="admin-login">Acesso da camisaria</button>
+              </div>
+              <div class="hero-trust">
+                <span><span class="material-symbols-rounded">verified_user</span>Compra segura</span>
+                <span><span class="material-symbols-rounded">palette</span>Modelos para todos</span>
+              </div>
+            </div>
+
+            <div class="hero-products" aria-label="Modelos de camisas disponíveis">
+              <figure class="hero-shirt common">
+                <img src="assets/shirt-common.png" alt="Camisa comum branca">
+                <figcaption>Comum</figcaption>
+              </figure>
+              <figure class="hero-shirt oversized">
+                <img src="assets/shirt-oversized.png" alt="Camisa oversized preta">
+                <figcaption>Oversized</figcaption>
+              </figure>
+              <figure class="hero-shirt babylook">
+                <img src="assets/shirt-babylook.png" alt="Camisa baby look azul">
+                <figcaption>Baby Look</figcaption>
+              </figure>
+            </div>
+          </div>
+        </section>
+
+        <section class="steps-section" id="como-funciona">
+          <div class="container steps-grid">
+            <div class="section-heading compact">
+              <p class="eyebrow">Como funciona</p>
+              <h2>Simples em 3 passos</h2>
+            </div>
+            <article class="step">
+              <span class="step-number">01</span>
+              <span class="step-icon material-symbols-rounded">search</span>
+              <div><h3>Escolha a campanha</h3><p>Encontre seu curso ou turma.</p></div>
+            </article>
+            <article class="step">
+              <span class="step-number">02</span>
+              <span class="step-icon material-symbols-rounded">checkroom</span>
+              <div><h3>Defina seu modelo</h3><p>Selecione tipo, tamanho e quantidade.</p></div>
+            </article>
+            <article class="step">
+              <span class="step-number">03</span>
+              <span class="step-icon material-symbols-rounded">shopping_bag</span>
+              <div><h3>Finalize o pedido</h3><p>Pague e acompanhe até a retirada.</p></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="campaigns-section" id="campanhas">
+          <div class="container">
+            <div class="section-heading campaigns-heading">
+              <div>
+                <p class="eyebrow">Campanhas em destaque</p>
+                <h2>Campanhas disponíveis</h2>
+                <p>Escolha sua área e encontre a camisa que vai acompanhar sua história.</p>
+              </div>
+              <label class="search-field">
+                <span class="material-symbols-rounded">search</span>
+                <span class="sr-only">Filtrar campanhas</span>
+                <input id="campaign-filter" type="search" placeholder="Busque seu curso ou turma">
+              </label>
+            </div>
+
+            <div class="campaign-grid" id="campaign-grid">
+              <article class="campaign-card" data-search="engenharia civil turma 2026">
+                <div class="campaign-image">
+                  <img src="assets/campaign-engineering.png" alt="Camisa preta da campanha de Engenharia Civil">
+                  <span class="campaign-badge">Encomendas abertas</span>
+                </div>
+                <div class="campaign-content">
+                  <p class="course-label">Engenharia Civil</p>
+                  <h3>Engenharia Civil — Turma 2026</h3>
+                  <p class="campaign-school">Faculdade Mendes • Formandos</p>
+                  <div class="campaign-meta">
+                    <strong>R$ 59,90</strong>
+                    <span><span class="material-symbols-rounded">calendar_today</span> até 31/08/2026</span>
+                  </div>
+                  <button class="button button-dark full-width" type="button" data-campaign="Engenharia Civil">Ver camisa</button>
+                </div>
+              </article>
+
+              <article class="campaign-card" data-search="enfermagem turma 2026">
+                <div class="campaign-image blue">
+                  <img src="assets/campaign-nursing.png" alt="Camisa azul da campanha de Enfermagem">
+                  <span class="campaign-badge">Encomendas abertas</span>
+                </div>
+                <div class="campaign-content">
+                  <p class="course-label">Enfermagem</p>
+                  <h3>Enfermagem — Turma 2026</h3>
+                  <p class="campaign-school">Faculdade Mendes • 8º período</p>
+                  <div class="campaign-meta">
+                    <strong>R$ 59,90</strong>
+                    <span><span class="material-symbols-rounded">calendar_today</span> até 15/09/2026</span>
+                  </div>
+                  <button class="button button-dark full-width" type="button" data-campaign="Enfermagem">Ver camisa</button>
+                </div>
+              </article>
+
+              <article class="campaign-card" data-search="administração administracao turma 2026">
+                <div class="campaign-image">
+                  <img src="assets/campaign-admin.png" alt="Camisa preta da campanha de Administração">
+                  <span class="campaign-badge">Encomendas abertas</span>
+                </div>
+                <div class="campaign-content">
+                  <p class="course-label">Administração</p>
+                  <h3>Administração — Turma 2026</h3>
+                  <p class="campaign-school">Faculdade Mendes • Turma Noturna</p>
+                  <div class="campaign-meta">
+                    <strong>R$ 59,90</strong>
+                    <span><span class="material-symbols-rounded">calendar_today</span> até 20/09/2026</span>
+                  </div>
+                  <button class="button button-dark full-width" type="button" data-campaign="Administração">Ver camisa</button>
+                </div>
+              </article>
+            </div>
+            <p class="empty-message" id="campaign-empty" hidden>Nenhuma campanha encontrada.</p>
+          </div>
+        </section>
+
+        <section class="assurance-section">
+          <div class="container assurance-grid">
+            <article><span class="material-symbols-rounded">verified</span><div><h3>Qualidade garantida</h3><p>Malha premium e acabamento cuidadoso.</p></div></article>
+            <article><span class="material-symbols-rounded">tune</span><div><h3>Do seu jeito</h3><p>Tipo, tamanho e personalização.</p></div></article>
+            <article><span class="material-symbols-rounded">lock</span><div><h3>Pagamento seguro</h3><p>Processamento pela InfinitePay.</p></div></article>
+          </div>
+        </section>
+      </section>
+
+      <section class="view product-view" id="view-campaign" data-view="campaign">
+        <div class="container product-breadcrumb">
+          <button type="button" class="back-link" data-go="home"><span class="material-symbols-rounded">arrow_back</span> Voltar às campanhas</button>
+        </div>
+        <div class="container product-layout">
+          <div class="product-gallery">
+            <div class="main-product-image">
+              <img id="product-image" src="assets/campaign-engineering.png" alt="Camisa da campanha selecionada">
+            </div>
+            <div class="gallery-note">
+              <span class="material-symbols-rounded">zoom_in</span>
+              <span>Visualização ilustrativa do produto</span>
+            </div>
+          </div>
+
+          <div class="product-details">
+            <p class="course-label" id="product-course-label">Engenharia Civil</p>
+            <h1 id="product-title">Engenharia Civil — Turma 2026</h1>
+            <p class="product-description">Camiseta oficial da turma, produzida em malha 100% algodão com estampa de alta durabilidade.</p>
+            <p class="product-price">R$ <span>59,90</span></p>
+
+            <div class="deadline-box">
+              <span class="material-symbols-rounded">event</span>
+              <div><strong>Pedidos até 31 de agosto</strong><small>Retirada em 30/09, na Faculdade Mendes</small></div>
+            </div>
+
+            <fieldset class="option-group">
+              <legend>Escolha o tipo</legend>
+              <div class="choice-row" id="type-options">
+                <button class="choice active" type="button" data-type="Comum">Comum</button>
+                <button class="choice" type="button" data-type="Oversized">Oversized</button>
+                <button class="choice" type="button" data-type="Baby Look">Baby Look</button>
+              </div>
+            </fieldset>
+
+            <fieldset class="option-group">
+              <div class="legend-row"><legend>Escolha o tamanho</legend><button type="button" id="size-guide-button">Ver tabela de medidas</button></div>
+              <div class="choice-row sizes" id="size-options">
+                <button class="choice" type="button" data-size="P">P</button>
+                <button class="choice active" type="button" data-size="M">M</button>
+                <button class="choice" type="button" data-size="G">G</button>
+                <button class="choice" type="button" data-size="GG">GG</button>
+                <button class="choice" type="button" data-size="XG">XG</button>
+              </div>
+            </fieldset>
+
+            <div class="product-fields">
+              <label>Quantidade
+                <span class="quantity-control">
+                  <button type="button" id="qty-minus" aria-label="Diminuir quantidade">−</button>
+                  <input id="quantity" type="number" value="1" min="1" max="20" inputmode="numeric">
+                  <button type="button" id="qty-plus" aria-label="Aumentar quantidade">+</button>
+                </span>
+              </label>
+              <label>Nome ou apelido <small>Opcional</small>
+                <input id="personalization" type="text" maxlength="20" placeholder="Ex.: Mendes">
+              </label>
+            </div>
+
+            <button class="button button-primary full-width product-cta" id="add-to-cart" type="button">
+              Adicionar ao pedido
+              <span id="product-total">R$ 59,90</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="view checkout-view" id="view-checkout" data-view="checkout">
+        <div class="container narrow-container">
+          <button class="back-link" type="button" data-go="campaign"><span class="material-symbols-rounded">arrow_back</span> Voltar ao produto</button>
+          <div class="checkout-heading">
+            <p class="eyebrow">Finalização</p>
+            <h1>Conclua seu pedido</h1>
+            <p>Seus dados serão usados apenas para esta simulação visual.</p>
+          </div>
+          <div class="checkout-grid">
+            <form class="checkout-form" id="checkout-form">
+              <h2>Seus dados</h2>
+              <label>Nome completo<input name="name" type="text" required placeholder="Digite seu nome"></label>
+              <div class="field-grid">
+                <label>Telefone<input name="phone" type="tel" required placeholder="(98) 99999-9999"></label>
+                <label>E-mail<input name="email" type="email" required placeholder="voce@email.com"></label>
+              </div>
+              <fieldset class="payment-options">
+                <legend>Forma de pagamento</legend>
+                <label class="payment-card active">
+                  <input type="radio" name="payment" value="Pix" checked>
+                  <span class="material-symbols-rounded">qr_code_2</span>
+                  <span><strong>Pix</strong><small>Aprovação imediata</small></span>
+                  <span class="material-symbols-rounded check-icon">check_circle</span>
+                </label>
+                <label class="payment-card">
+                  <input type="radio" name="payment" value="Cartão">
+                  <span class="material-symbols-rounded">credit_card</span>
+                  <span><strong>Cartão</strong><small>Crédito ou débito</small></span>
+                  <span class="material-symbols-rounded check-icon">check_circle</span>
+                </label>
+              </fieldset>
+              <p class="payment-note"><span class="material-symbols-rounded">lock</span>O pagamento será processado pela InfinitePay.</p>
+              <button class="button button-primary full-width" type="submit">Pagar pedido</button>
+            </form>
+
+            <aside class="order-summary">
+              <h2>Resumo da compra</h2>
+              <div class="summary-product">
+                <img id="summary-image" src="assets/campaign-engineering.png" alt="">
+                <div><strong id="summary-product-name">Engenharia Civil — Turma 2026</strong><span id="summary-variant">Comum • M • 1 unidade</span></div>
+              </div>
+              <dl>
+                <div><dt>Produto</dt><dd id="summary-subtotal">R$ 59,90</dd></div>
+                <div><dt>Entrega</dt><dd>Retirada gratuita</dd></div>
+                <div class="summary-total"><dt>Total</dt><dd id="summary-total">R$ 59,90</dd></div>
+              </dl>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section class="view admin-login-view" id="view-admin-login" data-view="admin-login">
+        <div class="login-shell">
+          <div class="login-brand">
+            <img src="assets/logo-mendes.png" alt="Logo Camisaria Mendes">
+            <div><strong>Camisaria Mendes</strong><span>Gestão de campanhas</span></div>
+          </div>
+          <form class="login-card" id="login-form">
+            <p class="eyebrow">Área restrita</p>
+            <h1>Acesso da camisaria</h1>
+            <p>Entre para acompanhar campanhas, pedidos e produção.</p>
+            <label>E-mail<input type="email" required value="gestao@camisariamendes.com.br"></label>
+            <label>Senha<input type="password" required value="camisaria2026"></label>
+            <button class="button button-primary full-width" type="submit">Entrar no painel</button>
+            <button class="text-button" type="button" data-go="home">Voltar para a loja</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="view admin-view" id="view-admin" data-view="admin">
+        <aside class="admin-sidebar" id="admin-sidebar">
+          <div class="admin-brand">
+            <img src="assets/logo-mendes.png" alt="">
+            <div><strong>Camisaria Mendes</strong><span>Painel da camisaria</span></div>
+          </div>
+          <nav aria-label="Menu administrativo">
+            <button class="admin-nav active" type="button" data-admin-page="overview"><span class="material-symbols-rounded">space_dashboard</span>Visão geral</button>
+            <button class="admin-nav" type="button" data-admin-page="campaigns"><span class="material-symbols-rounded">campaign</span>Campanhas</button>
+            <button class="admin-nav" type="button" data-admin-page="products"><span class="material-symbols-rounded">checkroom</span>Produtos</button>
+            <button class="admin-nav" type="button" data-admin-page="orders"><span class="material-symbols-rounded">receipt_long</span>Pedidos</button>
+            <button class="admin-nav" type="button" data-admin-page="reports"><span class="material-symbols-rounded">bar_chart</span>Relatórios</button>
+            <button class="admin-nav" type="button" data-admin-page="settings"><span class="material-symbols-rounded">settings</span>Configurações</button>
+          </nav>
+          <button class="admin-exit" type="button" data-go="home"><span class="material-symbols-rounded">logout</span>Sair do painel</button>
+        </aside>
+
+        <div class="admin-main">
+          <header class="admin-topbar">
+            <button class="icon-button admin-menu-button" id="admin-menu-button" type="button" aria-label="Abrir menu administrativo"><span class="material-symbols-rounded">menu</span></button>
+            <div><p>Quarta-feira, 29 de julho</p><h1 id="admin-page-title">Visão geral</h1></div>
+            <div class="admin-user"><span class="material-symbols-rounded">person</span><div><strong>Equipe Mendes</strong><small>Administrador</small></div></div>
+          </header>
+
+          <div class="admin-content">
+            <section class="admin-page active" data-admin-content="overview">
+              <div class="metrics-grid">
+                <article><span class="metric-icon cyan material-symbols-rounded">paid</span><div><p>Pedidos pagos</p><strong>184</strong><small>+12 nesta semana</small></div></article>
+                <article><span class="metric-icon material-symbols-rounded">checkroom</span><div><p>Camisas vendidas</p><strong>236</strong><small>3 campanhas abertas</small></div></article>
+                <article><span class="metric-icon amber material-symbols-rounded">pending_actions</span><div><p>Pagamentos pendentes</p><strong>17</strong><small>R$ 1.018,30</small></div></article>
+                <article><span class="metric-icon green material-symbols-rounded">inventory_2</span><div><p>Aguardando retirada</p><strong>42</strong><small>Prontos para entrega</small></div></article>
+              </div>
+              <div class="dashboard-grid">
+                <article class="panel recent-orders">
+                  <div class="panel-heading"><div><p class="eyebrow">Últimos pedidos</p><h2>Movimentação recente</h2></div><button type="button" data-admin-page="orders">Ver todos</button></div>
+                  <div class="order-list">
+                    <div><span class="order-avatar">AM</span><div><strong>Ana Martins</strong><small>#CM-2048 • Enfermagem</small></div><b>R$ 119,80</b><em>Pago</em></div>
+                    <div><span class="order-avatar">LP</span><div><strong>Lucas Pereira</strong><small>#CM-2047 • Engenharia Civil</small></div><b>R$ 59,90</b><em>Pago</em></div>
+                    <div><span class="order-avatar">JC</span><div><strong>Júlia Costa</strong><small>#CM-2046 • Administração</small></div><b>R$ 59,90</b><em class="pending">Pendente</em></div>
+                  </div>
+                </article>
+                <article class="panel campaign-progress">
+                  <div class="panel-heading"><div><p class="eyebrow">Campanhas</p><h2>Vendas por campanha</h2></div></div>
+                  <div class="progress-item"><span><strong>Engenharia Civil</strong><b>82</b></span><progress value="82" max="100"></progress></div>
+                  <div class="progress-item"><span><strong>Enfermagem</strong><b>67</b></span><progress value="67" max="100"></progress></div>
+                  <div class="progress-item"><span><strong>Administração</strong><b>51</b></span><progress value="51" max="100"></progress></div>
+                </article>
+              </div>
+            </section>
+
+            <section class="admin-page" data-admin-content="campaigns">
+              <div class="page-action-row"><div><p>Acompanhe prazos e desempenho.</p></div><button class="button button-primary" type="button" data-admin-page="products">Nova campanha</button></div>
+              <div class="admin-campaign-list">
+                <article><img src="assets/campaign-engineering.png" alt=""><div><span class="status-pill active">Aberta</span><h2>Engenharia Civil — Turma 2026</h2><p>82 camisas pagas • encerra em 31/08</p></div><button type="button">Gerenciar</button></article>
+                <article><img src="assets/campaign-nursing.png" alt=""><div><span class="status-pill active">Aberta</span><h2>Enfermagem — Turma 2026</h2><p>67 camisas pagas • encerra em 15/09</p></div><button type="button">Gerenciar</button></article>
+                <article><img src="assets/campaign-admin.png" alt=""><div><span class="status-pill active">Aberta</span><h2>Administração — Turma 2026</h2><p>51 camisas pagas • encerra em 20/09</p></div><button type="button">Gerenciar</button></article>
+              </div>
+            </section>
+
+            <section class="admin-page" data-admin-content="products">
+              <div class="page-action-row"><p>Cadastre uma campanha e seus modelos disponíveis.</p></div>
+              <form class="product-form panel" id="product-form">
+                <div class="form-section"><h2>Informações da campanha</h2>
+                  <div class="field-grid">
+                    <label>Nome da campanha<input required name="campaignName" placeholder="Ex.: Direito — Turma 2026"></label>
+                    <label>Curso ou turma<input required name="course" placeholder="Ex.: Direito, 10º período"></label>
+                  </div>
+                  <label>Descrição<textarea name="description" rows="4" placeholder="Conte os detalhes da campanha"></textarea></label>
+                  <div class="field-grid thirds">
+                    <label>Preço fixo<input required name="price" type="number" min="0" step="0.01" placeholder="59,90"></label>
+                    <label>Prazo para encomenda<input required name="deadline" type="date"></label>
+                    <label>Local de retirada<input required name="pickup" placeholder="Ex.: Faculdade Mendes"></label>
+                  </div>
+                </div>
+                <div class="form-section"><h2>Modelos e tamanhos</h2>
+                  <div class="toggle-grid">
+                    <label><input type="checkbox" checked>Comum <small>P, M, G, GG, XG</small></label>
+                    <label><input type="checkbox" checked>Oversized <small>P, M, G, GG</small></label>
+                    <label><input type="checkbox" checked>Baby Look <small>PP, P, M, G</small></label>
+                    <label><input type="checkbox" checked>Permitir personalização <small>Nome ou apelido</small></label>
+                  </div>
+                </div>
+                <label class="upload-field"><span class="material-symbols-rounded">add_photo_alternate</span><strong>Adicionar fotos</strong><small>PNG ou JPG, apenas para demonstração</small><input type="file" accept="image/*" multiple></label>
+                <button class="button button-primary" type="submit">Cadastrar produto</button>
+              </form>
+            </section>
+
+            <section class="admin-page" data-admin-content="orders">
+              <div class="orders-toolbar">
+                <label class="search-field"><span class="material-symbols-rounded">search</span><input id="order-search" type="search" placeholder="Buscar aluno ou pedido"></label>
+                <select id="payment-filter" aria-label="Filtrar por pagamento"><option value="">Todos os pagamentos</option><option value="Pago">Pago</option><option value="Pendente">Pendente</option></select>
+              </div>
+              <div class="table-wrap panel">
+                <table>
+                  <thead><tr><th>Pedido</th><th>Aluno</th><th>Campanha</th><th>Tipo</th><th>Tamanho</th><th>Qtd.</th><th>Pagamento</th><th>Produção</th><th>Retirada</th></tr></thead>
+                  <tbody id="orders-body">
+                    <tr data-payment="Pago"><td>#CM-2048</td><td>Ana Martins</td><td>Enfermagem</td><td>Comum</td><td>M</td><td>2</td><td><span class="status-pill paid">Pago</span></td><td>Em produção</td><td>Agendada</td></tr>
+                    <tr data-payment="Pago"><td>#CM-2047</td><td>Lucas Pereira</td><td>Engenharia Civil</td><td>Oversized</td><td>G</td><td>1</td><td><span class="status-pill paid">Pago</span></td><td>Pronto</td><td>Aguardando</td></tr>
+                    <tr data-payment="Pendente"><td>#CM-2046</td><td>Júlia Costa</td><td>Administração</td><td>Baby Look</td><td>P</td><td>1</td><td><span class="status-pill pending">Pendente</span></td><td>Aguardando</td><td>—</td></tr>
+                    <tr data-payment="Pago"><td>#CM-2045</td><td>Rafael Sousa</td><td>Engenharia Civil</td><td>Comum</td><td>GG</td><td>3</td><td><span class="status-pill paid">Pago</span></td><td>Em produção</td><td>Agendada</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="admin-page" data-admin-content="reports">
+              <div class="report-actions">
+                <button class="button button-secondary" type="button" data-export="excel"><span class="material-symbols-rounded">table_view</span>Exportar Excel</button>
+                <button class="button button-secondary" type="button" data-export="csv"><span class="material-symbols-rounded">download</span>Exportar CSV</button>
+                <button class="button button-dark" type="button" id="print-report"><span class="material-symbols-rounded">print</span>Imprimir relatório</button>
+              </div>
+              <div class="report-summary">
+                <article><span>Total pago</span><strong>111</strong><small>camisas na campanha selecionada</small></article>
+                <article><span>Modelo mais vendido</span><strong>Comum M</strong><small>28 unidades pagas</small></article>
+              </div>
+              <div class="table-wrap panel report-table">
+                <table>
+                  <thead><tr><th>Tipo</th><th>Tamanho</th><th>Quantidade paga</th></tr></thead>
+                  <tbody>
+                    <tr><td>Comum</td><td>M</td><td>28</td></tr>
+                    <tr><td>Comum</td><td>G</td><td>17</td></tr>
+                    <tr><td>Oversized</td><td>M</td><td>12</td></tr>
+                    <tr><td>Oversized</td><td>G</td><td>19</td></tr>
+                    <tr><td>Baby Look</td><td>P</td><td>14</td></tr>
+                    <tr><td>Baby Look</td><td>M</td><td>21</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="admin-page" data-admin-content="settings">
+              <form class="settings-form panel" id="settings-form">
+                <h2>Configurações da loja</h2>
+                <div class="field-grid">
+                  <label>Nome da empresa<input value="Camisaria Mendes"></label>
+                  <label>WhatsApp<input value="+55 98 8778-0960"></label>
+                  <label>Instagram<input value="@camisariamendes"></label>
+                  <label>E-mail de atendimento<input value="contato@camisariamendes.com.br"></label>
+                </div>
+                <label>Mensagem de retirada<textarea rows="4">Seu pedido está pronto para retirada. Leve um documento com foto.</textarea></label>
+                <button class="button button-primary" type="submit">Salvar configurações</button>
+              </form>
+            </section>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer" id="site-footer">
+      <div class="container footer-grid">
+        <div class="footer-brand"><img src="assets/logo-mendes.png" alt=""><div><strong>Camisaria Mendes</strong><span>Vista sua história. Represente sua turma.</span></div></div>
+        <div><h2>Contato</h2><a href="https://wa.me/559887780960">WhatsApp</a><a href="https://instagram.com/camisariamendes">Instagram</a></div>
+        <div><h2>Institucional</h2><a href="#">Política de privacidade</a><a href="#">Termos de compra</a></div>
+        <p>© 2026 Camisaria Mendes.<br>Protótipo visual para apresentação.</p>
+      </div>
+    </footer>
+
+    <aside class="cart-drawer" id="cart-drawer" aria-hidden="true" aria-label="Resumo do pedido">
+      <div class="drawer-header"><h2>Seu pedido</h2><button class="icon-button" id="close-cart" type="button" aria-label="Fechar carrinho"><span class="material-symbols-rounded">close</span></button></div>
+      <div class="drawer-product">
+        <img id="cart-image" src="assets/campaign-engineering.png" alt="">
+        <div><strong id="cart-product-name">Engenharia Civil — Turma 2026</strong><span id="cart-variant">Comum • M</span><small id="cart-personalization"></small></div>
+      </div>
+      <div class="drawer-total"><span>Total</span><strong id="cart-total">R$ 59,90</strong></div>
+      <button class="button button-primary full-width" id="continue-checkout" type="button">Continuar para pagamento</button>
+      <button class="text-button" id="continue-shopping" type="button">Continuar comprando</button>
+    </aside>
+    <div class="overlay" id="overlay" hidden></div>
+
+    <dialog class="size-dialog" id="size-dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">Tabela de medidas</p><h2>Encontre seu tamanho</h2></div><button class="icon-button" id="close-size-dialog" type="button" aria-label="Fechar"><span class="material-symbols-rounded">close</span></button></div>
+      <table><thead><tr><th>Tamanho</th><th>Largura</th><th>Comprimento</th></tr></thead><tbody><tr><td>P</td><td>50 cm</td><td>68 cm</td></tr><tr><td>M</td><td>53 cm</td><td>71 cm</td></tr><tr><td>G</td><td>56 cm</td><td>74 cm</td></tr><tr><td>GG</td><td>59 cm</td><td>77 cm</td></tr></tbody></table>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"><span class="material-symbols-rounded">check_circle</span><span id="toast-message">Operação realizada com sucesso.</span></div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
