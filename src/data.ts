@@ -1,6 +1,7 @@
-import campaignAdmin from "../assets/campaign-admin.png";
-import campaignEngineering from "../assets/campaign-engineering.png";
-import campaignNursing from "../assets/campaign-nursing.png";
+import campaignAdmin from "../assets/campaign-admin-v2.png";
+import campaignEngineering from "../assets/campaign-engineering-v2.png";
+import campaignLaw from "../assets/campaign-law.png";
+import campaignNursing from "../assets/campaign-nursing-v2.png";
 import shirtBabyLook from "../assets/shirt-babylook.png";
 import shirtCommon from "../assets/shirt-common.png";
 import shirtOversized from "../assets/shirt-oversized.png";
@@ -49,6 +50,14 @@ export const showcaseCampaigns: ShowcaseCampaign[] = [
     quantity: "51 camisas produzidas",
     description: "Visual universitário pensado junto ao representante da turma.",
     year: "2026",
+  },
+  {
+    course: "Direito",
+    group: "Turma de formandos",
+    image: campaignLaw,
+    quantity: "74 camisas produzidas",
+    description: "Identidade acadêmica clássica desenvolvida para a turma de Direito.",
+    year: "2025",
   },
 ];
 

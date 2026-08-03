@@ -13,6 +13,11 @@ Protótipo responsivo desenvolvido com React, TypeScript, CSS e Vite.
 
 Use o código `MENDES-ENG-26` para testar uma campanha privada.
 
+Para testar o painel interno em `/acesso-camisaria/`:
+
+- E-mail: `admin@teste.com`
+- Senha: `123456`
+
 > Este projeto ainda é uma demonstração visual. Não possui backend, banco de dados, autenticação ou pagamentos reais.
 
 ## Executar localmente

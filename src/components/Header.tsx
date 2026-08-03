@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { buildRoute } from "../App";
 import { Brand } from "./Brand";
 
 const links = [
@@ -17,13 +18,11 @@ export function Header() {
       <div className="container header-inner">
         <Brand compact />
         <nav className="desktop-nav" aria-label="Navegação principal">
-          {links.map(([href, label]) => (
-            <a href={href} key={href}>{label}</a>
-          ))}
+          {links.map(([href, label], index) => <a className={index === 0 ? "is-current" : ""} href={href} key={href}>{label}</a>)}
         </nav>
-        <a className="header-code-link" href="#acessar-campanha">
-          <span className="material-symbols-rounded" aria-hidden="true">key</span>
+        <a className="header-code-link" href={buildRoute("acesso-campanha")}>
           Tenho um código
+          <span className="material-symbols-rounded" aria-hidden="true">radio_button_checked</span>
         </a>
         <button
           className="menu-button"
@@ -36,10 +35,8 @@ export function Header() {
         </button>
       </div>
       <nav className={`mobile-nav ${open ? "is-open" : ""}`} aria-label="Navegação mobile">
-        {links.map(([href, label]) => (
-          <a href={href} key={href} onClick={() => setOpen(false)}>{label}</a>
-        ))}
-        <a href="#acessar-campanha" onClick={() => setOpen(false)}>Tenho um código</a>
+        {links.map(([href, label]) => <a href={href} key={href} onClick={() => setOpen(false)}>{label}</a>)}
+        <a href={buildRoute("acesso-campanha")} onClick={() => setOpen(false)}>Tenho um código</a>
       </nav>
     </header>
   );
