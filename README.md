@@ -1,21 +1,29 @@
-# Camisaria Mendes — Protótipo visual
+# Camisaria Mendes — Protótipo de campanhas privadas
 
-Protótipo responsivo em HTML, CSS e JavaScript puro para apresentação da plataforma Camisaria Mendes.
+Protótipo responsivo desenvolvido com React, TypeScript, CSS e Vite.
 
-## Demonstração
+## Fluxos demonstrados
 
-- Landing page e campanhas;
-- Seleção de modelo, tamanho e quantidade;
-- Carrinho e pagamento exclusivamente simulados;
-- Área administrativa visual;
-- Layout responsivo para celular, tablet e computador.
+- Landing page institucional;
+- Mostruário público apenas com campanhas concluídas;
+- Acesso a campanhas ativas por código, link direto ou QR Code;
+- Página privada para escolha de modelo, tamanho e quantidade;
+- Orientações para representantes criarem campanhas pelo WhatsApp;
+- Área interna reservada em `/acesso-camisaria/`, sem link na navegação pública.
 
-> Este projeto é uma demonstração visual. Não possui backend, banco de dados nem processamento de pagamentos reais.
+Use o código `MENDES-ENG-26` para testar uma campanha privada.
+
+> Este projeto ainda é uma demonstração visual. Não possui backend, banco de dados, autenticação ou pagamentos reais.
 
 ## Executar localmente
 
-Abra `index.html` diretamente no navegador ou execute:
+```bash
+npm install
+npm run dev
+```
+
+## Gerar a versão de publicação
 
 ```bash
-npm run dev -- --host 127.0.0.1 --port 4173
+npm run build
 ```

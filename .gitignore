@@ -2,3 +2,6 @@ assets/*-source.png
 implementation-*.png
 qa-*.png
 design-qa.md
+node_modules/
+dist/
+*.tsbuildinfo
