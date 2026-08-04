@@ -3,8 +3,11 @@ import campaignEngineering from "../assets/campaign-engineering-v2.png";
 import campaignLaw from "../assets/campaign-law.png";
 import campaignNursing from "../assets/campaign-nursing-v2.png";
 import shirtBabyLook from "../assets/shirt-babylook.png";
+import shirtBabyLookBack from "../assets/shirt-babylook-back.png";
 import shirtCommon from "../assets/shirt-common.png";
+import shirtCommonBack from "../assets/shirt-common-back.png";
 import shirtOversized from "../assets/shirt-oversized.png";
+import shirtOversizedBack from "../assets/shirt-oversized-back.png";
 
 export type ShowcaseCampaign = {
   course: string;
@@ -20,11 +23,39 @@ export type PrivateCampaign = {
   title: string;
   subtitle: string;
   image: string;
-  price: number;
+  prices: Record<ShirtModelName, number>;
   deadline: string;
   pickup: string;
   representative: string;
+  modelImages?: Record<ShirtModelName, { front: string; back: string }>;
+  colors?: Record<ShirtModelName, ShirtColorOption[]>;
+  variantIds?: Partial<Record<ShirtModelName, Partial<Record<ShirtColorName, number>>>>;
 };
+
+export type ShirtModelName = "Comum" | "Oversized" | "Baby Look";
+export type ShirtColorName = "Preto" | "Branco" | "Azul Royal" | "Azul Marinho" | "Bordô" | "Verde";
+export type ShirtColorOption = { name: ShirtColorName; hex: string };
+
+export const shirtColors: ShirtColorOption[] = [
+  { name: "Preto", hex: "#111315" },
+  { name: "Branco", hex: "#f3f3ef" },
+  { name: "Azul Royal", hex: "#1468b8" },
+  { name: "Azul Marinho", hex: "#17365d" },
+  { name: "Bordô", hex: "#6f1833" },
+  { name: "Verde", hex: "#27704b" },
+];
+
+function colorsByName(names: ShirtColorName[]) {
+  return names.map((name) => shirtColors.find((color) => color.name === name) as ShirtColorOption);
+}
+
+export const defaultCampaignColors: Record<ShirtModelName, ShirtColorOption[]> = {
+  Comum: colorsByName(["Preto", "Branco", "Azul Royal", "Azul Marinho"]),
+  Oversized: colorsByName(["Preto", "Branco", "Azul Royal"]),
+  "Baby Look": colorsByName(["Preto", "Branco", "Azul Royal", "Bordô"]),
+};
+
+export const DEMO_CAMPAIGNS_STORAGE_KEY = "camisaria-mendes-demo-campaigns";
 
 export const showcaseCampaigns: ShowcaseCampaign[] = [
   {
@@ -67,22 +98,40 @@ export const privateCampaigns: Record<string, PrivateCampaign> = {
     title: "Engenharia Civil — Turma 2026",
     subtitle: "Campanha exclusiva para os alunos da turma",
     image: campaignEngineering,
-    price: 59.9,
+    prices: { Comum: 59.9, Oversized: 69.9, "Baby Look": 62.9 },
     deadline: "Pedidos até 31 de agosto de 2026",
     pickup: "Retirada com o representante da turma",
     representative: "Lucas Pereira",
+    colors: {
+      Comum: colorsByName(["Preto", "Branco", "Azul Marinho"]),
+      Oversized: colorsByName(["Branco", "Preto", "Azul Royal"]),
+      "Baby Look": colorsByName(["Azul Royal", "Preto", "Bordô"]),
+    },
+  },
+  "MENDES-ADS-26": {
+    code: "MENDES-ADS-26",
+    title: "Análise e Desenvolvimento de Sistemas — 2026.2",
+    subtitle: "Campanha exclusiva para os alunos da turma",
+    image: campaignAdmin,
+    prices: { Comum: 59.9, Oversized: 69.9, "Baby Look": 62.9 },
+    deadline: "Pedidos até 12 de setembro de 2026",
+    pickup: "Retirada com o representante da turma",
+    representative: "Carla Sousa",
+    colors: defaultCampaignColors,
   },
 };
 
 export const privateCodeAliases: Record<string, string> = {
   ENG26: "MENDES-ENG-26",
   "MENDES-ENG-26": "MENDES-ENG-26",
+  ADS26: "MENDES-ADS-26",
+  "MENDES-ADS-26": "MENDES-ADS-26",
 };
 
-export const shirtModels = [
-  { name: "Comum", image: shirtCommon, description: "Caimento tradicional" },
-  { name: "Oversized", image: shirtOversized, description: "Amplo e contemporâneo" },
-  { name: "Baby Look", image: shirtBabyLook, description: "Modelagem ajustada" },
+export const shirtModels: Array<{ name: ShirtModelName; image: string; backImage: string; description: string }> = [
+  { name: "Comum", image: shirtCommon, backImage: shirtCommonBack, description: "Caimento tradicional" },
+  { name: "Oversized", image: shirtOversized, backImage: shirtOversizedBack, description: "Amplo e contemporâneo" },
+  { name: "Baby Look", image: shirtBabyLook, backImage: shirtBabyLookBack, description: "Modelagem ajustada" },
 ];
 
 export const whatsappCampaignUrl =

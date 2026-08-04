@@ -37,6 +37,7 @@ export function Header() {
       <nav className={`mobile-nav ${open ? "is-open" : ""}`} aria-label="Navegação mobile">
         {links.map(([href, label]) => <a href={href} key={href} onClick={() => setOpen(false)}>{label}</a>)}
         <a href={buildRoute("acesso-campanha")} onClick={() => setOpen(false)}>Tenho um código</a>
+        <a href={buildRoute("acompanhar-pedido")} onClick={() => setOpen(false)}>Acompanhar pedido</a>
       </nav>
     </header>
   );

@@ -5,3 +5,5 @@ design-qa.md
 node_modules/
 dist/
 *.tsbuildinfo
+.env
+npm-debug.log*

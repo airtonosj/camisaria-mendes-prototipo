@@ -5,11 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "api:dev": "node --watch api/server.mjs",
+    "api:start": "node api/server.mjs",
+    "db:create": "node api/create-database.mjs",
+    "db:migrate": "node api/migrate.mjs",
+    "db:seed": "node api/seed.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "mysql2": "^3.14.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Comparação focada — fluxo da campanha</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; color: #fff; background: #0a0d0f; font: 14px Arial, sans-serif; }
+      header { height: 64px; display: flex; align-items: center; padding: 0 20px; }
+      header strong { font-size: 18px; }
+      main { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+      figure { min-width: 0; margin: 0; background: #151a1d; }
+      figcaption { height: 40px; display: flex; align-items: center; padding: 0 14px; font-weight: 700; }
+      .crop { position: relative; height: 796px; overflow: hidden; background: #fff; }
+      img { position: absolute; max-width: none; display: block; }
+      .reference img { width: 1487px; transform: translate(-365px, -176px); }
+      .implementation img { width: 1440px; transform: translate(-435px, -164px); }
+    </style>
+  </head>
+  <body>
+    <header><strong>Foco: campanha selecionada, ciclo, ação global e resumo de produção</strong></header>
+    <main>
+      <figure class="reference">
+        <figcaption>Referência selecionada</figcaption>
+        <div class="crop"><img src="./admin-orders-option2-reference.png" alt="Recorte da referência" /></div>
+      </figure>
+      <figure class="implementation">
+        <figcaption>Implementação atual</figcaption>
+        <div class="crop"><img src="./admin-orders-campaign-flow-desktop.png" alt="Recorte da implementação" /></div>
+      </figure>
+    </main>
+  </body>
+</html>

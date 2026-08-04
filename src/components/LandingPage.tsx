@@ -55,6 +55,7 @@ export function LandingPage() {
             <div>
               <h2>Já recebeu o acesso da sua turma?</h2>
               <p>Campanhas ativas não são listadas publicamente.</p>
+              <a className="code-panel-track" href={buildRoute("acompanhar-pedido")}>Já fez o pedido? Acompanhe aqui<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></a>
             </div>
             <form onSubmit={openCampaign}>
               <label htmlFor="landing-code">Código da campanha</label>
@@ -139,6 +140,7 @@ export function LandingPage() {
             <a href="#como-funciona">Como funciona</a>
             <a href="#sobre">Sobre nós</a>
             <a href="#faca-sua-campanha">Faça sua campanha</a>
+            <a href={buildRoute("acompanhar-pedido")}>Acompanhar pedido</a>
           </nav>
           <div className="footer-meta">
             <p className="footer-legal">© 2018–2026 Camisaria Mendes. Todos os direitos reservados.</p>

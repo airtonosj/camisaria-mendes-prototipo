@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Comparação focada — controles da campanha</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; color: #fff; background: #0a0d0f; font: 14px Arial, sans-serif; }
+      header { height: 64px; display: flex; align-items: center; padding: 0 20px; }
+      main { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+      figure { min-width: 0; margin: 0; background: #151a1d; }
+      figcaption { height: 40px; display: flex; align-items: center; padding: 0 14px; font-weight: 700; }
+      .crop { position: relative; height: 470px; overflow: hidden; background: #fff; }
+      img { position: absolute; max-width: none; display: block; }
+      .reference img { width: 1487px; transform: translate(-490px, -190px); }
+      .implementation img { width: 1425px; transform: translate(-510px, -174px); }
+    </style>
+  </head>
+  <body>
+    <header><strong>Foco: ciclo operacional e controles globais da campanha</strong></header>
+    <main>
+      <figure class="reference"><figcaption>Opção 2 aprovada</figcaption><div class="crop"><img src="./admin-orders-option2-reference.png" alt="Recorte da referência" /></div></figure>
+      <figure class="implementation"><figcaption>Avançar e voltar</figcaption><div class="crop"><img src="./admin-orders-campaign-rollback-desktop.png" alt="Recorte dos controles implementados" /></div></figure>
+    </main>
+  </body>
+</html>
