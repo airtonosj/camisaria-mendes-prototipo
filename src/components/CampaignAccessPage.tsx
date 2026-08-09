@@ -1,21 +1,23 @@
 import { FormEvent, useState } from "react";
 import { buildRoute } from "../App";
-import { privateCodeAliases } from "../data";
 import { Brand } from "./Brand";
 
 export function CampaignAccessPage({ invalidCampaignCode }: { invalidCampaignCode?: string }) {
   const [code, setCode] = useState(invalidCampaignCode ?? "");
   const [error, setError] = useState(invalidCampaignCode ? "Este código não foi encontrado." : "");
 
+  /**
+   * Quem decide se o código existe é o servidor, não uma lista no navegador: as
+   * campanhas nascem no painel e o site publicado não conhece nenhuma delas de véspera.
+   */
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalized = code.trim().toUpperCase().replace(/\s+/g, "-");
-    const campaign = privateCodeAliases[normalized];
-    if (!campaign) {
-      setError("Código não encontrado. Confira com o representante da turma.");
+    if (!normalized) {
+      setError("Digite o código enviado pelo representante da turma.");
       return;
     }
-    window.location.assign(buildRoute(undefined, campaign));
+    window.location.assign(buildRoute(undefined, normalized));
   }
 
   return (

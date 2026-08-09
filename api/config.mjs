@@ -24,11 +24,70 @@ function integerFromEnv(name, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function textFromEnv(name) {
+  return (process.env[name] ?? "").trim();
+}
+
+function booleanFromEnv(name, fallback) {
+  const value = textFromEnv(name).toLowerCase();
+  if (!value) return fallback;
+  if (["1", "true", "yes", "on"].includes(value)) return true;
+  if (["0", "false", "no", "off"].includes(value)) return false;
+  return fallback;
+}
+
+/**
+ * O ambiente da API é `APP_ENV`, e não `NODE_ENV`, de propósito: o Vite também lê o
+ * `.env` deste projeto, e um `NODE_ENV=development` ali faria `npm run build` gerar um
+ * pacote de desenvolvimento — com campanhas, pedidos e credenciais de demonstração
+ * dentro do site publicado. `NODE_ENV` continua valendo quando vem do próprio processo,
+ * que é como o systemd costuma configurar o servidor.
+ */
+const environment = textFromEnv("APP_ENV") || textFromEnv("NODE_ENV") || "development";
+const configuredUploadsDirectory = textFromEnv("UPLOADS_DIR");
+
 export const config = {
+  environment,
+  isProduction: environment === "production",
   host: process.env.API_HOST ?? "127.0.0.1",
   port: integerFromEnv("API_PORT", 3333),
-  corsOrigin: process.env.CORS_ORIGIN ?? "http://127.0.0.1:5173",
+  // Aceita lista separada por vírgula: o navegador manda 127.0.0.1 ou localhost
+  // conforme o endereço digitado, e a comparação de origem é exata.
+  corsOrigins: (process.env.CORS_ORIGIN ?? "http://127.0.0.1:4173,http://localhost:4173")
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean),
+  adminApiTokenEnabled: booleanFromEnv("ADMIN_API_TOKEN_ENABLED", environment !== "production"),
   adminApiToken: process.env.ADMIN_API_TOKEN ?? "",
+  // Endereço público do site. Entra nos links de redefinição de senha, que precisam
+  // apontar para o navegador do usuário e não para o host interno da API.
+  publicAppUrl: (textFromEnv("PUBLIC_APP_URL") || "http://127.0.0.1:4173").replace(/\/+$/, ""),
+  /**
+   * Pagamento. O checkout integrado da InfinitePay identifica a conta pela InfiniteTag
+   * (`handle`). `checkoutEnabled` permanece falso até as rotas de criação do link e de
+   * confirmação automática estarem implementadas e verificadas.
+   */
+  payments: {
+    provider: textFromEnv("PAYMENT_PROVIDER") || "infinitepay",
+    infinitePay: {
+      handle: textFromEnv("INFINITEPAY_HANDLE"),
+      checkoutEnabled: booleanFromEnv("INFINITEPAY_CHECKOUT_ENABLED", false),
+    },
+  },
+  /**
+   * SMTP da recuperação de senha. Opcional: sem host configurado, a API responde que
+   * a recuperação por e-mail não está disponível em vez de fingir que enviou.
+   */
+  smtp: {
+    host: textFromEnv("SMTP_HOST"),
+    port: integerFromEnv("SMTP_PORT", 465),
+    user: textFromEnv("SMTP_USER"),
+    password: textFromEnv("SMTP_PASSWORD"),
+    from: textFromEnv("SMTP_FROM") || textFromEnv("SMTP_USER"),
+    fromName: textFromEnv("SMTP_FROM_NAME") || "Camisaria Mendes",
+  },
+  uploadsDirectory: path.resolve(configuredUploadsDirectory || path.join(projectDirectory, "uploads")),
+  uploadsDirectoryConfigured: Boolean(configuredUploadsDirectory),
   database: {
     host: process.env.DB_HOST ?? "127.0.0.1",
     port: integerFromEnv("DB_PORT", 3306),
@@ -38,3 +97,50 @@ export const config = {
     connectionLimit: integerFromEnv("DB_CONNECTION_LIMIT", 10),
   },
 };
+
+function isInsideProject(target) {
+  const relative = path.relative(projectDirectory, target);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+/** Configurações que seriam inseguras ou incompletas demais para aceitar pedidos reais. */
+export function productionConfigurationErrors() {
+  if (!config.isProduction) return [];
+  const errors = [];
+  let publicOrigin = "";
+  try {
+    const url = new URL(config.publicAppUrl);
+    publicOrigin = url.origin;
+    if (url.protocol !== "https:") errors.push("PUBLIC_APP_URL precisa usar HTTPS.");
+  } catch {
+    errors.push("PUBLIC_APP_URL precisa ser uma URL pública válida.");
+  }
+  if (publicOrigin && !config.corsOrigins.includes(publicOrigin)) {
+    errors.push("CORS_ORIGIN precisa incluir a origem de PUBLIC_APP_URL.");
+  }
+  if (config.corsOrigins.some((origin) => !origin.startsWith("https://"))) {
+    errors.push("Todas as origens de CORS_ORIGIN precisam usar HTTPS em produção.");
+  }
+  if (config.adminApiTokenEnabled && config.adminApiToken.length < 32) {
+    errors.push("ADMIN_API_TOKEN_ENABLED exige ADMIN_API_TOKEN com pelo menos 32 caracteres.");
+  }
+  if (!config.smtp.host || !config.smtp.user || !config.smtp.password || !config.smtp.from) {
+    errors.push("SMTP_HOST, SMTP_USER, SMTP_PASSWORD e SMTP_FROM são obrigatórios em produção.");
+  }
+  if (["root", "admin", "administrator"].includes(config.database.user.toLowerCase())) {
+    errors.push("DB_USER precisa ser um usuário restrito da aplicação, nunca root/administrador.");
+  }
+  if (!config.uploadsDirectoryConfigured || isInsideProject(config.uploadsDirectory)) {
+    errors.push("UPLOADS_DIR precisa apontar para um caminho persistente fora da pasta do projeto.");
+  }
+  if (config.payments.provider !== "infinitepay") {
+    errors.push("PAYMENT_PROVIDER precisa ser infinitepay.");
+  }
+  if (!config.payments.infinitePay.handle) {
+    errors.push("INFINITEPAY_HANDLE é obrigatória para identificar a conta no checkout.");
+  }
+  if (!config.payments.infinitePay.checkoutEnabled) {
+    errors.push("INFINITEPAY_CHECKOUT_ENABLED permanece false até API, redirect e webhook estarem integrados.");
+  }
+  return errors;
+}

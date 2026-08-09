@@ -1,19 +1,40 @@
 import { FormEvent, useMemo, useState } from "react";
 import { createOrderInApi } from "../api";
-import type { PrivateCampaign, ShirtModelName } from "../data";
-import { defaultCampaignColors, shirtModels } from "../data";
+import type { PrivateCampaign, ShirtModelName, SizeCode } from "../data";
+import { defaultCampaignColors, defaultCampaignSizes, shirtModels, sizeCatalog, sizeGroupLabels } from "../data";
 import { Brand } from "./Brand";
 
-const sizes = ["PP", "P", "M", "G", "GG", "XG"];
 type CampaignStep = "model" | "details" | "payment" | "received";
 type PaymentMethod = "pix" | "card";
 
+const sizeGroupOf = new Map(sizeCatalog.map((size) => [size.code, size.group]));
+
+function campaignSizes(campaign: PrivateCampaign, model: ShirtModelName) {
+  const configured = campaign.sizes?.[model];
+  return configured?.length ? configured : defaultCampaignSizes[model];
+}
+
+function campaignColors(campaign: PrivateCampaign, model: ShirtModelName) {
+  const configured = campaign.colors?.[model];
+  return configured?.length ? configured : defaultCampaignColors[model];
+}
+
+/** Mostra a arte da campanha. Se não houver imagem de costas, mostra só a frente. */
+function ArtThumbs({ art, label }: { art: PrivateCampaign["art"]; label: string }) {
+  return (
+    <div className={`campaign-art-thumbs ${art.back ? "" : "is-single"}`} aria-label={art.back ? "Arte de frente e costas" : "Arte da campanha"}>
+      <img src={art.front} alt={`${label} — frente`} />
+      {art.back && <img src={art.back} alt={`${label} — costas`} />}
+    </div>
+  );
+}
+
 export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: PrivateCampaign; resumePayment?: string }) {
   const [step, setStep] = useState<CampaignStep>(resumePayment ? "payment" : "model");
-  const [model, setModel] = useState(shirtModels[0].name);
-  const [previewSide, setPreviewSide] = useState<"front" | "back">("back");
-  const [color, setColor] = useState(() => (campaign.colors?.[shirtModels[0].name] ?? defaultCampaignColors[shirtModels[0].name])[0].name);
-  const [size, setSize] = useState("M");
+  const [model, setModel] = useState<ShirtModelName>(shirtModels[0].name);
+  const [previewSide, setPreviewSide] = useState<"front" | "back">("front");
+  const [color, setColor] = useState(() => campaignColors(campaign, shirtModels[0].name)[0].name);
+  const [size, setSize] = useState<SizeCode>(() => campaignSizes(campaign, shirtModels[0].name)[0]);
   const [quantity, setQuantity] = useState(1);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [customerName, setCustomerName] = useState("");
@@ -21,26 +42,37 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   const [customerEmail, setCustomerEmail] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("pix");
   const [orderCopied, setOrderCopied] = useState(false);
-  const [orderNumber, setOrderNumber] = useState(resumePayment ?? "CM-2026-0147");
+  const [orderNumber, setOrderNumber] = useState(resumePayment ?? "");
   const [paymentError, setPaymentError] = useState("");
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [idempotencyKey] = useState(() => crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
+  const [simulated, setSimulated] = useState(false);
+
   const selectedModel = shirtModels.find((item) => item.name === model) ?? shirtModels[0];
-  const campaignModelImages = campaign.modelImages?.[model];
-  const availableColors = campaign.colors?.[model]?.length ? campaign.colors[model] : defaultCampaignColors[model];
+  const availableColors = campaignColors(campaign, model);
   const selectedColor = availableColors.find((item) => item.name === color) ?? availableColors[0];
-  const selectedFrontImage = campaignModelImages?.front ?? selectedModel.image;
-  const selectedBackImage = campaignModelImages?.back ?? selectedModel.backImage;
-  const selectedImage = previewSide === "front" ? selectedFrontImage : selectedBackImage;
-  const oppositeImage = previewSide === "front" ? selectedBackImage : selectedFrontImage;
+  const availableSizes = campaignSizes(campaign, model);
+  const sizeGroups = useMemo(() => {
+    const groups: Array<{ group: "standard" | "baby_look"; sizes: SizeCode[] }> = [];
+    for (const group of ["standard", "baby_look"] as const) {
+      const sizes = availableSizes.filter((item) => sizeGroupOf.get(item) === group);
+      if (sizes.length) groups.push({ group, sizes });
+    }
+    return groups;
+  }, [availableSizes]);
+
+  const art = campaign.art;
+  const displayedArt = previewSide === "back" && art.back ? art.back : art.front;
   const unitPrice = campaign.prices[model];
-  const total = useMemo(() => unitPrice * quantity, [unitPrice, quantity]);
+  const total = unitPrice * quantity;
   const formattedTotal = total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const hasBabyLook = sizeGroups.some((group) => group.group === "baby_look");
 
   function selectModel(nextModel: ShirtModelName) {
     setModel(nextModel);
-    const nextColors = campaign.colors?.[nextModel]?.length ? campaign.colors[nextModel] : defaultCampaignColors[nextModel];
-    setColor(nextColors[0].name);
+    setColor(campaignColors(campaign, nextModel)[0].name);
+    const nextSizes = campaignSizes(campaign, nextModel);
+    if (!nextSizes.includes(size)) setSize(nextSizes[0]);
     setOrderCopied(false);
   }
 
@@ -65,7 +97,14 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
     setPaymentError("");
     const variantId = campaign.variantIds?.[model]?.[selectedColor.name];
     if (!variantId) {
-      goToStep("received");
+      // Campanha de demonstração: existe só no protótipo local, sem variante no banco.
+      if (import.meta.env.DEV) {
+        setSimulated(true);
+        setOrderNumber("CM-DEMO-0000");
+        goToStep("received");
+        return;
+      }
+      setPaymentError("Esta combinação de corte e cor não está disponível. Escolha outra opção ou fale com o representante da turma.");
       return;
     }
     setSubmittingOrder(true);
@@ -115,35 +154,35 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
         <main className="campaign-builder">
           <section className="campaign-builder-heading">
             <h1>{campaign.title}</h1>
-            <div className="campaign-progress-copy"><strong>1 de 3</strong><span>·</span><span>Modelo</span></div>
+            <div className="campaign-progress-copy"><strong>1 de 3</strong><span>·</span><span>Sua camiseta</span></div>
             <div className="campaign-progress" aria-hidden="true"><span /></div>
           </section>
 
           <form className="campaign-configurator" onSubmit={submitConfiguration}>
-            <section className="campaign-product-stage">
-              <h2>1. Escolha o modelo</h2>
+            <section className="campaign-art-stage">
+              {art.back && (
+                <div className="campaign-side-switch" role="group" aria-label="Visualizar lado da camiseta">
+                  <button className={previewSide === "front" ? "is-active" : ""} type="button" aria-pressed={previewSide === "front"} onClick={() => setPreviewSide("front")}>Frente</button>
+                  <button className={previewSide === "back" ? "is-active" : ""} type="button" aria-pressed={previewSide === "back"} onClick={() => setPreviewSide("back")}>Costas</button>
+                </div>
+              )}
 
-              <div className="campaign-side-switch" role="group" aria-label="Visualizar lado da camiseta">
-                <button className={previewSide === "front" ? "is-active" : ""} type="button" aria-pressed={previewSide === "front"} onClick={() => setPreviewSide("front")}>Frente</button>
-                <button className={previewSide === "back" ? "is-active" : ""} type="button" aria-pressed={previewSide === "back"} onClick={() => setPreviewSide("back")}>Costas</button>
+              <div className="campaign-art-viewer">
+                <img src={displayedArt} alt={`Arte da campanha ${campaign.title}${art.back ? ` — ${previewSide === "front" ? "frente" : "costas"}` : ""}`} />
               </div>
-              <p className="fixed-art-label">Arte fixa da campanha</p>
+              <p className="campaign-art-note">A arte é a mesma em todos os cortes e tamanhos.</p>
+            </section>
 
-              <div className="campaign-product-preview">
-                <img className="campaign-product-main" src={selectedImage} alt={`${selectedModel.name} — ${previewSide === "front" ? "frente" : "costas"}`} />
-                <button className="campaign-opposite-view" type="button" onClick={() => setPreviewSide(previewSide === "front" ? "back" : "front")} aria-label={`Ver ${previewSide === "front" ? "costas" : "frente"}`}>
-                  <img src={oppositeImage} alt="" />
-                  <span>{previewSide === "front" ? "Costas" : "Frente"}</span>
-                </button>
-              </div>
-
-              <div className="campaign-model-grid" role="radiogroup" aria-label="Modelo da camiseta">
+            <section className="campaign-choice-stage campaign-cut-stage">
+              <h2>1. Escolha o corte</h2>
+              <div className="campaign-cut-options" role="radiogroup" aria-label="Corte da camiseta">
                 {shirtModels.map((item) => (
                   <label className={model === item.name ? "is-selected" : ""} key={item.name}>
                     <input type="radio" name="model" checked={model === item.name} onChange={() => selectModel(item.name)} />
-                    <span className="campaign-model-check material-symbols-rounded" aria-hidden="true">check</span>
-                    <img src={campaign.modelImages?.[item.name]?.front ?? item.image} alt={`Modelo ${item.name}`} />
-                    <strong>{item.name}</strong>
+                    <span className="campaign-cut-head">
+                      <strong>{item.name}</strong>
+                      <span className="campaign-cut-check material-symbols-rounded" aria-hidden="true">check</span>
+                    </span>
                     <small>{item.description}</small>
                     <b>{campaign.prices[item.name].toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</b>
                   </label>
@@ -166,20 +205,30 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
               <p className="campaign-color-note">A arte permanece fixa; a cor escolhida será aplicada à peça.</p>
             </section>
 
-            <section className="campaign-choice-stage" id="size-guide">
+            <section className="campaign-choice-stage campaign-size-stage" id="size-guide">
               <div className="campaign-stage-heading">
                 <h2>3. Escolha o tamanho</h2>
                 <button type="button" onClick={() => setShowSizeGuide((value) => !value)}>Qual o meu tamanho?</button>
               </div>
-              <div className="campaign-size-options" role="radiogroup" aria-label="Tamanho da camiseta">
-                {sizes.map((item) => (
-                  <label className={size === item ? "is-selected" : ""} key={item}>
-                    <input type="radio" name="size" checked={size === item} onChange={() => { setSize(item); setOrderCopied(false); }} />
-                    <span>{item}</span>
-                  </label>
-                ))}
-              </div>
-              {showSizeGuide && <p className="campaign-size-help">Compare uma camiseta que veste bem com as medidas informadas pelo representante da turma.</p>}
+              {sizeGroups.map(({ group, sizes }) => (
+                <div className="campaign-size-group" key={group}>
+                  <p className="campaign-size-group-label">{sizeGroupLabels[group]}</p>
+                  <div className="campaign-size-options" role="radiogroup" aria-label={`Tamanho ${sizeGroupLabels[group]}`}>
+                    {sizes.map((item) => (
+                      <label className={size === item ? "is-selected" : ""} key={item}>
+                        <input type="radio" name="size" checked={size === item} onChange={() => { setSize(item); setOrderCopied(false); }} />
+                        <span>{item}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {showSizeGuide && (
+                <p className="campaign-size-help">
+                  Compare uma camiseta que veste bem com as medidas informadas pelo representante da turma.
+                  {hasBabyLook && " Os tamanhos com B são de modelagem baby look, mais ajustada ao corpo."}
+                </p>
+              )}
             </section>
 
             <section className="campaign-choice-stage campaign-quantity-stage">
@@ -193,7 +242,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
 
             <aside className="campaign-order-bar">
               <div><small>Total</small><strong>{formattedTotal}</strong></div>
-              <p>{quantity} {quantity === 1 ? "camiseta" : "camisetas"} · {selectedColor.name} · {size}</p>
+              <p>{quantity} {quantity === 1 ? "camiseta" : "camisetas"} · {selectedModel.name} · {selectedColor.name} · {size}</p>
               <button type="submit">Continuar pedido<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
             </aside>
           </form>
@@ -210,13 +259,10 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
             <section className="checkout-order-review" aria-labelledby="order-review-title">
               <h2 id="order-review-title">Seu pedido</h2>
               <div className="checkout-product-row">
-                <div className="checkout-shirt-pair" aria-label="Camiseta vista de frente e costas">
-                  <img src={selectedFrontImage} alt={`${selectedModel.name} — frente`} />
-                  <img src={selectedBackImage} alt={`${selectedModel.name} — costas`} />
-                </div>
+                <ArtThumbs art={art} label={`Arte da campanha ${campaign.title}`} />
                 <div className="checkout-product-copy">
                   <strong>{selectedModel.name} · {selectedColor.name} · {size} · {quantity} {quantity === 1 ? "unidade" : "unidades"}</strong>
-                  <span className="checkout-color-choice"><i style={{ backgroundColor: selectedColor.hex }} />Cor {selectedColor.name} · Arte fixa frente e costas</span>
+                  <span className="checkout-color-choice"><i style={{ backgroundColor: selectedColor.hex }} />Cor {selectedColor.name} · Arte da campanha</span>
                   <div className="checkout-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span><span>Retirada com <b>{campaign.representative}</b></span></div>
                   <div className="checkout-total"><span>Total</span><strong>{formattedTotal}</strong></div>
                 </div>
@@ -253,10 +299,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
           </section>
 
           <section className="payment-order-summary" aria-label="Resumo do pedido">
-            <div className="payment-shirt-pair" aria-label="Camiseta vista de frente e costas">
-              <img src={selectedFrontImage} alt={`${selectedModel.name} — frente`} />
-              <img src={selectedBackImage} alt={`${selectedModel.name} — costas`} />
-            </div>
+            <ArtThumbs art={art} label={`Arte da campanha ${campaign.title}`} />
             <div className="payment-order-copy">
               <strong>{selectedModel.name} · {selectedColor.name} · {size} · {quantity} {quantity === 1 ? "unidade" : "unidades"}</strong>
               <b>{formattedTotal}</b>
@@ -269,17 +312,17 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
             <h2>Escolha a forma de pagamento</h2>
             <div className="payment-methods" role="radiogroup" aria-label="Forma de pagamento">
               <label className={paymentMethod === "pix" ? "is-selected" : ""}>
-                <input type="radio" name="payment-method" value="pix" checked={paymentMethod === "pix"} onChange={() => { setPaymentMethod("pix"); setOrderCopied(false); }} />
+                <input type="radio" name="payment-method" value="pix" checked={paymentMethod === "pix"} onChange={() => setPaymentMethod("pix")} />
                 <span className="payment-method-icon material-symbols-rounded" aria-hidden="true">qr_code_2</span>
-                <span className="payment-method-copy"><strong>Pix</strong><small>Aprovação rápida</small></span>
+                <span className="payment-method-copy"><strong>Pix</strong><small>Confirmação automática</small></span>
                 <span className="payment-method-value">À vista · {formattedTotal}</span>
                 <span className="payment-method-check material-symbols-rounded" aria-hidden="true">check</span>
               </label>
               <label className={paymentMethod === "card" ? "is-selected" : ""}>
-                <input type="radio" name="payment-method" value="card" checked={paymentMethod === "card"} onChange={() => { setPaymentMethod("card"); setOrderCopied(false); }} />
+                <input type="radio" name="payment-method" value="card" checked={paymentMethod === "card"} onChange={() => setPaymentMethod("card")} />
                 <span className="payment-method-icon material-symbols-rounded" aria-hidden="true">credit_card</span>
-                <span className="payment-method-copy"><strong>Cartão de crédito</strong><small>Pagamento seguro</small></span>
-                <span className="payment-method-value">1x de {formattedTotal}</span>
+                <span className="payment-method-copy"><strong>Cartão de crédito</strong><small>Pagamento seguro pela InfinitePay</small></span>
+                <span className="payment-method-value">Parcelamento no checkout</span>
                 <span className="payment-method-check material-symbols-rounded" aria-hidden="true">check</span>
               </label>
             </div>
@@ -290,7 +333,8 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
               <div className="payment-breakdown-total"><dt>Total</dt><dd>{formattedTotal}</dd></div>
             </dl>
 
-            <p className="payment-security"><span className="material-symbols-rounded" aria-hidden="true">lock</span>Você será direcionado ao ambiente seguro de pagamento.</p>
+            <p className="payment-security"><span className="material-symbols-rounded" aria-hidden="true">lock</span>Você será direcionado ao checkout seguro da InfinitePay. Os dados do cartão e o Pix não passam pelo site da camisaria.</p>
+            {import.meta.env.DEV && <p className="payment-integration-note" role="status"><span className="material-symbols-rounded" aria-hidden="true">code</span>Tela pronta. Falta conectar a criação do link e a confirmação automática pela API/webhook da InfinitePay.</p>}
             {paymentError && <p className="form-error" role="alert">{paymentError}</p>}
             <button className="payment-submit" type="submit" disabled={submittingOrder}>{submittingOrder ? "Registrando pedido..." : `Continuar com ${paymentMethod === "pix" ? "Pix" : "cartão"}`}<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
           </form>
@@ -300,9 +344,30 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
           <section className="received-hero">
             <span className="received-hero-icon material-symbols-rounded" aria-hidden="true">schedule</span>
             <p className="received-eyebrow">Pedido recebido</p>
-            <h1>Agora é só aguardar a confirmação.</h1>
-            <p className="received-intro">Registramos seu pedido e estamos aguardando o retorno do pagamento.</p>
+            <h1>Aguardando a confirmação do pagamento.</h1>
+            <p className="received-intro">Seu pedido está guardado como pendente. Ele será liberado automaticamente depois que a InfinitePay confirmar o pagamento.</p>
             <span className="received-status"><span className="material-symbols-rounded" aria-hidden="true">hourglass_top</span>Aguardando confirmação</span>
+          </section>
+
+          {simulated && (
+            <p className="received-simulation" role="status">
+              <span className="material-symbols-rounded" aria-hidden="true">science</span>
+              Pedido simulado em desenvolvimento. Nada foi gravado no banco e este número não existe.
+            </p>
+          )}
+
+          <section className="received-payment-panel" aria-labelledby="received-payment-title">
+            <header>
+              <span className="material-symbols-rounded" aria-hidden="true">verified_user</span>
+              <div><h2 id="received-payment-title">Pagamento seguro pela InfinitePay</h2><p>Pix e cartão serão vinculados ao número do pedido e confirmados automaticamente.</p></div>
+            </header>
+            <dl className="received-payment-summary">
+              <div><dt>Forma escolhida</dt><dd>{paymentMethod === "pix" ? "Pix" : "Cartão"}</dd></div>
+              <div><dt>Valor</dt><dd>{formattedTotal}</dd></div>
+              <div><dt>Pedido</dt><dd>#{orderNumber}</dd></div>
+            </dl>
+            <p className="received-payment-status" role="status">Não envie comprovante: a confirmação virá diretamente da InfinitePay.</p>
+            {import.meta.env.DEV && <p className="received-integration-note"><span className="material-symbols-rounded" aria-hidden="true">code</span>Pré-integração: falta gerar o link do checkout e processar o webhook/API.</p>}
           </section>
 
           <div className="received-content">
@@ -319,15 +384,12 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
               </header>
 
               <div className="received-product-row">
-                <div className="received-shirt-pair" aria-label="Camiseta vista de frente e costas">
-                  <img src={selectedFrontImage} alt={`${selectedModel.name} — frente`} />
-                  <img src={selectedBackImage} alt={`${selectedModel.name} — costas`} />
-                </div>
+                <ArtThumbs art={art} label={`Arte da campanha ${campaign.title}`} />
                 <div className="received-product-copy">
                   <strong>{selectedModel.name} · {selectedColor.name} · {size}</strong>
-                  <span>{quantity} {quantity === 1 ? "unidade" : "unidades"} · Arte fixa frente e costas</span>
+                  <span>{quantity} {quantity === 1 ? "unidade" : "unidades"} · Arte da campanha</span>
                   <dl>
-                    <div><dt>Pagamento</dt><dd>{paymentMethod === "pix" ? "Pix" : "Cartão de crédito"}</dd></div>
+                    <div><dt>Pagamento</dt><dd>{paymentMethod === "pix" ? "Pix" : "Cartão"} · InfinitePay</dd></div>
                     <div><dt>Total</dt><dd>{formattedTotal}</dd></div>
                   </dl>
                 </div>
@@ -340,7 +402,8 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
               <h2 id="received-next-title">Próximos passos</h2>
               <ol>
                 <li className="is-complete"><span className="material-symbols-rounded" aria-hidden="true">check</span><div><strong>Pedido criado</strong><small>Seus dados e sua camiseta foram registrados.</small></div></li>
-                <li className="is-current"><span className="material-symbols-rounded" aria-hidden="true">hourglass_top</span><div><strong>Confirmação do pagamento</strong><small>O provedor está verificando a transação.</small></div></li>
+                <li className="is-current"><span className="material-symbols-rounded" aria-hidden="true">payments</span><div><strong>Pagamento na InfinitePay</strong><small>Conclua pelo checkout seguro do provedor.</small></div></li>
+                <li><span className="material-symbols-rounded" aria-hidden="true">verified</span><div><strong>Confirmação automática</strong><small>A InfinitePay atualiza o pedido pela integração.</small></div></li>
                 <li><span className="material-symbols-rounded" aria-hidden="true">inventory_2</span><div><strong>Envio para produção</strong><small>Acontece somente depois da confirmação.</small></div></li>
               </ol>
               <p className="received-production-note"><span className="material-symbols-rounded" aria-hidden="true">lock</span>Somente pedidos com pagamento confirmado entram na produção.</p>

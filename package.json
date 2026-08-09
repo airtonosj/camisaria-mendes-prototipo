@@ -10,9 +10,18 @@
     "db:create": "node api/create-database.mjs",
     "db:migrate": "node api/migrate.mjs",
     "db:seed": "node api/seed.mjs",
-    "build": "tsc -b && vite build",
+    "user:admin": "node api/create-admin.mjs",
+    "user:create": "node api/create-user.mjs",
+    "user:reset": "node api/reset-password.mjs",
+    "db:test:reset": "node tests/reset-test-database.mjs",
+    "test:smoke": "node tests/smoke.mjs",
+    "test": "npm run typecheck && npm run test:smoke",
+    "build": "tsc -b && vite build && node ops/verify-build.mjs",
     "preview": "vite preview",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc -b --pretty false",
+    "ops:health": "node ops/healthcheck.mjs",
+    "ops:backup": "node ops/backup.mjs",
+    "ops:verify-build": "node ops/verify-build.mjs"
   },
   "dependencies": {
     "mysql2": "^3.14.4",

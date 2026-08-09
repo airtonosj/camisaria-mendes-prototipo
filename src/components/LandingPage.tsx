@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { buildRoute } from "../App";
-import { privateCodeAliases, shirtModels, showcaseCampaigns, whatsappCampaignUrl } from "../data";
+import { heroShirts, privateCodeAliases, showcaseCampaigns, whatsappCampaignUrl } from "../data";
 import { Brand } from "./Brand";
 import { Header } from "./Header";
 
@@ -40,10 +40,10 @@ export function LandingPage() {
               <p>Mais que uma camiseta.<br />Um símbolo do que vocês vivem juntos.</p>
               <a className="editorial-link" href="#mostruario">Conheça nosso trabalho<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></a>
             </div>
-            <div className="hero-products" aria-label="Modelos de camisa da Camisaria Mendes">
-              {shirtModels.map((model, index) => (
-                <figure className={`hero-product hero-product--${index + 1}`} key={model.name}>
-                  <img src={model.image} alt={`Camisa ${model.name}`} />
+            <div className="hero-products" aria-label="Camisas da Camisaria Mendes">
+              {heroShirts.map((image, index) => (
+                <figure className={`hero-product hero-product--${index + 1}`} key={image}>
+                  <img src={image} alt="" />
                 </figure>
               ))}
             </div>
@@ -87,7 +87,7 @@ export function LandingPage() {
             <div className="process-grid">
               <div className="process-heading">
                 <span className="kicker">Como funciona</span>
-                <h2>Simples, do<br />primeiro contato<br />à entrega.</h2>
+                <h2>Simples, do <br />primeiro contato <br />à entrega.</h2>
               </div>
               {steps.map(([number, icon, title, text]) => (
                 <article className="process-step" key={number}>

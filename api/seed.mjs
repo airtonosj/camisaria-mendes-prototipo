@@ -4,6 +4,17 @@ import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
 import { config } from "./config.mjs";
 
+/**
+ * Carga de demonstração: campanhas fictícias e o usuário `admin@teste.com`. Serve para
+ * desenvolver sem depender de dados reais e não pode existir no ambiente publicado —
+ * a equipe olhando pedidos inventados achando que são reais é o pior desfecho possível.
+ */
+if (config.isProduction) {
+  console.error("A carga de demonstração não roda em produção (APP_ENV=production).");
+  console.error("Em produção, use `npm run db:migrate` e depois `npm run user:admin`.");
+  process.exit(1);
+}
+
 const apiDirectory = path.dirname(fileURLToPath(import.meta.url));
 const seedsDirectory = path.resolve(apiDirectory, "..", "database", "seeds");
 const files = (await fs.readdir(seedsDirectory))
