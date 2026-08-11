@@ -70,7 +70,19 @@ function assertCheckoutUrl(value) {
     throw new InfinitePayRequestError("INFINITEPAY_INVALID_RESPONSE", "A InfinitePay não devolveu um link de checkout válido.");
   }
   if (url.protocol !== "https:" || url.hostname !== "checkout.infinitepay.com.br") {
-    throw new InfinitePayRequestError("INFINITEPAY_UNTRUSTED_CHECKOUT", "A InfinitePay devolveu um destino de checkout inesperado.");
+    const safeDestination = {
+      protocol: url.protocol,
+      hostname: url.hostname.toLowerCase(),
+    };
+    // Nunca registre caminho, query string ou fragmento: eles podem carregar
+    // identificadores da fatura. Protocolo e hostname bastam para revisar a
+    // allowlist sem transformar um erro do provedor em redirecionamento aberto.
+    console.warn("[InfinitePay] Checkout bloqueado por destino inesperado.", safeDestination);
+    throw new InfinitePayRequestError(
+      "INFINITEPAY_UNTRUSTED_CHECKOUT",
+      "A InfinitePay devolveu um destino de checkout inesperado.",
+      safeDestination,
+    );
   }
   return url.toString();
 }
