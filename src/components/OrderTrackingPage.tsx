@@ -4,7 +4,7 @@ import { buildRoute } from "../App";
 import { shirtModels } from "../data";
 import { Brand } from "./Brand";
 
-type DemoOrderStatus = "pending" | "confirmed" | "failed" | "ready" | "delivered" | "cancelled";
+type DemoOrderStatus = "pending" | "confirmed" | "production" | "failed" | "ready" | "delivered" | "cancelled";
 
 type DemoOrder = {
   number: string;
@@ -105,7 +105,8 @@ function onlyDigits(value: string) {
 function timelineClass(status: DemoOrderStatus, index: number) {
   if (status === "cancelled") return index === 0 ? "is-complete" : index === 1 ? "is-failed" : "";
   if (status === "pending") return index === 0 ? "is-complete" : index === 1 ? "is-current" : "";
-  if (status === "confirmed") return index < 2 ? "is-complete" : index === 2 ? "is-current" : "";
+  if (status === "confirmed") return index < 1 ? "is-complete" : index === 1 ? "is-current" : "";
+  if (status === "production") return index < 2 ? "is-complete" : index === 2 ? "is-current" : "";
   if (status === "ready") return index < 3 ? "is-complete" : index === 3 ? "is-current" : "";
   if (status === "delivered") return index < 4 ? "is-complete" : index === 4 ? "is-current" : "";
   return index === 0 ? "is-complete" : index === 1 ? "is-failed" : "";
@@ -158,7 +159,8 @@ export function OrderTrackingPage() {
       const item = persisted.items[0];
       const copyByStatus = {
         pending: ["Seu pedido está em análise.", "Acompanhe cada etapa até a retirada com o representante.", "Aguardando confirmação", "hourglass_top"],
-        confirmed: ["Pagamento confirmado!", "Seu pedido já foi liberado e está seguindo para produção.", "Pagamento confirmado", "verified"],
+        confirmed: ["Pagamento confirmado!", "Seu pedido está confirmado e aguarda o avanço da campanha para produção.", "Pagamento confirmado", "verified"],
+        production: ["Seu pedido está em produção.", "A campanha avançou e sua camiseta está sendo produzida.", "Em produção", "precision_manufacturing"],
         failed: ["O pagamento não foi aprovado.", "Seu pedido continua salvo e você pode tentar novamente com segurança.", "Pagamento não aprovado", "error"],
         ready: ["Seu pedido está pronto para retirada.", "Leve o número do pedido e procure o representante da sua turma.", "Pronto para retirada", "redeem"],
         delivered: ["Pedido entregue!", "A retirada foi registrada e este pedido está finalizado.", "Entregue", "task_alt"],
@@ -250,6 +252,8 @@ export function OrderTrackingPage() {
 
   const headingIcon = order?.status === "confirmed"
     ? "verified"
+    : order?.status === "production"
+      ? "precision_manufacturing"
     : order?.status === "cancelled"
       ? "cancel"
     : order?.status === "failed"
@@ -395,7 +399,7 @@ export function OrderTrackingPage() {
                 <ol>
                   {timeline.map((item, index) => {
                     const itemClass = timelineClass(order.status, index);
-                    const paidOrder = order.status === "confirmed" || order.status === "ready" || order.status === "delivered";
+                    const paidOrder = order.status === "confirmed" || order.status === "production" || order.status === "ready" || order.status === "delivered";
                     const cancelledStep = order.status === "cancelled" && index === 1;
                     const icon = cancelledStep
                       ? "cancel"
@@ -412,7 +416,9 @@ export function OrderTrackingPage() {
                       : paidOrder && index === 1
                         ? "Pagamento validado com segurança."
                       : order.status === "confirmed" && index === 2
-                          ? "Seu pedido foi liberado para produção."
+                          ? "Aguardando a campanha entrar em produção."
+                          : order.status === "production" && index === 2
+                            ? "Sua camiseta está sendo produzida."
                           : (order.status === "ready" || order.status === "delivered") && index === 2
                             ? "Produção concluída."
                             : order.status === "ready" && index === 3

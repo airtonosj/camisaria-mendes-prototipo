@@ -41,13 +41,16 @@ main > section[id] { scroll-margin-top: 78px; }
 .minimal-header .brand--compact > span,
 .admin-sidebar .brand--compact > span { display: none; }
 .site-header { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid #e6e7e5; background: rgba(255,255,255,.96); backdrop-filter: blur(16px); }
-.header-inner { min-height: 78px; display: flex; align-items: center; gap: 28px; }
-.desktop-nav { display: flex; align-items: center; gap: 31px; margin-left: auto; }
+.header-inner { min-height: 78px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 28px; }
+.desktop-nav { justify-self: center; display: flex; align-items: center; gap: 31px; }
 .desktop-nav a { position: relative; padding-block: 28px; color: #4d5257; font-size: .74rem; font-weight: 600; }
 .desktop-nav a::after { position: absolute; left: 0; right: 100%; bottom: -1px; height: 2px; content: ""; background: var(--blue); transition: right 160ms ease; }
 .desktop-nav a:hover::after,
 .desktop-nav a.is-current::after { right: 0; }
-.header-code-link { display: inline-flex; align-items: center; gap: 7px; margin-left: 14px; color: #32373b; font-size: .72rem; font-weight: 700; }
+.header-actions { justify-self: end; display: flex; align-items: center; gap: 18px; white-space: nowrap; }
+.header-order-link, .header-code-link { display: inline-flex; align-items: center; gap: 7px; color: #32373b; font-size: .72rem; font-weight: 700; }
+.header-order-link { border-bottom: 1px solid #aeb4b7; padding-block: 5px; }
+.header-order-link:hover, .header-order-link:focus-visible, .header-code-link:hover, .header-code-link:focus-visible { color: var(--blue-dark); outline: 0; }
 .header-code-link span { color: #111315; font-size: 9px; }
 .menu-button, .mobile-nav { display: none; }
 
@@ -505,6 +508,7 @@ main > section[id] { scroll-margin-top: 78px; }
 .tracking-heading { max-width: 720px; margin-inline: auto; text-align: center; }
 .tracking-heading-icon { width: 62px; height: 62px; display: grid; place-content: center; margin-inline: auto; border: 1px solid #075f91; border-radius: 50%; color: var(--blue); background: #07131b; font-size: 31px; }
 .tracking-heading-icon.is-confirmed { border-color: #257755; color: #55d99f; background: #091711; }
+.tracking-heading-icon.is-production { border-color: #286b91; color: #6dcbff; background: #08151d; }
 .tracking-heading-icon.is-failed { border-color: #7d3c3c; color: #ff8e8e; background: #1a0b0b; }
 .tracking-heading-icon.is-cancelled { border-color: #7d3c3c; color: #ff8e8e; background: #1a0b0b; }
 .tracking-heading-icon.is-ready { border-color: #1179b6; color: #65c9ff; background: #071722; }
@@ -537,6 +541,7 @@ main > section[id] { scroll-margin-top: 78px; }
 .tracking-result-topline > span { display: flex; align-items: center; gap: 8px; border: 1px solid #8a6823; padding: 10px 13px; color: #f0c66d; background: #171208; font-size: .62rem; font-weight: 700; }
 .tracking-result-topline > span .material-symbols-rounded { font-size: 17px; }
 .tracking-result-topline > span.is-confirmed { border-color: #257755; color: #55d99f; background: #091711; }
+.tracking-result-topline > span.is-production { border-color: #286b91; color: #6dcbff; background: #08151d; }
 .tracking-result-topline > span.is-failed { border-color: #7d3c3c; color: #ff9c9c; background: #1a0b0b; }
 .tracking-result-topline > span.is-cancelled { border-color: #7d3c3c; color: #ff9c9c; background: #1a0b0b; }
 .tracking-result-topline > span.is-ready { border-color: #1179b6; color: #65c9ff; background: #071722; }
@@ -849,7 +854,8 @@ main > section[id] { scroll-margin-top: 78px; }
 
 @media (max-width: 820px) {
   .container { width: min(100% - 32px, 680px); }
-  .desktop-nav, .header-code-link { display: none; }
+  .desktop-nav, .header-actions { display: none; }
+  .header-inner { display: flex; }
   .site-header { color: #fff; border-color: #24282b; background: rgba(7,9,11,.97); }
   .site-header .brand strong { color: #fff; }
   .menu-button { display: grid; place-content: center; width: 42px; height: 42px; margin-left: auto; border: 1px solid #353a3e; color: #fff; background: transparent; }

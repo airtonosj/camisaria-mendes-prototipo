@@ -1,6 +1,6 @@
 import { FormEvent, useState } from "react";
 import { buildRoute } from "../App";
-import { heroShirts, privateCodeAliases, showcaseCampaigns, whatsappCampaignUrl } from "../data";
+import { heroShirts, showcaseCampaigns, whatsappCampaignUrl } from "../data";
 import { Brand } from "./Brand";
 import { Header } from "./Header";
 
@@ -20,12 +20,13 @@ export function LandingPage() {
   function openCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalized = code.trim().toUpperCase().replace(/\s+/g, "-");
-    const campaign = privateCodeAliases[normalized];
-    if (!campaign) {
-      setError("Confira o código com o representante da turma.");
+    if (!normalized) {
+      setError("Digite o código enviado pelo representante da turma.");
       return;
     }
-    window.location.assign(buildRoute(undefined, campaign));
+    // Campanhas são criadas pelo painel e validadas pela API. Uma lista embutida
+    // aqui rejeitaria qualquer código novo antes mesmo de consultar o servidor.
+    window.location.assign(buildRoute(undefined, normalized));
   }
 
   return (

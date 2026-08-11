@@ -50,7 +50,7 @@ type CreateOrderInput = {
 
 export type TrackedOrder = {
   number: string;
-  status: "pending" | "confirmed" | "failed" | "ready" | "delivered" | "cancelled";
+  status: "pending" | "confirmed" | "production" | "failed" | "ready" | "delivered" | "cancelled";
   cancellationReason: string | null;
   paymentStatus: string;
   totalCents: number;

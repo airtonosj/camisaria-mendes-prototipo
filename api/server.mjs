@@ -906,13 +906,15 @@ async function createOrder(request) {
     if (existingRows.length > 0) return { created: false, order: existingRows[0] };
 
     const [campaignRows] = await connection.execute(
-      "SELECT id, phase, deadline_at FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE",
+      "SELECT id, phase FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE",
       [campaignCode],
     );
     if (campaignRows.length === 0) throw new ApiError(404, "CAMPAIGN_NOT_FOUND", "Campanha não encontrada.");
     const campaign = campaignRows[0];
+    // A fase operacional é a autoridade de abertura. Se a equipe retornar uma
+    // campanha para `receiving_orders`, a ação deliberada reabre os pedidos mesmo
+    // quando o prazo originalmente divulgado já passou.
     if (campaign.phase !== "receiving_orders") throw new ApiError(409, "CAMPAIGN_NOT_RECEIVING", "Esta campanha não está recebendo pedidos.");
-    if (new Date(campaign.deadline_at).getTime() < Date.now()) throw new ApiError(409, "CAMPAIGN_DEADLINE_REACHED", "O prazo desta campanha foi encerrado.");
 
     const variantIds = [...new Set(requestedItems.map((item) => item.variantId))];
     const placeholders = variantIds.map(() => "?").join(", ");
@@ -967,6 +969,7 @@ function effectiveOrderStatus(order) {
   if (order.payment_status !== "paid") return "pending";
   if (order.delivery_status === "delivered") return "delivered";
   if (["ready_for_delivery", "completed"].includes(order.campaign_phase)) return "ready";
+  if (order.campaign_phase === "production") return "production";
   return "confirmed";
 }
 

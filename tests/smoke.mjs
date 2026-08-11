@@ -171,6 +171,23 @@ async function deliverQueuedPaymentEmailForTest(orderNumber) {
   }
 }
 
+async function expireCampaignDeadlineForTest(code) {
+  const connection = await mysql.createConnection({
+    host: environment.DB_HOST,
+    port: Number.parseInt(environment.DB_PORT || "3306", 10),
+    user: environment.DB_USER,
+    password: environment.DB_PASSWORD || "",
+    database: environment.DB_NAME,
+    charset: "utf8mb4",
+    timezone: "Z",
+  });
+  try {
+    await connection.execute("UPDATE campaigns SET deadline_at = '2020-01-01 00:00:00' WHERE code = ?", [code]);
+  } finally {
+    await connection.end();
+  }
+}
+
 async function request(path, { method = "GET", token, headers = {}, body, expected = 200 } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
@@ -489,6 +506,8 @@ try {
       body: { targetPhase },
     });
   }
+  let phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
+  assert.equal(phaseTracking.order.status, "ready");
   await request(`/api/admin/campaigns/${campaign.code}/phase`, {
     method: "PATCH",
     token,
@@ -500,12 +519,41 @@ try {
     token,
     body: { targetPhase: "production", reason: "Validando retorno controlado" },
   });
+  phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
+  assert.equal(phaseTracking.order.status, "production");
   await request(`/api/admin/campaigns/${campaign.code}/phase`, {
     method: "PATCH",
     token,
-    body: { targetPhase: "ready_for_delivery" },
+    body: { targetPhase: "orders_closed", reason: "Validando retorno ao fechamento" },
   });
-  step("campanha avança uma etapa e retorno exige motivo");
+  phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
+  assert.equal(phaseTracking.order.status, "confirmed");
+  await expireCampaignDeadlineForTest(campaign.code);
+  await request(`/api/admin/campaigns/${campaign.code}/phase`, {
+    method: "PATCH",
+    token,
+    body: { targetPhase: "receiving_orders", reason: "Reabrindo pedidos no smoke test" },
+  });
+  const reopenedCampaign = await request(`/api/campaigns/${campaign.code}`);
+  assert.equal(reopenedCampaign.campaign.phase, "receiving_orders");
+  await request("/api/orders", {
+    method: "POST",
+    expected: 201,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: {
+      campaignCode: campaign.code,
+      customer: { name: "Cliente da campanha reaberta", whatsapp: "5598999991004", email: "reaberta@example.com" },
+      items: [{ variantId: variant.id, size: allowedSize.code, quantity: 1 }],
+    },
+  });
+  for (const targetPhase of ["orders_closed", "production", "ready_for_delivery"]) {
+    await request(`/api/admin/campaigns/${campaign.code}/phase`, {
+      method: "PATCH",
+      token,
+      body: { targetPhase },
+    });
+  }
+  step("retrocesso atualiza o cliente e reabre pedidos mesmo após o prazo original");
 
   await request(`/api/admin/orders/${firstCreated.order.number}/delivery`, {
     method: "PATCH",
