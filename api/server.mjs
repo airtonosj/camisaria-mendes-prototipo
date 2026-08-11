@@ -231,29 +231,56 @@ async function requireSessionUser(request) {
   return session.user;
 }
 
-const loginAttempts = new Map();
-const maxLoginAttempts = 8;
+const rateLimitEntries = new Map();
+const maxRateLimitEntries = 10_000;
 const loginWindowMs = 10 * 60 * 1000;
+const maxLoginAttempts = 8;
+const orderWindowMs = 10 * 60 * 1000;
+const maxOrderAttempts = 20;
 
-function registerLoginAttempt(key) {
-  const now = Date.now();
-  const attempt = loginAttempts.get(key);
-  if (!attempt || now - attempt.since > loginWindowMs) {
-    loginAttempts.set(key, { count: 1, since: now });
-    return;
-  }
-  attempt.count += 1;
+function clientAddress(request) {
+  const socketAddress = String(request.socket.remoteAddress ?? "desconhecido").slice(0, 64);
+  if (!config.trustProxy) return socketAddress;
+
+  // O proxy confiável acrescenta o endereço real ao fim de X-Forwarded-For. Usar o
+  // último valor impede o cliente de escapar do limite adicionando valores à esquerda.
+  const forwarded = String(request.headers["x-forwarded-for"] ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const proxyAddress = forwarded.at(-1) || String(request.headers["x-real-ip"] ?? "").trim();
+  return (proxyAddress || socketAddress).slice(0, 64);
 }
 
-function assertLoginAllowed(key) {
-  const attempt = loginAttempts.get(key);
-  if (!attempt) return;
-  if (Date.now() - attempt.since > loginWindowMs) {
-    loginAttempts.delete(key);
-    return;
+function pruneRateLimits(now) {
+  if (rateLimitEntries.size < maxRateLimitEntries) return;
+  for (const [key, entry] of rateLimitEntries) {
+    if (entry.resetAt <= now) rateLimitEntries.delete(key);
   }
-  if (attempt.count >= maxLoginAttempts) {
-    throw new ApiError(429, "TOO_MANY_ATTEMPTS", "Muitas tentativas de acesso. Aguarde alguns minutos.");
+  if (rateLimitEntries.size >= maxRateLimitEntries) {
+    const oldestKey = rateLimitEntries.keys().next().value;
+    if (oldestKey !== undefined) rateLimitEntries.delete(oldestKey);
+  }
+}
+
+function rateLimitEntry(key, windowMs) {
+  const now = Date.now();
+  let entry = rateLimitEntries.get(key);
+  if (!entry || entry.resetAt <= now) {
+    pruneRateLimits(now);
+    entry = { count: 0, resetAt: now + windowMs };
+    rateLimitEntries.set(key, entry);
+  }
+  return entry;
+}
+
+function registerRateLimitedAttempt(key, windowMs) {
+  rateLimitEntry(key, windowMs).count += 1;
+}
+
+function assertRateLimitAllowed(key, limit, windowMs, message) {
+  if (rateLimitEntry(key, windowMs).count >= limit) {
+    throw new ApiError(429, "TOO_MANY_ATTEMPTS", message);
   }
 }
 
@@ -261,19 +288,19 @@ async function login(request) {
   const body = await readJson(request);
   const email = normalizeEmail(body.email);
   const password = requireText(body.password, "password", 200);
-  const attemptKey = `${request.socket.remoteAddress ?? "desconhecido"}:${email}`;
-  assertLoginAllowed(attemptKey);
+  const attemptKey = `login:${clientAddress(request)}:${email}`;
+  assertRateLimitAllowed(attemptKey, maxLoginAttempts, loginWindowMs, "Muitas tentativas de acesso. Aguarde alguns minutos.");
 
   const user = email ? await findActiveUserByEmail(email) : null;
   if (!user || !verifyPassword(password, user.password_hash)) {
-    registerLoginAttempt(attemptKey);
+    registerRateLimitedAttempt(attemptKey, loginWindowMs);
     throw new ApiError(401, "INVALID_CREDENTIALS", "E-mail ou senha incorretos.");
   }
   if (user.role !== "camisaria") {
-    registerLoginAttempt(attemptKey);
+    registerRateLimitedAttempt(attemptKey, loginWindowMs);
     throw new ApiError(403, "STAFF_ROLE_NOT_ALLOWED", "Esta conta não possui acesso ao painel da camisaria.");
   }
-  loginAttempts.delete(attemptKey);
+  rateLimitEntries.delete(attemptKey);
   const session = await createSession(user.id);
   return {
     token: session.token,
@@ -349,15 +376,16 @@ function resetLink(token) {
 async function requestPasswordReset(request) {
   const body = await readJson(request);
   const email = normalizeEmail(body.email);
-  const attemptKey = `reset:${request.socket.remoteAddress ?? "desconhecido"}`;
-  assertLoginAllowed(attemptKey);
-  registerLoginAttempt(attemptKey);
+  const requestAddress = clientAddress(request);
+  const attemptKey = `reset:${requestAddress}`;
+  assertRateLimitAllowed(attemptKey, maxLoginAttempts, loginWindowMs, "Muitas tentativas de recuperação. Aguarde alguns minutos.");
+  registerRateLimitedAttempt(attemptKey, loginWindowMs);
 
   const configured = mailerConfigured();
   const user = email ? await findActiveUserByEmail(email) : null;
   if (!user) return { delivery: configured ? "email" : "unavailable" };
 
-  const { token, expiresInMinutes } = await createPasswordResetToken(user.id, request.socket.remoteAddress);
+  const { token, expiresInMinutes } = await createPasswordResetToken(user.id, requestAddress);
   const link = resetLink(token);
   if (!configured) {
     console.warn(`Recuperação de senha solicitada por ${user.email}, mas o SMTP não está configurado.`);
@@ -1361,6 +1389,14 @@ async function route(request, response) {
     return;
   }
   if (request.method === "POST" && path === "/api/orders") {
+    const attemptKey = `order:${clientAddress(request)}`;
+    assertRateLimitAllowed(
+      attemptKey,
+      maxOrderAttempts,
+      orderWindowMs,
+      "Muitos pedidos enviados em pouco tempo. Aguarde alguns minutos.",
+    );
+    registerRateLimitedAttempt(attemptKey, orderWindowMs);
     const result = await createOrder(request);
     sendJson(response, result.created ? 201 : 200, {
       order: {
@@ -1520,6 +1556,12 @@ async function productionStartupErrors() {
       "SELECT email FROM users WHERE email = 'admin@teste.com' AND active = TRUE",
     );
     if (demoUsers.length > 0) errors.push("O usuário de demonstração admin@teste.com precisa ser desativado.");
+    const [provisionalUsers] = await pool.execute(
+      "SELECT email FROM users WHERE must_change_password = TRUE AND active = TRUE LIMIT 1",
+    );
+    if (provisionalUsers.length > 0) {
+      errors.push(`A conta ${provisionalUsers[0].email} ainda usa senha provisória e precisa trocá-la antes da produção.`);
+    }
   } catch (error) {
     errors.push(error instanceof ApiError ? error.message : `Pré-verificação operacional falhou: ${error.message}`);
   }

@@ -36,6 +36,8 @@ function assertInvalidProductionIsRejected() {
       CORS_ORIGIN: "http://127.0.0.1:4175",
       ADMIN_API_TOKEN_ENABLED: "true",
       ADMIN_API_TOKEN: "curta",
+      TRUST_PROXY: "false",
+      ADMIN_INITIAL_PASSWORD: "senha-provisoria-a-remover",
       SMTP_HOST: "",
       SMTP_USER: "",
       SMTP_PASSWORD: "",
@@ -51,9 +53,39 @@ function assertInvalidProductionIsRejected() {
   });
   assert.equal(result.status, 1, "A API aceitou uma configuração de produção insegura.");
   const output = `${result.stdout}\n${result.stderr}`;
-  for (const expected of ["PUBLIC_APP_URL", "ADMIN_API_TOKEN", "SMTP_HOST", "DB_USER", "UPLOADS_DIR", "PAYMENT_PROVIDER", "INFINITEPAY_HANDLE", "INFINITEPAY_CHECKOUT_ENABLED"]) {
+  for (const expected of ["PUBLIC_APP_URL", "ADMIN_API_TOKEN", "TRUST_PROXY", "ADMIN_INITIAL_PASSWORD", "SMTP_HOST", "DB_USER", "UPLOADS_DIR", "PAYMENT_PROVIDER", "INFINITEPAY_HANDLE", "INFINITEPAY_CHECKOUT_ENABLED"]) {
     assert.match(output, new RegExp(expected), `A recusa de produção não mencionou ${expected}.`);
   }
+}
+
+function assertAdminBootstrapHidesPassword() {
+  const password = "senha-bootstrap-smoke-2026";
+  const result = spawnSync(process.execPath, ["api/create-admin.mjs"], {
+    cwd: projectDirectory,
+    env: {
+      ...environment,
+      ADMIN_INITIAL_NAME: "Bootstrap Smoke",
+      ADMIN_INITIAL_EMAIL: "bootstrap@smoke.test",
+      ADMIN_INITIAL_PASSWORD: password,
+    },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const output = `${result.stdout}\n${result.stderr}`;
+  assert.doesNotMatch(output, new RegExp(password), "O bootstrap expôs a senha provisória no log.");
+  assert.match(output, /omitida dos logs/i);
+
+  const missing = spawnSync(process.execPath, ["api/create-admin.mjs"], {
+    cwd: projectDirectory,
+    env: {
+      ...environment,
+      ADMIN_INITIAL_EMAIL: "sem-senha@smoke.test",
+      ADMIN_INITIAL_PASSWORD: "",
+    },
+    encoding: "utf8",
+  });
+  assert.equal(missing.status, 1, "O bootstrap aceitou senha inicial ausente.");
+  assert.match(`${missing.stdout}\n${missing.stderr}`, /informada explicitamente/i);
 }
 
 const fakeInfinitePay = { links: [], checks: new Map(), checkRequests: [] };
@@ -215,6 +247,8 @@ step(`isolamento confirmado em ${environment.DB_NAME}`);
 runNode("api/migrate.mjs");
 runNode("api/seed.mjs");
 step("banco recriado, migrado e sem dados do ambiente principal");
+assertAdminBootstrapHidesPassword();
+step("bootstrap exige senha explícita e nunca a imprime nos logs");
 
 const providerApi = await startFakeInfinitePay();
 const api = startApi();
@@ -534,6 +568,64 @@ try {
     body: { email: "admin@teste.com", password: "senha-smoke-2026" },
   });
   step("redefinição usa token único, troca a senha e encerra sessões antigas");
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await request("/api/auth/login", {
+      method: "POST",
+      expected: 401,
+      headers: { "X-Forwarded-For": `203.0.113.${attempt + 1}, 198.51.100.10` },
+      body: { email: "admin@teste.com", password: "senha-incorreta" },
+    });
+  }
+  await request("/api/auth/login", {
+    method: "POST",
+    expected: 429,
+    headers: { "X-Forwarded-For": "203.0.113.250, 198.51.100.10" },
+    body: { email: "admin@teste.com", password: "senha-incorreta" },
+  });
+  await request("/api/auth/login", {
+    method: "POST",
+    headers: { "X-Forwarded-For": "198.51.100.11" },
+    body: { email: "admin@teste.com", password: "senha-smoke-2026" },
+  });
+  step("login limita o cliente real atrás do proxy sem bloquear outro endereço");
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await request("/api/orders", {
+      method: "POST",
+      expected: 422,
+      headers: {
+        "Idempotency-Key": randomUUID(),
+        "X-Forwarded-For": `203.0.113.${attempt + 1}, 198.51.100.20`,
+      },
+      body: {},
+    });
+  }
+  await request("/api/orders", {
+    method: "POST",
+    expected: 429,
+    headers: {
+      "Idempotency-Key": randomUUID(),
+      "X-Forwarded-For": "203.0.113.250, 198.51.100.20",
+    },
+    body: {},
+  });
+  const customAllowedSize = customCampaign.sizes.find((size) => size.model.code === customVariant.model.code);
+  assert.ok(customAllowedSize);
+  await request("/api/orders", {
+    method: "POST",
+    expected: 201,
+    headers: {
+      "Idempotency-Key": randomUUID(),
+      "X-Forwarded-For": "198.51.100.21",
+    },
+    body: {
+      campaignCode: customCampaign.code,
+      customer: { name: "Cliente após limite", whatsapp: "5598999991021", email: "limite@example.com" },
+      items: [{ variantId: customVariant.id, size: customAllowedSize.code, quantity: 1 }],
+    },
+  });
+  step("criação pública de pedidos limita abuso sem bloquear outro cliente");
 
   console.log("\nSmoke test operacional concluído com sucesso.");
 } catch (error) {

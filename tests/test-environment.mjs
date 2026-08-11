@@ -37,6 +37,7 @@ export function testEnvironment() {
     APP_ENV: "test",
     API_HOST: "127.0.0.1",
     API_PORT: base.TEST_API_PORT || "3334",
+    TRUST_PROXY: "true",
     DB_NAME: testDatabase,
     CORS_ORIGIN: `http://127.0.0.1:${base.TEST_WEB_PORT || "4175"}`,
     PUBLIC_APP_URL: `http://127.0.0.1:${base.TEST_WEB_PORT || "4175"}`,

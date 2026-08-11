@@ -26,6 +26,7 @@ Configure sem aspas e sem colocar segredos no GitHub:
 APP_ENV=production
 API_HOST=0.0.0.0
 API_PORT=3000
+TRUST_PROXY=true
 CORS_ORIGIN=https://sandybrown-bee-997442.hostingersite.com
 PUBLIC_APP_URL=https://sandybrown-bee-997442.hostingersite.com
 ADMIN_API_TOKEN_ENABLED=false
@@ -73,5 +74,7 @@ Arquivos o prefixo real `/home/<usuario-hostinger>`.
 7. O checkout abre na conta `gustavo-henrique-9yt`.
 8. Somente `payment_check` confirmado muda o pedido para pago.
 
-Depois do primeiro acesso, remova `ADMIN_INITIAL_PASSWORD` do hPanel e redeploye. A
-conta persistida permanece no MySQL e deixa de existir uma senha inicial no ambiente.
+O bootstrap nunca imprime a senha no log. Depois do primeiro acesso, remova
+`ADMIN_INITIAL_PASSWORD` do hPanel e redeploye. A conta persistida permanece no MySQL;
+em `APP_ENV=production`, a API recusa iniciar enquanto a variável existir ou alguma
+conta ativa ainda estiver marcada para troca obrigatória.

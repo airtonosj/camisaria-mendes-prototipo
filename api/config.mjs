@@ -64,6 +64,10 @@ export const config = {
     .filter(Boolean),
   adminApiTokenEnabled: booleanFromEnv("ADMIN_API_TOKEN_ENABLED", environment !== "production"),
   adminApiToken: process.env.ADMIN_API_TOKEN ?? "",
+  // Só aceite cabeçalhos de endereço quando a aplicação estiver atrás do proxy
+  // reverso controlado pelo operador, como acontece no Web App gerenciado da Hostinger.
+  trustProxy: booleanFromEnv("TRUST_PROXY", false),
+  initialAdminPasswordConfigured: Boolean(process.env.ADMIN_INITIAL_PASSWORD),
   // Endereço público do site. Entra nos links de redefinição de senha, que precisam
   // apontar para o navegador do usuário e não para o host interno da API.
   publicAppUrl: (textFromEnv("PUBLIC_APP_URL") || "http://127.0.0.1:4173").replace(/\/+$/, ""),
@@ -132,6 +136,12 @@ export function productionConfigurationErrors() {
   }
   if (config.adminApiTokenEnabled && config.adminApiToken.length < 32) {
     errors.push("ADMIN_API_TOKEN_ENABLED exige ADMIN_API_TOKEN com pelo menos 32 caracteres.");
+  }
+  if (!config.trustProxy) {
+    errors.push("TRUST_PROXY precisa ser true em produção para os limites por cliente funcionarem atrás do proxy reverso.");
+  }
+  if (config.initialAdminPasswordConfigured) {
+    errors.push("ADMIN_INITIAL_PASSWORD deve ser removida depois que a conta inicial trocar a senha.");
   }
   if (!config.smtp.host || !config.smtp.user || !config.smtp.password || !config.smtp.from) {
     errors.push("SMTP_HOST, SMTP_USER, SMTP_PASSWORD e SMTP_FROM são obrigatórios em produção.");

@@ -12,10 +12,14 @@ import { hashPassword, normalizeEmail } from "./auth.mjs";
 const force = process.argv.includes("--force");
 const name = process.env.ADMIN_INITIAL_NAME?.trim() || "Gustavo Mendes";
 const email = normalizeEmail(process.env.ADMIN_INITIAL_EMAIL || "gustavo@mendes");
-const password = process.env.ADMIN_INITIAL_PASSWORD || "changeme";
+const password = process.env.ADMIN_INITIAL_PASSWORD || "";
 
 if (!email) {
   console.error("ADMIN_INITIAL_EMAIL inválido.");
+  process.exit(1);
+}
+if (!password) {
+  console.error("ADMIN_INITIAL_PASSWORD precisa ser informada explicitamente.");
   process.exit(1);
 }
 if (password.length < 8) {
@@ -40,8 +44,8 @@ try {
       [email],
     );
     console.log(`Conta da camisaria pronta: ${email}`);
-    console.log(`Senha provisória: ${password}`);
-    console.log("O painel vai exigir a troca da senha no primeiro acesso.");
+    console.log("Senha provisória armazenada com hash e omitida dos logs.");
+    console.log("O painel vai exigir a troca da senha no primeiro acesso; depois remova ADMIN_INITIAL_PASSWORD do ambiente.");
   }
 } finally {
   await pool.end();
