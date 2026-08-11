@@ -63,7 +63,7 @@ ALTER TABLE campaign_variants
 
 -- O tamanho deixa de ser texto validado por CHECK e passa a referenciar o catálogo.
 ALTER TABLE order_items
-  DROP CHECK chk_order_items_size,
+  DROP CONSTRAINT chk_order_items_size,
   ADD COLUMN size_id SMALLINT UNSIGNED NULL AFTER campaign_variant_id;
 
 UPDATE order_items oi JOIN sizes sz ON sz.code = oi.size
