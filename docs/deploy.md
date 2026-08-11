@@ -1,5 +1,9 @@
 # Publicar na Hostinger
 
+Para o plano Business com **Node.js Web App gerenciado**, siga primeiro
+[`deploy-hostinger-business.md`](deploy-hostinger-business.md). As instrucoes abaixo
+continuam sendo a referencia para uma VPS com acesso root e systemd.
+
 Este guia cobre banco, API, painel com login real e infraestrutura. O deploy público de
 pedidos permanece bloqueado até o checkout InfinitePay passar por uma compra real controlada.
 Ele assume uma **VPS da Hostinger** com acesso SSH, porque a hospedagem compartilhada não

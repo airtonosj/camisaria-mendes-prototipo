@@ -46,12 +46,16 @@ function booleanFromEnv(name, fallback) {
 const environment = textFromEnv("APP_ENV") || textFromEnv("NODE_ENV") || "development";
 const configuredUploadsDirectory = textFromEnv("UPLOADS_DIR");
 const officialInfinitePayApiBaseUrl = "https://api.checkout.infinitepay.io";
+const platformPort = integerFromEnv("PORT", 0);
+const configuredApiPort = integerFromEnv("API_PORT", environment === "production" ? 3000 : 3333);
 
 export const config = {
   environment,
   isProduction: environment === "production",
-  host: process.env.API_HOST ?? "127.0.0.1",
-  port: integerFromEnv("API_PORT", 3333),
+  // A hospedagem Node.js gerenciada injeta PORT e precisa aceitar conexoes fora
+  // do processo. Em desenvolvimento mantemos o bind local e a porta historica.
+  host: textFromEnv("API_HOST") || (environment === "production" ? "0.0.0.0" : "127.0.0.1"),
+  port: platformPort || configuredApiPort,
   // Aceita lista separada por vírgula: o navegador manda 127.0.0.1 ou localhost
   // conforme o endereço digitado, e a comparação de origem é exata.
   corsOrigins: (process.env.CORS_ORIGIN ?? "http://127.0.0.1:4173,http://localhost:4173")

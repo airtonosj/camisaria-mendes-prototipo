@@ -29,6 +29,7 @@ import {
 
 const campaignPhases = ["receiving_orders", "orders_closed", "production", "ready_for_delivery", "completed"];
 const projectDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const frontendDirectory = path.join(projectDirectory, "dist");
 const uploadsDirectory = config.uploadsDirectory;
 const migrationsDirectory = path.join(projectDirectory, "database", "migrations");
 const uploadExtensions = new Map([
@@ -40,6 +41,20 @@ const uploadContentTypes = new Map([
   ["png", "image/png"],
   ["jpg", "image/jpeg"],
   ["webp", "image/webp"],
+]);
+const frontendContentTypes = new Map([
+  [".css", "text/css; charset=utf-8"],
+  [".html", "text/html; charset=utf-8"],
+  [".ico", "image/x-icon"],
+  [".jpeg", "image/jpeg"],
+  [".jpg", "image/jpeg"],
+  [".js", "text/javascript; charset=utf-8"],
+  [".json", "application/json; charset=utf-8"],
+  [".png", "image/png"],
+  [".svg", "image/svg+xml; charset=utf-8"],
+  [".webp", "image/webp"],
+  [".woff", "font/woff"],
+  [".woff2", "font/woff2"],
 ]);
 const maxUploadBytes = 2 * 1024 * 1024;
 
@@ -1183,6 +1198,41 @@ async function serveUpload(response, filename) {
   response.end(file);
 }
 
+async function serveFrontend(request, response, requestPath) {
+  const relativePath = requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
+  const requestedFile = path.resolve(frontendDirectory, relativePath);
+  const relativeToFrontend = path.relative(frontendDirectory, requestedFile);
+  const staysInsideFrontend = relativeToFrontend
+    && !relativeToFrontend.startsWith("..")
+    && !path.isAbsolute(relativeToFrontend);
+
+  let filePath = staysInsideFrontend ? requestedFile : path.join(frontendDirectory, "index.html");
+  try {
+    const stats = await fs.stat(filePath);
+    if (!stats.isFile()) filePath = path.join(frontendDirectory, "index.html");
+  } catch {
+    // Fallback do React para caminhos que nao correspondem a um arquivo compilado.
+    filePath = path.join(frontendDirectory, "index.html");
+  }
+
+  let file;
+  try {
+    file = await fs.readFile(filePath);
+  } catch {
+    throw new ApiError(503, "FRONTEND_UNAVAILABLE", "O site ainda nao foi compilado neste servidor.");
+  }
+
+  const extension = path.extname(filePath).toLowerCase();
+  const immutableAsset = relativeToFrontend.startsWith(`assets${path.sep}`);
+  response.writeHead(200, {
+    "Content-Type": frontendContentTypes.get(extension) || "application/octet-stream",
+    "Content-Length": file.length,
+    "Cache-Control": immutableAsset ? "public, max-age=31536000, immutable" : "no-cache",
+    "X-Content-Type-Options": "nosniff",
+  });
+  response.end(request.method === "HEAD" ? undefined : file);
+}
+
 async function productionReport(requestUrl) {
   const campaign = requestUrl.searchParams.get("campaign");
   const parameters = [];
@@ -1389,6 +1439,10 @@ async function route(request, response) {
   if (request.method === "GET" && path === "/api/admin/reports/delivery") {
     await requireStaff(request);
     sendJson(response, 200, { rows: await deliveryReport(requestUrl) });
+    return;
+  }
+  if ((request.method === "GET" || request.method === "HEAD") && !path.startsWith("/api/")) {
+    await serveFrontend(request, response, path);
     return;
   }
   throw new ApiError(404, "ROUTE_NOT_FOUND", "Rota não encontrada.");
