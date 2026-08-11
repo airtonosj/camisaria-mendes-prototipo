@@ -8,7 +8,7 @@ para todos é somente `INFINITEPAY_CHECKOUT_ENABLED=true`.
 
 | Etapa | Entrega no repositório | Evidência atual | Pendência externa para liberar |
 | --- | --- | --- | --- |
-| 1. Artes permanentes | `UPLOADS_DIR` obrigatório fora da release, health check, backup dos uploads e prova antes/depois do redeploy | Caminho real `/home/u374132860/domains/camisariamendes.com.br/uploads` configurado; health verde e diretório visível fora de `hbuilds` | Enviar uma arte de prova e confirmar o mesmo arquivo depois de outro redeploy |
+| 1. Artes permanentes | `UPLOADS_DIR` obrigatório fora da release, health check, backup dos uploads e prova antes/depois do redeploy | Caminho real configurado; a arte `e71ac8c1-9693-4e31-87b7-f22f70a9a879.png` continuou acessível em 1254 × 1254 após o deploy `b32d719` | Manter os uploads incluídos na rotina de backup e restauração |
 | 2. SMTP | Fila idempotente pós-pagamento e `npm run ops:email:test -- destinatario` | Conteúdo, deduplicação e retry passaram no smoke; autenticação, envio e recebimento real foram confirmados em 11/08/2026 | Conferir SPF/DKIM nos cabeçalhos e repetir a entrega no teste de compra real |
 | 3. Produção | Validação de HTTPS, proxy, SMTP, banco restrito e storage; checkout fechado não impede mais o boot | `APP_ENV=production`, domínio real, SMTP e storage aplicados; deploy `c57c6c1` e health verdes em 11/08/2026 | Confirmar a restrição de privilégios do usuário MySQL e os cabeçalhos HTTP finais |
 | 4. Compra InfinitePay | Link vinculado ao pedido, webhook, retorno e `payment_check` idempotentes | Provedor falso passou inclusive divergência de valor | Fazer uma compra real de baixo valor no ambiente publicado e guardar pedido, transação e comprovante |

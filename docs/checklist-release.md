@@ -68,4 +68,5 @@
 - [x] Produção foi desacoplada da abertura pública: checkout `false` não invalida `APP_ENV=production`.
 - [x] SMTP real autenticou, enviou e teve o recebimento confirmado pelo titular da caixa.
 - [x] Deploy `c57c6c1` concluiu no hPanel e `/api/health` confirmou banco, migração e storage prontos.
-- [ ] A prova de arquivo antes/depois de outro redeploy, a compra de baixo valor e o estorno real ainda exigem execução externa.
+- [x] A arte de prova `e71ac8c1-9693-4e31-87b7-f22f70a9a879.png` permaneceu acessível em 1254 × 1254 depois do deploy `b32d719`.
+- [ ] A compra de baixo valor e o estorno real ainda exigem execução externa.
