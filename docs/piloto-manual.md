@@ -1,8 +1,8 @@
-# Homologação pré-checkout — go/no-go
+# Homologação do checkout InfinitePay — go/no-go
 
-Este arquivo preserva o nome antigo por compatibilidade com referências externas, mas o
-Pix manual foi encerrado. Antes da integração InfinitePay, a homologação usa somente
-pedidos de teste pendentes; ninguém transfere valor nem marca pagamento pelo painel.
+Este arquivo preserva o nome antigo por compatibilidade com referências externas. O Pix
+manual foi encerrado; a homologação final usa o Checkout Integrado da InfinitePay e uma
+compra real de baixo valor, sem confirmação manual pelo painel.
 
 ## Antes de abrir
 
@@ -12,13 +12,16 @@ pedidos de teste pendentes; ninguém transfere valor nem marca pagamento pelo pa
 - [ ] Arte, cortes, cores, tamanhos, preços e prazo da campanha foram aprovados.
 - [ ] Link e QR Code foram testados em Android, iPhone e desktop.
 - [ ] `PAYMENT_PROVIDER=infinitepay` e a `INFINITEPAY_HANDLE` correta estão preparados.
-- [ ] `INFINITEPAY_CHECKOUT_ENABLED=false` continua definido.
+- [ ] Checkout Integrado foi habilitado na conta InfinitePay.
+- [ ] `INFINITEPAY_CHECKOUT_ENABLED=true` foi aplicado somente no ambiente de homologação.
 
 ## Durante a homologação
 
 - [ ] A tela oferece Pix e cartão de crédito.
 - [ ] Nenhuma chave Pix fixa, pedido de comprovante ou confirmação manual aparece.
 - [ ] Pedido repetido com a mesma chave idempotente não cria duplicata.
+- [ ] Webhook repetido não duplica pagamento nem e-mail.
+- [ ] Retorno do navegador não confirma pagamento antes de `payment_check`.
 - [ ] Pedido pendente não aparece na produção nem na entrega.
 - [ ] A antiga rota administrativa de pagamento responde como inexistente.
 - [ ] Cancelamento não pago exige motivo e continua consultável.
@@ -29,17 +32,17 @@ pedidos de teste pendentes; ninguém transfere valor nem marca pagamento pelo pa
 
 ## Critério de aprovação
 
-Esta etapa aprova apenas a jornada até o ponto de integração. Receber dinheiro real é
-**no-go** enquanto criação do link, redirect, webhook, `payment_check`, idempotência,
-reconciliação e reembolso não estiverem implementados e testados.
+Produção é **go** somente quando a compra real confirmar checkout, `payment_check`, e-mail,
+relatório e rastreamento sem intervenção manual. Reembolso continua **no-go** até existir
+um procedimento validado no painel/conta InfinitePay e a reconciliação no sistema.
 
 ## Registro mínimo de incidente
 
 Anote horário, pedido, tela/rota, estado esperado, estado observado, impacto, ação tomada e
 resultado. Não inclua senha, token, dados de cartão ou payload completo de pagamento nos logs.
 
-## Próxima etapa
+## Resultado esperado
 
-Criar o link com `order_nsu` e o valor calculado pelo servidor, redirecionar ao checkout
-InfinitePay, persistir `transaction_nsu` e processar o webhook idempotentemente. O servidor
-deve chamar `payment_check` antes de marcar o pedido como pago; o redirect nunca confirma.
+O link usa `order_nsu` e o valor calculado pelo servidor, persiste `transaction_nsu` e
+processa o webhook idempotentemente. O servidor chama `payment_check` antes de marcar o
+pedido como pago; o redirect apenas solicita a reconciliação.

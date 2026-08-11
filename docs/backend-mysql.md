@@ -16,7 +16,8 @@ falha de servidor aparece como erro com "tentar novamente".
 - **A arte pertence à campanha, não à variante.** `campaigns.art_front_url` é obrigatória e serve para todos os cortes e tamanhos; `campaigns.art_back_url` é opcional e, quando ausente, o aluno vê só a frente.
 - O preço é copiado para `order_items` no momento da compra, preservando o histórico.
 - Somente pedidos com `payment_status = 'paid'` aparecem nos relatórios oficiais.
-- Redirecionamento do navegador não confirma pagamento; a futura integração deverá confirmar pela API/webhook assinado do provedor.
+- A transição legítima para `paid` agenda, na mesma transação, um e-mail com o código da compra para o comprador.
+- Redirecionamento do navegador não confirma pagamento; webhook e retorno apenas solicitam a validação server-to-server por `payment_check`.
 - `Idempotency-Key` impede que uma tentativa repetida crie dois pedidos.
 - O navegador nunca recebe o `ADMIN_API_TOKEN`. O painel autentica com login e usa um
   token de sessão de 12 horas; o token estático fica no servidor, para scripts.
@@ -65,7 +66,10 @@ Invoke-RestMethod http://127.0.0.1:3333/api/health
 | `PATCH` | `/api/admin/account` | Trocar nome, e-mail e senha do próprio acesso |
 | `GET` | `/api/campaigns/:codigo` | Carregar campanha, modelos e cores |
 | `POST` | `/api/orders` | Registrar pedido ainda pendente de pagamento |
+| `POST` | `/api/orders/:numero/checkout` | Criar ou reutilizar o link InfinitePay após conferir pedido e WhatsApp |
 | `GET` | `/api/orders/:numero?whatsapp=...` | Acompanhar um pedido com os dados da compra |
+| `POST` | `/api/payments/infinitepay/webhook` | Persistir notificação idempotente do provedor |
+| `POST` | `/api/payments/infinitepay/reconcile` | Agendar `payment_check` a partir do retorno do navegador |
 | `POST` | `/api/admin/uploads` | Enviar a arte da campanha e receber a URL |
 | `GET` | `/uploads/:arquivo` | Servir a arte enviada |
 | `GET/POST` | `/api/admin/campaigns` | Listar ou criar campanhas persistentes |
@@ -125,18 +129,25 @@ do usuário — a de quem está trocando continua valendo.
 
 ## Confirmação de pagamento
 
-A tela do aluno já oferece Pix e cartão de crédito pela InfinitePay, mas o checkout externo
-ainda não foi conectado. O pedido nasce pendente e não existe rota administrativa para
-marcá-lo como pago, nem chave Pix fixa ou envio de comprovante.
+A tela do aluno oferece Pix e cartão de crédito pela InfinitePay. O pedido nasce pendente,
+`POST /api/orders/:numero/checkout` cria ou reutiliza o link externo e não existe rota
+administrativa para marcá-lo como pago, nem chave Pix fixa ou envio de comprovante.
 
-A integração deverá criar o link com o número interno em `order_nsu`, redirecionar o aluno
-para o checkout hospedado e processar o webhook de forma idempotente. Antes de alterar
+A integração cria o link com o número interno em `order_nsu`, redireciona o aluno para o
+checkout hospedado e processa o webhook de forma idempotente. Antes de alterar
 `orders.payment_status`, o servidor deve conferir pedido, valor e transação com
 `POST https://api.checkout.infinitepay.io/payment_check`. O `redirect_url` serve apenas para
 experiência do aluno e nunca comprova pagamento.
 
-Somente pedidos pagos entram nos relatórios e no fluxo de entrega. Enquanto API e webhook
-não existirem, `INFINITEPAY_CHECKOUT_ENABLED=false` bloqueia o modo de produção.
+Somente pedidos pagos entram nos relatórios e no fluxo de entrega. A trava
+`INFINITEPAY_CHECKOUT_ENABLED=false` permanece até a homologação real na conta da camisaria.
+
+A migração `007_payment_confirmation_email` cria uma fila transacional e um trigger para a
+transição de `payment_status` para `paid`. Havendo `customer_email`, o worker da API envia
+uma única mensagem com o número do pedido, campanha, valor e link de acompanhamento. O
+link preenche apenas o código; o aluno ainda informa o WhatsApp na página. Se o SMTP
+falhar, a notificação fica registrada para nova tentativa sem desfazer a confirmação do
+pagamento.
 
 ## Enviar a arte da campanha
 
@@ -214,5 +225,6 @@ npm.cmd run test:smoke
 
 `test:smoke` prepara o schema desde zero, carrega apenas as seeds de desenvolvimento,
 sobe a API em `127.0.0.1:3334`, percorre a jornada operacional e encerra o processo ao
-final. O teste comprova que a antiga rota manual não existe e simula a baixa do provedor
-diretamente no banco de teste para validar produção e entrega; ele não chama a InfinitePay.
+final. O teste comprova que a antiga rota manual não existe e usa um servidor InfinitePay
+falso para validar criação do link, webhook duplicado, `payment_check`, valor divergente,
+produção e entrega; ele não cria cobrança real na InfinitePay.

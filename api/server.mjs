@@ -19,6 +19,13 @@ import {
 import { config, productionConfigurationErrors } from "./config.mjs";
 import { pool, withTransaction } from "./database.mjs";
 import { mailerConfigured, sendMail } from "./mailer.mjs";
+import { startOrderEmailNotificationWorker } from "./order-email-notifications.mjs";
+import {
+  createCheckoutForOrder,
+  enqueueInfinitePayEvent,
+  PaymentIntegrationError,
+  startInfinitePayReconciliationWorker,
+} from "./infinitepay-payments.mjs";
 
 const campaignPhases = ["receiving_orders", "orders_closed", "production", "ready_for_delivery", "completed"];
 const projectDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -823,7 +830,11 @@ async function createOrder(request) {
   const customer = body.customer ?? {};
   const customerName = requireText(customer.name, "customer.name", 160);
   const customerWhatsapp = normalizeWhatsapp(customer.whatsapp);
-  const customerEmail = optionalText(customer.email, 254);
+  const suppliedCustomerEmail = requireText(customer.email, "customer.email", 254);
+  const customerEmail = normalizeEmail(suppliedCustomerEmail);
+  if (!customerEmail) {
+    throw new ApiError(422, "VALIDATION_ERROR", "Informe um e-mail válido para receber a confirmação da compra.");
+  }
   if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 10) {
     throw new ApiError(422, "VALIDATION_ERROR", "O pedido deve conter entre 1 e 10 itens.");
   }
@@ -1311,6 +1322,25 @@ async function route(request, response) {
     });
     return;
   }
+  const checkoutMatch = path.match(/^\/api\/orders\/([^/]+)\/checkout$/);
+  if (request.method === "POST" && checkoutMatch) {
+    const body = await readJson(request);
+    const whatsapp = normalizeWhatsapp(body.whatsapp);
+    sendJson(response, 200, {
+      checkout: await createCheckoutForOrder(checkoutMatch[1].toUpperCase(), whatsapp),
+    });
+    return;
+  }
+  if (request.method === "POST" && path === "/api/payments/infinitepay/webhook") {
+    const queued = await enqueueInfinitePayEvent(await readJson(request), "webhook");
+    sendJson(response, 200, { success: true, message: null, ...queued });
+    return;
+  }
+  if (request.method === "POST" && path === "/api/payments/infinitepay/reconcile") {
+    const queued = await enqueueInfinitePayEvent(await readJson(request), "browser_return");
+    sendJson(response, 202, queued);
+    return;
+  }
   const trackingMatch = path.match(/^\/api\/orders\/([^/]+)$/);
   if (request.method === "GET" && trackingMatch) {
     sendJson(response, 200, { order: await trackOrder(requestUrl, trackingMatch[1].toUpperCase()) });
@@ -1366,11 +1396,12 @@ async function route(request, response) {
 
 const server = http.createServer((request, response) => {
   route(request, response).catch((error) => {
-    const status = error instanceof ApiError ? error.status : 500;
-    const code = error instanceof ApiError ? error.code : "INTERNAL_ERROR";
-    if (!(error instanceof ApiError)) console.error(error);
+    const knownError = error instanceof ApiError || error instanceof PaymentIntegrationError;
+    const status = knownError ? error.status : 500;
+    const code = knownError ? error.code : "INTERNAL_ERROR";
+    if (!knownError) console.error(error);
     sendJson(response, status, {
-      error: { code, message: error instanceof ApiError ? error.message : "Erro interno do servidor.", details: error.details },
+      error: { code, message: knownError ? error.message : "Erro interno do servidor.", details: error.details },
     });
   });
 });
@@ -1391,13 +1422,13 @@ async function reportStartupChecks() {
     warnings.push("INFINITEPAY_HANDLE não configurada: o checkout ainda não pode identificar a conta da camisaria.");
   }
   if (!config.payments.infinitePay.checkoutEnabled) {
-    warnings.push("Checkout InfinitePay desabilitado até a integração de API, redirect e webhook ser concluída.");
+    warnings.push("Checkout InfinitePay desabilitado até a homologação real de checkout, webhook e payment_check.");
   }
   if (config.isProduction && /^https?:\/\/(127\.0\.0\.1|localhost)/.test(config.publicAppUrl)) {
     warnings.push("PUBLIC_APP_URL aponta para o próprio servidor. O link de redefinição de senha não vai funcionar.");
   }
   if (!mailerConfigured()) {
-    warnings.push("SMTP não configurado: a recuperação de senha por e-mail fica indisponível (use `npm run user:reset`).");
+    warnings.push("SMTP não configurado: recuperação de senha e confirmações de pagamento por e-mail ficam indisponíveis.");
   }
 
   try {
@@ -1441,6 +1472,8 @@ async function productionStartupErrors() {
   return errors;
 }
 
+let stopOrderEmailWorker = () => {};
+let stopInfinitePayWorker = () => {};
 const startupErrors = await productionStartupErrors();
 if (startupErrors.length > 0) {
   for (const error of startupErrors) console.error(`Configuração de produção recusada: ${error}`);
@@ -1450,11 +1483,15 @@ if (startupErrors.length > 0) {
   server.listen(config.port, config.host, async () => {
     console.log(`API da Camisaria Mendes em http://${config.host}:${config.port} (${config.environment})`);
     await reportStartupChecks();
+    stopOrderEmailWorker = startOrderEmailNotificationWorker();
+    stopInfinitePayWorker = startInfinitePayReconciliationWorker();
   });
 }
 
 async function shutdown(signal) {
   console.log(`${signal}: encerrando API...`);
+  stopOrderEmailWorker();
+  stopInfinitePayWorker();
   server.close(async () => {
     await pool.end();
     process.exit(0);

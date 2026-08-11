@@ -18,6 +18,7 @@
 - [ ] Pedido repetido com a mesma chave não é duplicado.
 - [ ] Pedido pode ser consultado com número e WhatsApp.
 - [ ] Pedido pendente não entra no relatório de produção.
+- [ ] Confirmação de pagamento agenda um único e-mail com código e link de acompanhamento.
 - [ ] Não existe botão nem rota administrativa para marcar pagamento como pago.
 - [ ] Cancelamento exige motivo e continua consultável.
 - [ ] Entrega só ocorre para pedido pago em campanha pronta.
@@ -41,6 +42,7 @@
 - [ ] Usuário `admin@teste.com` não está ativo.
 - [ ] A senha provisória da conta real foi trocada.
 - [ ] SMTP foi testado de ponta a ponta.
+- [ ] Um comprador de teste recebeu a confirmação de pagamento e conseguiu consultar o pedido.
 - [ ] Uploads usam caminho persistente fora da árvore substituída no deploy.
 - [ ] HTTPS, cabeçalhos de segurança e proxy estão ativos.
 - [ ] Backup automático e restauração foram testados.
@@ -48,9 +50,10 @@
 
 ## Pagamento automático — fase final
 
-- [ ] Checkout integrado foi habilitado na conta InfinitePay.
+- [x] Checkout integrado foi habilitado na conta InfinitePay (confirmação do titular em 11/08/2026).
 - [ ] Taxas e condições atuais do provedor foram revalidadas.
-- [ ] Checkout está vinculado ao pedido e valor internos.
-- [ ] Webhook processa eventos idempotentemente e a API `payment_check` confirma pedido e valor.
-- [ ] Redirecionamento do navegador nunca confirma pagamento sozinho.
+- [x] Checkout está vinculado ao pedido e valor internos no teste automatizado.
+- [x] Webhook processa eventos idempotentemente e `payment_check` confere pedido e valor no provedor falso.
+- [x] Redirecionamento do navegador apenas agenda reconciliação e nunca confirma pagamento sozinho.
+- [ ] Uma compra real de baixo valor confirmou checkout, webhook, e-mail e relatório.
 - [ ] Reconciliação, expiração e reembolso foram testados.

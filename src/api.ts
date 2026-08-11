@@ -41,7 +41,7 @@ export type ApiSettings = {
 
 type CreateOrderInput = {
   campaignCode: string;
-  customer: { name: string; whatsapp: string; email?: string };
+  customer: { name: string; whatsapp: string; email: string };
   variantId: number;
   size: string;
   quantity: number;
@@ -192,6 +192,34 @@ export async function createOrderInApi(input: CreateOrderInput) {
     }),
   });
   return payload.order;
+}
+
+export async function createInfinitePayCheckout(orderNumber: string, whatsapp: string) {
+  const payload = await request<{ checkout: { url: string; reused: boolean } }>(
+    `/orders/${encodeURIComponent(orderNumber)}/checkout`,
+    { method: "POST", body: JSON.stringify({ whatsapp }) },
+    15000,
+  );
+  return payload.checkout;
+}
+
+export async function requestInfinitePayReconciliation(input: {
+  orderNsu: string;
+  transactionNsu: string;
+  invoiceSlug: string;
+  receiptUrl?: string;
+  captureMethod?: string;
+}) {
+  return request<{ accepted: boolean; duplicate: boolean }>("/payments/infinitepay/reconcile", {
+    method: "POST",
+    body: JSON.stringify({
+      order_nsu: input.orderNsu,
+      transaction_nsu: input.transactionNsu,
+      slug: input.invoiceSlug,
+      receipt_url: input.receiptUrl,
+      capture_method: input.captureMethod,
+    }),
+  });
 }
 
 export async function trackOrderInApi(orderNumber: string, whatsapp: string) {

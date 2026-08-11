@@ -45,6 +45,7 @@ function booleanFromEnv(name, fallback) {
  */
 const environment = textFromEnv("APP_ENV") || textFromEnv("NODE_ENV") || "development";
 const configuredUploadsDirectory = textFromEnv("UPLOADS_DIR");
+const officialInfinitePayApiBaseUrl = "https://api.checkout.infinitepay.io";
 
 export const config = {
   environment,
@@ -72,6 +73,9 @@ export const config = {
     infinitePay: {
       handle: textFromEnv("INFINITEPAY_HANDLE"),
       checkoutEnabled: booleanFromEnv("INFINITEPAY_CHECKOUT_ENABLED", false),
+      apiBaseUrl: (textFromEnv("INFINITEPAY_API_BASE_URL") || officialInfinitePayApiBaseUrl).replace(/\/+$/, ""),
+      requestTimeoutMs: Math.max(1000, integerFromEnv("INFINITEPAY_REQUEST_TIMEOUT_MS", 8000)),
+      reconciliationIntervalMs: Math.max(1000, integerFromEnv("PAYMENT_RECONCILIATION_INTERVAL_MS", 5000)),
     },
   },
   /**
@@ -85,6 +89,7 @@ export const config = {
     password: textFromEnv("SMTP_PASSWORD"),
     from: textFromEnv("SMTP_FROM") || textFromEnv("SMTP_USER"),
     fromName: textFromEnv("SMTP_FROM_NAME") || "Camisaria Mendes",
+    deliveryIntervalMs: Math.max(5000, integerFromEnv("EMAIL_DELIVERY_INTERVAL_MS", 30000)),
   },
   uploadsDirectory: path.resolve(configuredUploadsDirectory || path.join(projectDirectory, "uploads")),
   uploadsDirectoryConfigured: Boolean(configuredUploadsDirectory),
@@ -140,7 +145,10 @@ export function productionConfigurationErrors() {
     errors.push("INFINITEPAY_HANDLE é obrigatória para identificar a conta no checkout.");
   }
   if (!config.payments.infinitePay.checkoutEnabled) {
-    errors.push("INFINITEPAY_CHECKOUT_ENABLED permanece false até API, redirect e webhook estarem integrados.");
+    errors.push("INFINITEPAY_CHECKOUT_ENABLED permanece false até checkout, webhook e payment_check passarem na homologação real.");
+  }
+  if (config.payments.infinitePay.apiBaseUrl !== officialInfinitePayApiBaseUrl) {
+    errors.push("INFINITEPAY_API_BASE_URL must use the official endpoint in production.");
   }
   return errors;
 }

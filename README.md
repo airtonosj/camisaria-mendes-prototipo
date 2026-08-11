@@ -40,9 +40,11 @@ A API recebe o arquivo em `POST /api/admin/uploads`, confere a assinatura da ima
 
 O checkout do aluno oferece **Pix e cartão de crédito pela InfinitePay**. O pedido nasce pendente e só entra na produção depois da confirmação automática do provedor; não existe mais chave Pix fixa, envio de comprovante ou botão de confirmação manual no painel.
 
-O limite atual é explícito: a tela está pronta, mas ainda faltam as rotas que criam o link em `POST https://api.checkout.infinitepay.io/links`, recebem o webhook e validam o retorno com `payment_check`. Até isso ser concluído, `INFINITEPAY_CHECKOUT_ENABLED=false` impede um deploy de produção incompleto.
+O backend cria e reutiliza o link em `POST https://api.checkout.infinitepay.io/links`, persiste o webhook rapidamente e confirma a transação em segundo plano com `payment_check`. O retorno do navegador também pode solicitar a reconciliação, mas nunca confirma o pagamento sozinho. `INFINITEPAY_CHECKOUT_ENABLED=false` continua sendo a trava até uma compra real de baixo valor validar a conta e o ambiente público.
 
 `PAYMENT_PROVIDER=infinitepay` e `INFINITEPAY_HANDLE` preparam a conta. O número interno do pedido será enviado como `order_nsu`; redirecionamento do navegador nunca será aceito como prova de pagamento.
+
+O e-mail é obrigatório nos novos pedidos. Quando a confirmação legítima mudar o pedido para `paid`, o banco agenda uma mensagem transacional para o comprador com o código da compra e um link para **Acompanhar pedido** já preenchido; o WhatsApp continua sendo solicitado na página para proteger a consulta. Reprocessamentos não duplicam a fila e falhas temporárias de SMTP são tentadas novamente.
 
 ### Acesso da equipe
 
@@ -92,5 +94,6 @@ npm test
 ```
 
 O comando usa um banco separado terminado em `_test` e valida os fluxos críticos sem
-alterar pedidos, campanhas ou usuários do banco principal. A integração com provedor de
-pagamento/webhook permanece fora desta etapa.
+alterar pedidos, campanhas ou usuários do banco principal. Um servidor InfinitePay falso
+confere payload, idempotência do webhook, `payment_check`, divergência de valor e e-mail;
+nenhum link ou pagamento real é criado pelo teste automatizado.

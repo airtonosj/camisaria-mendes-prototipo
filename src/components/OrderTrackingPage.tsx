@@ -1,5 +1,5 @@
-import { FormEvent, useState } from "react";
-import { ApiRequestError, assetUrl, trackOrderInApi } from "../api";
+import { FormEvent, useEffect, useState } from "react";
+import { ApiRequestError, assetUrl, createInfinitePayCheckout, requestInfinitePayReconciliation, trackOrderInApi } from "../api";
 import { buildRoute } from "../App";
 import { shirtModels } from "../data";
 import { Brand } from "./Brand";
@@ -119,6 +119,35 @@ export function OrderTrackingPage() {
   const [error, setError] = useState("");
   const [searching, setSearching] = useState(false);
   const [orderCopied, setOrderCopied] = useState(false);
+  const [paymentReturnMessage, setPaymentReturnMessage] = useState("");
+  const [retryingPayment, setRetryingPayment] = useState(false);
+
+  useEffect(() => {
+    const returnedOrder = params.get("order_nsu");
+    const transactionNsu = params.get("transaction_nsu");
+    const invoiceSlug = params.get("slug");
+    if (!returnedOrder || !transactionNsu || !invoiceSlug) return;
+    setOrderNumber(returnedOrder);
+    setPaymentReturnMessage("Pagamento recebido pela InfinitePay. Estamos confirmando a transação com segurança.");
+    requestInfinitePayReconciliation({
+      orderNsu: returnedOrder,
+      transactionNsu,
+      invoiceSlug,
+      receiptUrl: params.get("receipt_url") ?? undefined,
+      captureMethod: params.get("capture_method") ?? undefined,
+    }).catch(() => {
+      setPaymentReturnMessage("Seu pedido continua salvo. A confirmação automática seguirá pelo servidor da InfinitePay.");
+    }).finally(() => {
+      const cleanUrl = new URL(window.location.href);
+      for (const key of ["order_nsu", "transaction_nsu", "slug", "receipt_url", "capture_method"]) {
+        cleanUrl.searchParams.delete(key);
+      }
+      cleanUrl.searchParams.set("pedido", returnedOrder);
+      window.history.replaceState({}, "", cleanUrl);
+    });
+  // Os parâmetros do retorno são consumidos uma única vez ao abrir a página.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function findOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -205,6 +234,20 @@ export function OrderTrackingPage() {
     }
   }
 
+  async function retryPayment() {
+    if (!order) return;
+    setRetryingPayment(true);
+    setError("");
+    try {
+      const checkout = await createInfinitePayCheckout(order.number, phone);
+      window.location.assign(checkout.url);
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : "Não foi possível abrir o checkout agora.");
+    } finally {
+      setRetryingPayment(false);
+    }
+  }
+
   const headingIcon = order?.status === "confirmed"
     ? "verified"
     : order?.status === "cancelled"
@@ -222,7 +265,6 @@ export function OrderTrackingPage() {
   // e um traço, em vez de repetir números de uma campanha de demonstração.
   const displayedRepresentative = order?.representative ?? "o representante da turma";
   const displayedCampaignTitle = order?.campaignTitle ?? "Campanha da turma";
-  const displayedCampaignCode = order?.campaignCode ?? "";
   const trackedArt = { front: order?.artFront ?? shirtModels[0].image, back: order?.artBack ?? null };
   const displayedModel = order?.modelName ?? "—";
   const displayedColor = order?.colorName ? ` · ${order.colorName}` : "";
@@ -257,6 +299,7 @@ export function OrderTrackingPage() {
 
         {!order ? (
           <form className="tracking-form" onSubmit={findOrder}>
+            {paymentReturnMessage && <p className="tracking-order-notice"><span className="material-symbols-rounded" aria-hidden="true">verified_user</span>{paymentReturnMessage}</p>}
             <label htmlFor="tracking-order">Número do pedido</label>
             <input
               id="tracking-order"
@@ -387,7 +430,7 @@ export function OrderTrackingPage() {
             </div>
 
             <div className="tracking-actions">
-              {order.status === "failed" && <a className="is-primary" href={buildRoute(undefined, displayedCampaignCode, undefined, order.number)}>Tentar pagamento novamente</a>}
+              {order.status === "failed" && <button className="is-primary" type="button" onClick={retryPayment} disabled={retryingPayment}>{retryingPayment ? "Abrindo checkout..." : "Tentar pagamento novamente"}</button>}
               {order.status === "ready" && <button className="is-primary" type="button" onClick={copyOrderNumber}>Copiar número para retirada<span className="material-symbols-rounded" aria-hidden="true">content_copy</span></button>}
               <button className={order.status === "failed" || order.status === "ready" ? "is-secondary" : ""} type="button" onClick={resetSearch}>Consultar outro pedido</button>
               <a href={buildRoute()}>Voltar ao site</a>

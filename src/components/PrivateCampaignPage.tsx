@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from "react";
-import { createOrderInApi } from "../api";
+import { createInfinitePayCheckout, createOrderInApi } from "../api";
 import type { PrivateCampaign, ShirtModelName, SizeCode } from "../data";
 import { defaultCampaignColors, defaultCampaignSizes, shirtModels, sizeCatalog, sizeGroupLabels } from "../data";
 import { Brand } from "./Brand";
@@ -111,14 +111,15 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
     try {
       const created = await createOrderInApi({
         campaignCode: campaign.code,
-        customer: { name: customerName, whatsapp: customerPhone, email: customerEmail || undefined },
+        customer: { name: customerName, whatsapp: customerPhone, email: customerEmail },
         variantId,
         size,
         quantity,
         idempotencyKey,
       });
       setOrderNumber(created.number);
-      goToStep("received");
+      const checkout = await createInfinitePayCheckout(created.number, customerPhone);
+      window.location.assign(checkout.url);
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : "Não foi possível registrar o pedido.");
     } finally {
@@ -282,7 +283,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
               </label>
               <label>
                 <span className="sr-only">E-mail opcional</span>
-                <input name="email" type="email" placeholder="E-mail (opcional)" autoComplete="email" value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} />
+                <input name="email" type="email" placeholder="E-mail para confirmação" autoComplete="email" value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} required />
               </label>
               <p className="checkout-privacy"><span className="material-symbols-rounded" aria-hidden="true">lock</span>Seus dados serão usados apenas para identificar o pedido.</p>
             </section>
@@ -334,9 +335,8 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
             </dl>
 
             <p className="payment-security"><span className="material-symbols-rounded" aria-hidden="true">lock</span>Você será direcionado ao checkout seguro da InfinitePay. Os dados do cartão e o Pix não passam pelo site da camisaria.</p>
-            {import.meta.env.DEV && <p className="payment-integration-note" role="status"><span className="material-symbols-rounded" aria-hidden="true">code</span>Tela pronta. Falta conectar a criação do link e a confirmação automática pela API/webhook da InfinitePay.</p>}
             {paymentError && <p className="form-error" role="alert">{paymentError}</p>}
-            <button className="payment-submit" type="submit" disabled={submittingOrder}>{submittingOrder ? "Registrando pedido..." : `Continuar com ${paymentMethod === "pix" ? "Pix" : "cartão"}`}<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
+            <button className="payment-submit" type="submit" disabled={submittingOrder}>{submittingOrder ? "Abrindo checkout..." : `Continuar com ${paymentMethod === "pix" ? "Pix" : "cartão"}`}<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
           </form>
         </main>
       ) : (
@@ -367,7 +367,6 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
               <div><dt>Pedido</dt><dd>#{orderNumber}</dd></div>
             </dl>
             <p className="received-payment-status" role="status">Não envie comprovante: a confirmação virá diretamente da InfinitePay.</p>
-            {import.meta.env.DEV && <p className="received-integration-note"><span className="material-symbols-rounded" aria-hidden="true">code</span>Pré-integração: falta gerar o link do checkout e processar o webhook/API.</p>}
           </section>
 
           <div className="received-content">

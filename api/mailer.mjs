@@ -3,15 +3,7 @@ import { randomUUID } from "node:crypto";
 import tls from "node:tls";
 import { config } from "./config.mjs";
 
-/**
- * Cliente SMTP mínimo, só o suficiente para enviar o link de redefinição de senha:
- * EHLO, STARTTLS quando necessário, AUTH LOGIN e uma mensagem de texto.
- *
- * É código próprio em vez de biblioteca porque o projeto tem uma dependência de
- * runtime (o driver do MySQL) e essa é a única mensagem que a aplicação envia.
- * Se um dia houver mais e-mails — confirmação de pedido, aviso de entrega —, vale
- * trocar por uma biblioteca de verdade.
- */
+/** Cliente SMTP mínimo para as mensagens transacionais de texto da aplicação. */
 
 const socketTimeoutMs = 15000;
 
@@ -98,8 +90,12 @@ function encodeBody(text) {
   return (Buffer.from(text, "utf8").toString("base64").match(/.{1,76}/g) ?? []).join("\r\n");
 }
 
-export async function sendMail({ to, subject, text }) {
+export async function sendMail({ to, subject, text, messageId }) {
   if (!mailerConfigured()) throw new Error("SMTP não configurado.");
+  if (!/^[^@\s]+@[^@\s]+$/.test(String(to)) || /[\r\n]/.test(String(to))) {
+    throw new Error("Destinatário de e-mail inválido.");
+  }
+  if (/[\r\n]/.test(String(subject))) throw new Error("Assunto de e-mail inválido.");
   const { host, user, password, from, fromName } = config.smtp;
   const connection = connect();
   let socket = connection.socket;
@@ -146,12 +142,16 @@ export async function sendMail({ to, subject, text }) {
     await write(socket, "DATA");
     await expect(reader, [354], "o início da mensagem");
 
+    const messageDomain = from.split("@")[1] ?? "camisaria-mendes";
+    const safeMessageId = /^[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+$/.test(String(messageId ?? ""))
+      ? messageId
+      : `${randomUUID()}@${messageDomain}`;
     const headers = [
       `From: ${encodeHeader(fromName)} <${from}>`,
       `To: <${to}>`,
       `Subject: ${encodeHeader(subject)}`,
       `Date: ${new Date().toUTCString()}`,
-      `Message-ID: <${randomUUID()}@${from.split("@")[1] ?? "camisaria-mendes"}>`,
+      `Message-ID: <${safeMessageId}>`,
       "MIME-Version: 1.0",
       'Content-Type: text/plain; charset="utf-8"',
       "Content-Transfer-Encoding: base64",

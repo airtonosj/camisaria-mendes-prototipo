@@ -46,5 +46,10 @@ export function testEnvironment() {
     SMTP_USER: "",
     SMTP_PASSWORD: "",
     SMTP_FROM: "",
+    PAYMENT_PROVIDER: "infinitepay",
+    INFINITEPAY_HANDLE: "smoke-infinitepay",
+    INFINITEPAY_CHECKOUT_ENABLED: "true",
+    INFINITEPAY_API_BASE_URL: `http://127.0.0.1:${base.TEST_INFINITEPAY_PORT || "3335"}`,
+    PAYMENT_RECONCILIATION_INTERVAL_MS: "1000",
   };
 }

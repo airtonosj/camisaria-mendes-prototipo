@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
+import http from "node:http";
 import mysql from "mysql2/promise";
 import { resetTestDatabase } from "./reset-test-database.mjs";
 import { projectDirectory, testEnvironment } from "./test-environment.mjs";
@@ -55,12 +56,46 @@ function assertInvalidProductionIsRejected() {
   }
 }
 
-/**
- * O webhook ainda não foi implementado. Este helper de teste representa a única
- * transição que futuramente poderá marcar o pedido como pago, sem reabrir uma rota
- * administrativa de confirmação manual.
- */
-async function recordProviderPaymentForTest(orderNumber) {
+const fakeInfinitePay = { links: [], checks: new Map(), checkRequests: [] };
+
+async function readRequestJson(request) {
+  const chunks = [];
+  for await (const chunk of request) chunks.push(chunk);
+  return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+}
+
+async function startFakeInfinitePay() {
+  const server = http.createServer(async (request, response) => {
+    const body = await readRequestJson(request);
+    response.setHeader("Content-Type", "application/json");
+    if (request.method === "POST" && request.url === "/links") {
+      fakeInfinitePay.links.push(body);
+      response.end(JSON.stringify({
+        url: `https://checkout.infinitepay.com.br/smoke-infinitepay?lenc=${encodeURIComponent(body.order_nsu)}`,
+      }));
+      return;
+    }
+    if (request.method === "POST" && request.url === "/payment_check") {
+      fakeInfinitePay.checkRequests.push(body);
+      response.end(JSON.stringify(fakeInfinitePay.checks.get(body.transaction_nsu) ?? {
+        success: true,
+        paid: false,
+        amount: 0,
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end(JSON.stringify({ error: "not_found" }));
+  });
+  const port = Number.parseInt(new URL(environment.INFINITEPAY_API_BASE_URL).port, 10);
+  server.listen(port, "127.0.0.1");
+  await once(server, "listening");
+  return server;
+}
+
+async function deliverQueuedPaymentEmailForTest(orderNumber) {
+  Object.assign(process.env, environment);
+  const { processPaymentConfirmationEmails } = await import("../api/order-email-notifications.mjs");
   const connection = await mysql.createConnection({
     host: environment.DB_HOST,
     port: Number.parseInt(environment.DB_PORT || "3306", 10),
@@ -70,27 +105,35 @@ async function recordProviderPaymentForTest(orderNumber) {
     charset: "utf8mb4",
     timezone: "Z",
   });
+  const messages = [];
   try {
-    await connection.beginTransaction();
-    const [rows] = await connection.execute(
-      "SELECT id, total_cents FROM orders WHERE order_number = ? LIMIT 1 FOR UPDATE",
+    const first = await processPaymentConfirmationEmails({
+      database: connection,
+      send: async (message) => { messages.push(message); },
+    });
+    assert.deepEqual(first, { processed: 1, sent: 1, failed: 0 });
+    assert.equal(messages.length, 1);
+
+    const second = await processPaymentConfirmationEmails({
+      database: connection,
+      send: async (message) => { messages.push(message); },
+    });
+    assert.deepEqual(second, { processed: 0, sent: 0, failed: 0 });
+
+    await connection.execute(
+      "UPDATE orders SET payment_status = 'paid' WHERE order_number = ?",
       [orderNumber],
     );
-    assert.equal(rows.length, 1);
-    await connection.execute(
-      "UPDATE orders SET payment_status = 'paid', paid_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
-      [rows[0].id],
+    const [notifications] = await connection.execute(
+      `SELECT status, attempts, sent_at FROM order_email_notifications
+        WHERE order_id = (SELECT id FROM orders WHERE order_number = ?)`,
+      [orderNumber],
     );
-    await connection.execute(
-      `INSERT INTO payments
-        (order_id, provider, provider_order_id, provider_transaction_id, status, amount_cents, confirmed_at)
-       VALUES (?, 'infinitepay', ?, ?, 'paid', ?, CURRENT_TIMESTAMP(3))`,
-      [rows[0].id, orderNumber, `smoke-${randomUUID()}`, rows[0].total_cents],
-    );
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0].status, "sent");
+    assert.equal(Number(notifications[0].attempts), 1);
+    assert.ok(notifications[0].sent_at);
+    return messages[0];
   } finally {
     await connection.end();
   }
@@ -130,6 +173,15 @@ async function waitForApi(child) {
   throw new Error("A API de teste não ficou pronta no prazo esperado.");
 }
 
+async function waitForOrderStatus(orderNumber, whatsapp, expectedStatus) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const payload = await request(`/api/orders/${orderNumber}?whatsapp=${whatsapp}`);
+    if (payload.order.status === expectedStatus) return payload.order;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`Pedido ${orderNumber} não alcançou o status ${expectedStatus}.`);
+}
+
 function startApi() {
   const child = spawn(process.execPath, ["api/server.mjs"], {
     cwd: projectDirectory,
@@ -164,11 +216,12 @@ runNode("api/migrate.mjs");
 runNode("api/seed.mjs");
 step("banco recriado, migrado e sem dados do ambiente principal");
 
+const providerApi = await startFakeInfinitePay();
 const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "006_custom_campaign_colors");
+  assert.equal(health.schema.current, "008_infinitepay_checkout");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -227,6 +280,14 @@ try {
     customer: { name: "Cliente Smoke Pago", whatsapp: "5598999991001", email: "pago@example.com" },
     items: [{ variantId: variant.id, size: allowedSize.code, quantity: 2 }],
   };
+  await request("/api/orders", {
+    method: "POST",
+    expected: 422,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: { ...firstOrderBody, customer: { ...firstOrderBody.customer, email: "email-invalido" } },
+  });
+  step("API recusa e-mail inválido antes de registrar o pedido");
+
   const firstCreated = await request("/api/orders", {
     method: "POST",
     expected: 201,
@@ -258,10 +319,112 @@ try {
   assert.equal(stillPending.order.status, "pending");
   step("painel e API não oferecem confirmação manual de pagamento");
 
-  await recordProviderPaymentForTest(firstCreated.order.number);
+  const checkout = await request(`/api/orders/${firstCreated.order.number}/checkout`, {
+    method: "POST",
+    body: { whatsapp: "5598999991001" },
+  });
+  assert.match(checkout.checkout.url, /^https:\/\/checkout\.infinitepay\.com\.br\//);
+  assert.equal(fakeInfinitePay.links.length, 1);
+  assert.equal(fakeInfinitePay.links[0].handle, "smoke-infinitepay");
+  assert.equal(fakeInfinitePay.links[0].order_nsu, firstCreated.order.number);
+  assert.equal(fakeInfinitePay.links[0].items.reduce((sum, item) => sum + item.price * item.quantity, 0), firstCreated.order.totalCents);
+  assert.match(fakeInfinitePay.links[0].webhook_url, /\/api\/payments\/infinitepay\/webhook$/);
+  const checkoutReplay = await request(`/api/orders/${firstCreated.order.number}/checkout`, {
+    method: "POST",
+    body: { whatsapp: "5598999991001" },
+  });
+  assert.equal(checkoutReplay.checkout.reused, true);
+  assert.equal(fakeInfinitePay.links.length, 1);
+  step("checkout InfinitePay usa handle, pedido e valor persistidos sem duplicar link");
+
+  const transactionNsu = randomUUID();
+  const invoiceSlug = `smoke-${randomUUID()}`;
+  fakeInfinitePay.checks.set(transactionNsu, {
+    success: true,
+    paid: true,
+    amount: firstCreated.order.totalCents,
+    paid_amount: firstCreated.order.totalCents,
+    installments: 1,
+    capture_method: "pix",
+  });
+  const providerEvent = {
+    invoice_slug: invoiceSlug,
+    amount: firstCreated.order.totalCents,
+    paid_amount: firstCreated.order.totalCents,
+    installments: 1,
+    capture_method: "pix",
+    transaction_nsu: transactionNsu,
+    order_nsu: firstCreated.order.number,
+    receipt_url: "https://checkout.infinitepay.com.br/receipt/smoke",
+    items: fakeInfinitePay.links[0].items,
+  };
+  const firstWebhook = await request("/api/payments/infinitepay/webhook", {
+    method: "POST",
+    body: providerEvent,
+  });
+  assert.equal(firstWebhook.duplicate, false);
+  const browserReconciliation = await request("/api/payments/infinitepay/reconcile", {
+    method: "POST",
+    expected: 202,
+    body: { ...providerEvent, slug: providerEvent.invoice_slug, invoice_slug: undefined },
+  });
+  assert.equal(browserReconciliation.duplicate, true);
+  await waitForOrderStatus(firstCreated.order.number, "5598999991001", "confirmed");
+  assert.equal(fakeInfinitePay.checkRequests.length, 1);
+  assert.equal(fakeInfinitePay.checkRequests[0].order_nsu, firstCreated.order.number);
+  assert.equal(fakeInfinitePay.checkRequests[0].transaction_nsu, transactionNsu);
+  step("webhook e retorno do navegador reconciliam por payment_check de forma idempotente");
+
+  const confirmationEmail = await deliverQueuedPaymentEmailForTest(firstCreated.order.number);
+  assert.equal(confirmationEmail.to, "pago@example.com");
+  assert.match(confirmationEmail.subject, new RegExp(firstCreated.order.number));
+  assert.match(confirmationEmail.text, new RegExp(`Código da compra: ${firstCreated.order.number}`));
+  assert.match(confirmationEmail.text, /rota=acompanhar-pedido/);
+  assert.match(confirmationEmail.text, new RegExp(`pedido=${firstCreated.order.number}`));
+  step("pagamento confirmado agenda e entrega um único e-mail com código e link de acompanhamento");
+
   production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
   assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 2);
-  step("confirmação simulada do provedor inclui somente o pedido pago na produção");
+  step("confirmação validada do provedor inclui somente o pedido pago na produção");
+
+  const divergentCreated = await request("/api/orders", {
+    method: "POST",
+    expected: 201,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: {
+      campaignCode: campaign.code,
+      customer: { name: "Cliente Valor Divergente", whatsapp: "5598999991003", email: "divergente@example.com" },
+      items: [{ variantId: variant.id, size: allowedSize.code, quantity: 1 }],
+    },
+  });
+  await request(`/api/orders/${divergentCreated.order.number}/checkout`, {
+    method: "POST",
+    body: { whatsapp: "5598999991003" },
+  });
+  const divergentTransaction = randomUUID();
+  fakeInfinitePay.checks.set(divergentTransaction, {
+    success: true,
+    paid: true,
+    amount: divergentCreated.order.totalCents + 1,
+    paid_amount: divergentCreated.order.totalCents + 1,
+    installments: 1,
+    capture_method: "pix",
+  });
+  await request("/api/payments/infinitepay/webhook", {
+    method: "POST",
+    body: {
+      invoice_slug: `divergent-${randomUUID()}`,
+      amount: divergentCreated.order.totalCents + 1,
+      transaction_nsu: divergentTransaction,
+      order_nsu: divergentCreated.order.number,
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 1250));
+  const divergentTracking = await request(`/api/orders/${divergentCreated.order.number}?whatsapp=5598999991003`);
+  assert.equal(divergentTracking.order.status, "pending");
+  production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
+  assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 2);
+  step("payment_check com valor divergente não confirma nem inclui o pedido na produção");
 
   const secondCreated = await request("/api/orders", {
     method: "POST",
@@ -269,7 +432,7 @@ try {
     headers: { "Idempotency-Key": randomUUID() },
     body: {
       campaignCode: campaign.code,
-      customer: { name: "Cliente Smoke Cancelado", whatsapp: "5598999991002" },
+      customer: { name: "Cliente Smoke Cancelado", whatsapp: "5598999991002", email: "cancelado@example.com" },
       items: [{ variantId: variant.id, size: allowedSize.code, quantity: 1 }],
     },
   });
@@ -378,4 +541,6 @@ try {
   throw error;
 } finally {
   await stopApi(api.child);
+  providerApi.close();
+  await once(providerApi, "close");
 }
