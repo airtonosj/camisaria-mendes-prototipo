@@ -1856,3 +1856,202 @@ main > section[id] { scroll-margin-top: 78px; }
   .received-pix-panel { padding: 20px 16px; }
   .received-pix-key { flex-direction: column; align-items: stretch; }
 }
+
+/* painel: ferramentas recolhidas e tipografia mais legivel */
+@media screen and (min-width: 581px) {
+  .admin-shell { grid-template-columns: 76px minmax(0, 1fr); }
+}
+
+@media screen and (min-width: 581px) and (hover: hover) and (pointer: fine) {
+  .admin-sidebar {
+    width: 76px;
+    overflow: hidden;
+    padding-inline: 10px;
+    box-shadow: 8px 0 24px rgba(4, 8, 10, 0);
+    transition: width 180ms ease, box-shadow 180ms ease;
+  }
+
+  .admin-sidebar:hover {
+    width: 248px;
+    padding-inline: 18px;
+    box-shadow: 8px 0 24px rgba(4, 8, 10, .2);
+  }
+
+  .admin-sidebar .brand {
+    width: 56px;
+    justify-content: center;
+    overflow: hidden;
+    padding-inline: 5px;
+    transition: width 180ms ease, padding 180ms ease;
+  }
+
+  .admin-sidebar:hover .brand {
+    width: 212px;
+    justify-content: flex-start;
+    padding-inline: 8px;
+  }
+
+  .admin-sidebar .brand--compact > span,
+  .admin-sidebar .admin-nav-label,
+  .admin-sidebar .admin-logout span:last-child {
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    white-space: nowrap;
+    transition: max-width 180ms ease, opacity 120ms ease;
+  }
+
+  .admin-sidebar:hover .brand--compact > span,
+  .admin-sidebar:hover .admin-nav-label,
+  .admin-sidebar:hover .admin-logout span:last-child {
+    max-width: 170px;
+    opacity: 1;
+  }
+
+  .admin-sidebar nav button,
+  .admin-logout {
+    width: 56px;
+    flex: 0 0 auto;
+    justify-content: center;
+    padding-inline: 0;
+    transition: width 180ms ease, padding 180ms ease, color 140ms ease, background-color 140ms ease;
+  }
+
+  .admin-sidebar:hover nav button,
+  .admin-sidebar:hover .admin-logout {
+    width: 212px;
+    justify-content: flex-start;
+    padding-inline: 13px;
+  }
+}
+
+@media screen {
+  .admin-sidebar nav button,
+  .admin-logout { font-size: .78rem; }
+  .admin-topbar small { font-size: .68rem; }
+  .admin-topbar h1 { font-size: 1.5rem; }
+  .admin-user strong { font-size: .75rem; }
+  .admin-user small { font-size: .66rem; }
+  .admin-shell .kicker { font-size: .74rem; }
+  .admin-page-intro p,
+  .section-actions p,
+  .reports-intro p { font-size: .82rem; }
+  .metric-row article > div > span { font-size: .72rem; }
+  .metric-row article small { font-size: .66rem; }
+  .panel-heading h2 { font-size: 1.15rem; }
+  .panel-heading > span,
+  .panel-heading button { font-size: .68rem; }
+  .admin-campaign-focus-copy > p { font-size: .72rem; }
+  .campaign-progress-admin span,
+  .campaign-focus-stats dt,
+  .production-models span { font-size: .66rem; }
+  .campaign-progress-admin strong,
+  .production-models strong,
+  .admin-text-action { font-size: .72rem; }
+  .orders-head,
+  .campaign-production-head,
+  .campaign-orders-head,
+  .production-report-head,
+  .delivery-report-head { font-size: .62rem; }
+  .order-row,
+  .campaign-production-row,
+  .campaign-orders-row,
+  .production-report-row,
+  .delivery-report-row { font-size: .68rem; }
+  .order-row > strong,
+  .campaign-production-row > span:first-child strong,
+  .campaign-order-number strong,
+  .production-report-row > span:first-child strong,
+  .delivery-report-row > span > strong { font-size: .7rem; }
+  .status,
+  .campaign-flow-badge,
+  .order-payment-action,
+  .order-row-action button,
+  .delivery-report-status { font-size: .62rem; }
+  .campaign-create-panel > header p,
+  .campaign-share-panel > header p,
+  .admin-account-card > header p { font-size: .74rem; }
+  .campaign-field > span,
+  .campaign-model-pricing legend,
+  .campaign-color-setup legend,
+  .campaign-artwork legend { font-size: .7rem; }
+  .campaign-field > input,
+  .campaign-price-field input,
+  .campaign-custom-color-fields input,
+  .campaign-order-filters input,
+  .campaign-order-filters select,
+  .report-toolbar select,
+  .report-toolbar input,
+  .campaign-phase-reason input { font-size: .76rem; }
+  .campaign-price-field b,
+  .campaign-model-pricing > div > article > strong,
+  .campaign-artwork-guidance strong,
+  .campaign-share-options > article strong,
+  .campaign-admin-card-body dd,
+  .orders-campaign-card-copy > strong,
+  .campaign-phase-action > div strong,
+  .campaign-production-table h3,
+  .campaign-orders-table h3,
+  .report-tabs strong,
+  .production-report-card h3,
+  .delivery-report-card h3 { font-size: .74rem; }
+  .campaign-model-pricing > div > article > small,
+  .campaign-model-pricing > small,
+  .campaign-color-setup > p,
+  .campaign-color-palette label > span:not(.material-symbols-rounded),
+  .campaign-custom-color-heading small,
+  .campaign-custom-color-fields > label,
+  .campaign-custom-color-list strong,
+  .campaign-artwork-guidance p,
+  .campaign-artwork-uploads small,
+  .campaign-share-options small,
+  .campaign-share-content figcaption span,
+  .campaign-management-toolbar > span,
+  .campaign-admin-card-body > p,
+  .campaign-admin-card-body dt,
+  .orders-campaign-rail > header > small,
+  .orders-campaign-card-copy > span,
+  .orders-selected-header p,
+  .campaign-phase-track li > strong,
+  .campaign-phase-action > div p,
+  .campaign-production-table header p,
+  .campaign-orders-table header p,
+  .campaign-production-table header > strong,
+  .campaign-production-row > span:first-child small,
+  .order-cancellation-form p,
+  .order-refund-form p,
+  .campaign-orders-table > footer,
+  .report-tabs small,
+  .report-toolbar > label,
+  .report-feedback,
+  .report-metrics span,
+  .report-metrics small,
+  .production-report-card header p,
+  .delivery-report-card header p,
+  .production-report-row > span:first-child small,
+  .delivery-report-row > span > small,
+  .admin-mode-banner,
+  .admin-loading,
+  .campaign-production-empty,
+  .orders-table-empty,
+  .campaign-form-error,
+  .campaign-phase-reason > span,
+  .admin-account-role,
+  .admin-account-feedback { font-size: .66rem; }
+  .campaign-color-tabs button,
+  .campaign-custom-color-fields > button,
+  .campaign-artwork-tabs button,
+  .campaign-artwork-uploads > label,
+  .campaign-share-options > article button,
+  .campaign-filters button,
+  .campaign-card-action,
+  .orders-all-campaigns,
+  .campaign-phase-actions button,
+  .campaign-orders-table > footer button,
+  .delivery-report-row button { font-size: .68rem; }
+}
+
+@media screen and (max-width: 580px) {
+  .admin-sidebar nav { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .admin-sidebar .admin-nav-label { font-size: .56rem; }
+}
