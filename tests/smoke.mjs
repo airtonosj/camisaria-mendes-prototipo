@@ -103,7 +103,7 @@ async function startFakeInfinitePay() {
     if (request.method === "POST" && request.url === "/links") {
       fakeInfinitePay.links.push(body);
       response.end(JSON.stringify({
-        url: `https://checkout.infinitepay.com.br/smoke-infinitepay?lenc=${encodeURIComponent(body.order_nsu)}`,
+        url: `https://checkout.infinitepay.io/smoke-infinitepay?lenc=${encodeURIComponent(body.order_nsu)}`,
       }));
       return;
     }
@@ -357,7 +357,7 @@ try {
     method: "POST",
     body: { whatsapp: "5598999991001" },
   });
-  assert.match(checkout.checkout.url, /^https:\/\/checkout\.infinitepay\.com\.br\//);
+  assert.match(checkout.checkout.url, /^https:\/\/checkout\.infinitepay\.io\//);
   assert.equal(fakeInfinitePay.links.length, 1);
   assert.equal(fakeInfinitePay.links[0].handle, "smoke-infinitepay");
   assert.equal(fakeInfinitePay.links[0].order_nsu, firstCreated.order.number);

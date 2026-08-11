@@ -1,5 +1,10 @@
 import { config } from "./config.mjs";
 
+const trustedCheckoutHosts = new Set([
+  "checkout.infinitepay.com.br",
+  "checkout.infinitepay.io",
+]);
+
 export class InfinitePayRequestError extends Error {
   constructor(code, message, details) {
     super(message);
@@ -69,7 +74,7 @@ function assertCheckoutUrl(value) {
   } catch {
     throw new InfinitePayRequestError("INFINITEPAY_INVALID_RESPONSE", "A InfinitePay não devolveu um link de checkout válido.");
   }
-  if (url.protocol !== "https:" || url.hostname !== "checkout.infinitepay.com.br") {
+  if (url.protocol !== "https:" || !trustedCheckoutHosts.has(url.hostname.toLowerCase())) {
     const safeDestination = {
       protocol: url.protocol,
       hostname: url.hostname.toLowerCase(),
