@@ -2,17 +2,17 @@
 
 ## Código e banco
 
-- [ ] `npm.cmd run typecheck` passa.
-- [ ] `npm.cmd run build` passa.
-- [ ] Todos os arquivos `api/*.mjs` passam em `node --check`.
-- [ ] `git diff --check` não encontra erros.
+- [x] `npm.cmd run typecheck` passa.
+- [x] `npm.cmd run build` passa.
+- [x] Todos os arquivos `api/*.mjs` passam em `node --check`.
+- [x] `git diff --check` não encontra erros.
 - [ ] `npm.cmd run db:migrate` não encontra migração pendente.
-- [ ] `/api/health` informa banco conectado e schema pronto.
+- [x] `/api/health` informa banco conectado, schema `009_order_refunds` pronto e storage gravável no ambiente publicado.
 - [ ] O backup anterior à migração ou ao deploy foi conferido.
 
 ## Smoke test funcional
 
-- [ ] Login e sessão da camisaria funcionam.
+- [x] Login e sessão da camisaria funcionam no domínio publicado.
 - [ ] Senha provisória bloqueia o restante do painel até ser trocada.
 - [ ] Campanha pode ser criada com arte e tamanhos válidos.
 - [ ] Pedido repetido com a mesma chave não é duplicado.
@@ -37,17 +37,17 @@
 
 ## Produção
 
-- [ ] `APP_ENV=production` está definido no processo da API.
+- [x] `APP_ENV=production` foi aplicado no hPanel em 11/08/2026 com checkout fechado.
 - [ ] Usuário MySQL da aplicação não possui permissão de alterar schema.
 - [ ] Usuário `admin@teste.com` não está ativo.
-- [ ] A senha provisória da conta real foi trocada.
+- [x] A conta real está fora do fluxo de troca obrigatória e `ADMIN_INITIAL_PASSWORD` foi removida do hPanel.
 - [x] SMTP foi testado de ponta a ponta em 11/08/2026 com envio e recebimento confirmados em `gustavo@camisariamendes.com.br`.
 - [ ] Um comprador de teste recebeu a confirmação de pagamento e conseguiu consultar o pedido.
-- [ ] Uploads usam caminho persistente fora da árvore substituída no deploy.
+- [x] Uploads usam `/home/u374132860/domains/camisariamendes.com.br/uploads`, fora da árvore `hbuilds` substituída no deploy.
 - [ ] HTTPS, cabeçalhos de segurança e proxy estão ativos.
 - [ ] Backup automático e restauração foram testados.
 - [ ] Privacidade, trocas/reembolso e atendimento estão publicados com identificação e contatos reais do fornecedor.
-- [ ] Logs, monitoramento e rollback estão documentados.
+- [x] Logs, monitoramento e rollback estão documentados.
 
 ## Pagamento automático — fase final
 
@@ -67,4 +67,5 @@
 - [x] Políticas públicas foram ligadas ao rodapé e ao formulário de compra.
 - [x] Produção foi desacoplada da abertura pública: checkout `false` não invalida `APP_ENV=production`.
 - [x] SMTP real autenticou, enviou e teve o recebimento confirmado pelo titular da caixa.
-- [ ] Hospedagem persistente, compra de baixo valor e estorno real ainda exigem execução externa.
+- [x] Deploy `c57c6c1` concluiu no hPanel e `/api/health` confirmou banco, migração e storage prontos.
+- [ ] A prova de arquivo antes/depois de outro redeploy, a compra de baixo valor e o estorno real ainda exigem execução externa.
