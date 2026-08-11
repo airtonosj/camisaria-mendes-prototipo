@@ -53,7 +53,7 @@ function assertInvalidProductionIsRejected() {
   });
   assert.equal(result.status, 1, "A API aceitou uma configuração de produção insegura.");
   const output = `${result.stdout}\n${result.stderr}`;
-  for (const expected of ["PUBLIC_APP_URL", "ADMIN_API_TOKEN", "TRUST_PROXY", "ADMIN_INITIAL_PASSWORD", "SMTP_HOST", "DB_USER", "UPLOADS_DIR", "PAYMENT_PROVIDER", "INFINITEPAY_HANDLE", "INFINITEPAY_CHECKOUT_ENABLED"]) {
+  for (const expected of ["PUBLIC_APP_URL", "ADMIN_API_TOKEN", "TRUST_PROXY", "ADMIN_INITIAL_PASSWORD", "SMTP_HOST", "DB_USER", "UPLOADS_DIR", "PAYMENT_PROVIDER"]) {
     assert.match(output, new RegExp(expected), `A recusa de produção não mencionou ${expected}.`);
   }
 }
@@ -255,7 +255,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "008_infinitepay_checkout");
+  assert.equal(health.schema.current, "009_order_refunds");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -517,6 +517,39 @@ try {
   const delivery = await request(`/api/admin/reports/delivery?campaign=${campaign.code}`, { token });
   assert.equal(delivery.rows.every((row) => row.orderNumber === firstCreated.order.number), true);
   step("pedido pago percorre produção, retirada e entrega");
+
+  await request(`/api/admin/orders/${firstCreated.order.number}/cancel`, {
+    method: "PATCH",
+    token,
+    expected: 409,
+    body: { reason: "Tentativa antes do estorno" },
+  });
+  await request(`/api/admin/orders/${firstCreated.order.number}/refund`, {
+    method: "POST",
+    token,
+    expected: 422,
+    body: { amountCents: firstCreated.order.totalCents - 1, providerRefundId: `refund-invalid-${randomUUID()}`, reason: "Valor parcial" },
+  });
+  const refundReference = `refund-smoke-${randomUUID()}`;
+  const refund = await request(`/api/admin/orders/${firstCreated.order.number}/refund`, {
+    method: "POST",
+    token,
+    expected: 201,
+    body: {
+      amountCents: firstCreated.order.totalCents,
+      providerRefundId: refundReference,
+      reason: "Desistência validada no smoke test",
+      receiptUrl: "https://checkout.infinitepay.com.br/receipt/refund-smoke",
+    },
+  });
+  assert.equal(refund.refund.paymentStatus, "refunded");
+  const refundedTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
+  assert.equal(refundedTracking.order.status, "cancelled");
+  assert.equal(refundedTracking.order.paymentStatus, "refunded");
+  assert.match(refundedTracking.order.cancellationReason, /Reembolso integral/);
+  production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
+  assert.equal(production.rows.length, 0);
+  step("reembolso integral exige referência do provedor, cancela o pedido e o retira da produção");
 
   const accountUpdate = await request("/api/admin/account", {
     method: "PATCH",

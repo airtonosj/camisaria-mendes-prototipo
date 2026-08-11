@@ -27,8 +27,8 @@ APP_ENV=production
 API_HOST=0.0.0.0
 API_PORT=3000
 TRUST_PROXY=true
-CORS_ORIGIN=https://sandybrown-bee-997442.hostingersite.com
-PUBLIC_APP_URL=https://sandybrown-bee-997442.hostingersite.com
+CORS_ORIGIN=https://camisariamendes.com.br
+PUBLIC_APP_URL=https://camisariamendes.com.br
 ADMIN_API_TOKEN_ENABLED=false
 
 DB_HOST=localhost
@@ -38,11 +38,13 @@ DB_USER=<usuario completo informado pela Hostinger>
 DB_PASSWORD=<senha do banco>
 DB_CONNECTION_LIMIT=10
 
-UPLOADS_DIR=/home/<usuario-hostinger>/domains/sandybrown-bee-997442.hostingersite.com/uploads
+UPLOADS_DIR=/home/u374132860/domains/camisariamendes.com.br/uploads
+BACKUP_DIR=/home/u374132860/backups/camisaria-mendes
+BACKUP_RETENTION_DAYS=14
 
 ADMIN_INITIAL_NAME=Gustavo Mendes
 ADMIN_INITIAL_EMAIL=<email real da camisaria>
-ADMIN_INITIAL_PASSWORD=<senha provisoria forte>
+# ADMIN_INITIAL_PASSWORD e apenas para o primeiro acesso e deve ser removida depois da troca.
 
 SMTP_HOST=smtp.hostinger.com
 SMTP_PORT=465
@@ -53,15 +55,19 @@ SMTP_FROM_NAME=Camisaria Mendes
 
 PAYMENT_PROVIDER=infinitepay
 INFINITEPAY_HANDLE=gustavo-henrique-9yt
-INFINITEPAY_CHECKOUT_ENABLED=true
+INFINITEPAY_CHECKOUT_ENABLED=false
 INFINITEPAY_REQUEST_TIMEOUT_MS=8000
 PAYMENT_RECONCILIATION_INTERVAL_MS=5000
 EMAIL_DELIVERY_INTERVAL_MS=30000
 ```
 
-O caminho de `UPLOADS_DIR` precisa existir fora da pasta `nodejs` substituida nos
-deploys e permitir leitura e gravacao pelo aplicativo. Consulte no Gerenciador de
-Arquivos o prefixo real `/home/<usuario-hostinger>`.
+Os caminhos persistentes acima foram configurados no hPanel em 11/08/2026. Eles ficam
+fora da pasta `nodejs` substituida nos deploys e precisam permitir leitura e gravacao
+pelo aplicativo.
+
+`APP_ENV=production` deve ser ativado antes da homologacao, mas o checkout permanece
+`false`. Somente depois da compra e do reembolso reais, e com o checklist aprovado,
+altere `INFINITEPAY_CHECKOUT_ENABLED=true` e faça o redeploy final.
 
 ## Validacao apos o redeploy
 

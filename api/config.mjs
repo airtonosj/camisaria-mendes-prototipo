@@ -155,11 +155,11 @@ export function productionConfigurationErrors() {
   if (config.payments.provider !== "infinitepay") {
     errors.push("PAYMENT_PROVIDER precisa ser infinitepay.");
   }
-  if (!config.payments.infinitePay.handle) {
-    errors.push("INFINITEPAY_HANDLE é obrigatória para identificar a conta no checkout.");
-  }
-  if (!config.payments.infinitePay.checkoutEnabled) {
-    errors.push("INFINITEPAY_CHECKOUT_ENABLED permanece false até checkout, webhook e payment_check passarem na homologação real.");
+  // Produção e vendas públicas são estados diferentes. A API precisa poder operar em
+  // produção, com HTTPS/SMTP/storage reais, enquanto o checkout continua fechado para
+  // a homologação. A conta só se torna obrigatória quando a trava pública é aberta.
+  if (config.payments.infinitePay.checkoutEnabled && !config.payments.infinitePay.handle) {
+    errors.push("INFINITEPAY_HANDLE é obrigatória quando INFINITEPAY_CHECKOUT_ENABLED=true.");
   }
   if (config.payments.infinitePay.apiBaseUrl !== officialInfinitePayApiBaseUrl) {
     errors.push("INFINITEPAY_API_BASE_URL must use the official endpoint in production.");

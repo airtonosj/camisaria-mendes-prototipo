@@ -5,6 +5,7 @@ import { CamisariaAccessPage } from "./components/CamisariaAccessPage";
 import { CampaignAccessPage } from "./components/CampaignAccessPage";
 import { LandingPage } from "./components/LandingPage";
 import { OrderTrackingPage } from "./components/OrderTrackingPage";
+import { PoliciesPage } from "./components/PoliciesPage";
 import { PrivateCampaignPage } from "./components/PrivateCampaignPage";
 import { ResetPasswordPage } from "./components/ResetPasswordPage";
 import { DEMO_CAMPAIGNS_STORAGE_KEY, privateCampaigns, privateCodeAliases } from "./data";
@@ -109,6 +110,10 @@ export default function App() {
   if (route === "redefinir-senha") {
     return <ResetPasswordPage token={params.get("token") ?? ""} />;
   }
+
+  if (route === "politica-privacidade") return <PoliciesPage kind="privacy" />;
+  if (route === "politica-trocas") return <PoliciesPage kind="exchanges" />;
+  if (route === "politica-atendimento") return <PoliciesPage kind="support" />;
 
   if (route === "acesso-campanha") {
     return <CampaignAccessPage invalidCampaignCode={campaignCode ?? undefined} />;

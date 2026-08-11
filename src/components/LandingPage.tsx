@@ -143,7 +143,7 @@ export function LandingPage() {
             <a href={buildRoute("acompanhar-pedido")}>Acompanhar pedido</a>
           </nav>
           <div className="footer-meta">
-            <p className="footer-legal">© 2018–2026 Camisaria Mendes. Todos os direitos reservados.</p>
+            <div><p className="footer-legal">© 2018–2026 Camisaria Mendes. Todos os direitos reservados.</p><nav className="footer-policy-links" aria-label="Informações legais"><a href={buildRoute("politica-privacidade")}>Privacidade</a><a href={buildRoute("politica-trocas")}>Trocas e reembolso</a><a href={buildRoute("politica-atendimento")}>Atendimento</a></nav></div>
             <p className="footer-tagline">Camisetas que representam sua história.</p>
           </div>
         </div>

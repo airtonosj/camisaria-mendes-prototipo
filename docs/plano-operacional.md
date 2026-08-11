@@ -41,8 +41,8 @@ uma fase por vez e só seguir quando os critérios de saída da fase atual estiv
 
 ## Estado do checkpoint de backend operacional
 
-- Produção recusa configurações sem HTTPS, SMTP, usuário MySQL restrito, uploads persistentes
-  ou checkout InfinitePay explicitamente habilitado.
+- Produção recusa configurações sem HTTPS, SMTP, usuário MySQL restrito ou uploads persistentes.
+  O checkout pode e deve permanecer fechado durante a homologação externa.
 - `PAYMENT_PROVIDER` permanece `infinitepay`; a trava de checkout fica falsa até a fase final.
 - A chave estática administrativa fica desabilitada por padrão em produção.
 - Somente `role = 'camisaria'` pode criar sessão e acessar rotas administrativas.

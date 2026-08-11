@@ -470,6 +470,27 @@ export async function cancelOrderInApi(orderNumber: string, reason: string) {
   return payload.order;
 }
 
+export async function registerOrderRefundInApi(input: {
+  orderNumber: string;
+  amountCents: number;
+  providerRefundId: string;
+  reason: string;
+  receiptUrl?: string;
+}) {
+  const payload = await staffRequest<{
+    refund: { number: string; status: string; paymentStatus: "refunded"; amountCents: number };
+  }>(`/admin/orders/${encodeURIComponent(input.orderNumber)}/refund`, {
+    method: "POST",
+    body: JSON.stringify({
+      amountCents: input.amountCents,
+      providerRefundId: input.providerRefundId,
+      reason: input.reason,
+      receiptUrl: input.receiptUrl || undefined,
+    }),
+  });
+  return payload.refund;
+}
+
 export async function changeCampaignPhaseInApi(code: string, targetPhase: CampaignPhaseCode, reason?: string) {
   const payload = await staffRequest<{ campaign: { phase: CampaignPhaseCode; previousPhase: CampaignPhaseCode } }>(
     `/admin/campaigns/${encodeURIComponent(code)}/phase`,

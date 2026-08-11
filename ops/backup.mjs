@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import mysql from "mysql2/promise";
 import { config } from "../api/config.mjs";
 
 const projectDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -56,7 +57,7 @@ async function runDump(outputFile) {
     "--single-transaction",
     "--quick",
     "--routines",
-    "--triggers",
+    "--skip-triggers",
     "--events",
     "--no-tablespaces",
     "--set-gtid-purged=OFF",
@@ -74,6 +75,36 @@ async function runDump(outputFile) {
     child.on("error", reject);
     child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`mysqldump terminou com código ${code}: ${stderr.trim()}`)));
   });
+}
+
+async function dumpTriggers(outputFile) {
+  const connection = await mysql.createConnection({
+    host: config.database.host,
+    port: config.database.port,
+    user: (process.env.BACKUP_DB_USER || config.database.user).trim(),
+    password: process.env.BACKUP_DB_PASSWORD ?? config.database.password,
+    database: config.database.database,
+    charset: "utf8mb4",
+  });
+  try {
+    const [rows] = await connection.query("SHOW TRIGGERS");
+    const statements = [];
+    for (const row of rows) {
+      const name = String(row.Trigger);
+      const escaped = name.replaceAll("`", "``");
+      const [details] = await connection.query(`SHOW CREATE TRIGGER \`${escaped}\``);
+      let createStatement = String(details[0]?.["SQL Original Statement"] || details[0]?.["Create Trigger"] || "");
+      if (!createStatement) throw new Error(`Não foi possível extrair a definição do trigger ${name}.`);
+      // O usuário restrito de restauração não deve precisar recriar o DEFINER da origem.
+      createStatement = createStatement.replace(/^CREATE\s+DEFINER=`[^`]+`@`[^`]+`\s+/i, "CREATE ");
+      createStatement = createStatement.replace(/;\s*$/, "");
+      statements.push(`DROP TRIGGER IF EXISTS \`${escaped}\`;\nDELIMITER ;;\n${createStatement};;\nDELIMITER ;`);
+    }
+    await fs.writeFile(outputFile, `${statements.join("\n\n")}\n`, "utf8");
+    return rows.length;
+  } finally {
+    await connection.end();
+  }
 }
 
 async function pruneOldSnapshots(now) {
@@ -98,8 +129,10 @@ await fs.mkdir(partialDirectory, { recursive: false });
 
 try {
   const databaseFile = path.join(partialDirectory, "database.sql");
+  const triggersFile = path.join(partialDirectory, "triggers.sql");
   const uploadBackup = path.join(partialDirectory, "uploads");
   await runDump(databaseFile);
+  const triggers = await dumpTriggers(triggersFile);
   if (await fs.stat(config.uploadsDirectory).catch(() => null)) {
     await fs.cp(config.uploadsDirectory, uploadBackup, { recursive: true, force: false, errorOnExist: true });
   } else {
@@ -112,6 +145,8 @@ try {
     database: config.database.database,
     databaseBytes: databaseStat.size,
     databaseSha256: await sha256(databaseFile),
+    triggers,
+    triggersSha256: await sha256(triggersFile),
     uploadsDirectory: config.uploadsDirectory,
     uploadsFiles: uploads.length,
     uploadsBytes: uploads.reduce((total, file) => total + file.bytes, 0),

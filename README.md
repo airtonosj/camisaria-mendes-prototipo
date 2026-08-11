@@ -46,6 +46,8 @@ O backend cria e reutiliza o link em `POST https://api.checkout.infinitepay.io/l
 
 O e-mail é obrigatório nos novos pedidos. Quando a confirmação legítima mudar o pedido para `paid`, o banco agenda uma mensagem transacional para o comprador com o código da compra e um link para **Acompanhar pedido** já preenchido; o WhatsApp continua sendo solicitado na página para proteger a consulta. Reprocessamentos não duplicam a fila e falhas temporárias de SMTP são tentadas novamente.
 
+Como o Checkout Integrado não documenta endpoint público de estorno, o reembolso é feito primeiro na conta InfinitePay. Depois, o painel registra a referência e o comprovante, marca o pagamento como reembolsado, cancela o pedido e o retira dos relatórios oficiais. As políticas de privacidade, troca/reembolso e atendimento ficam acessíveis no rodapé do site.
+
 ### Acesso da equipe
 
 O acesso inicial da camisaria é criado no servidor com `npm run user:admin`: `gustavo@mendes` com a senha provisória `changeme`, marcada para troca obrigatória no primeiro acesso. Enquanto ela não for trocada, o painel abre direto na seção **Conta** e não libera o resto.

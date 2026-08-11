@@ -25,6 +25,10 @@
     "typecheck": "tsc -b --pretty false",
     "ops:health": "node ops/healthcheck.mjs",
     "ops:backup": "node ops/backup.mjs",
+    "ops:restore:test": "node ops/restore-backup.mjs",
+    "ops:email:test": "node ops/test-email.mjs",
+    "ops:storage:create": "node ops/verify-storage.mjs create",
+    "ops:storage:check": "node ops/verify-storage.mjs check",
     "ops:verify-build": "node ops/verify-build.mjs"
   },
   "dependencies": {

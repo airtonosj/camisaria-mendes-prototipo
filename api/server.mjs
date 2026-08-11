@@ -1147,6 +1147,95 @@ async function cancelOrder(request, orderNumber) {
   });
 }
 
+/**
+ * Registra um estorno já concluído na conta InfinitePay. A API pública do Checkout
+ * Integrado não documenta uma operação de reembolso, então esta rota nunca movimenta
+ * dinheiro: ela exige a referência obtida no app/painel do provedor e cria a trilha
+ * local antes de cancelar o pedido e retirá-lo dos relatórios.
+ */
+async function registerOrderRefund(request, orderNumber) {
+  const staff = await requireStaff(request);
+  const body = await readJson(request);
+  const providerRefundId = requireText(body.providerRefundId, "providerRefundId", 190);
+  const reason = requireText(body.reason, "reason", 500);
+  const amountCents = parsePositiveInteger(body.amountCents, "amountCents", 10_000_000);
+  const refundedAt = body.refundedAt ? new Date(body.refundedAt) : new Date();
+  if (reason.length < 3) throw new ApiError(422, "REFUND_REASON_REQUIRED", "Descreva o motivo do reembolso.");
+  if (Number.isNaN(refundedAt.getTime()) || refundedAt.getTime() > Date.now() + 5 * 60 * 1000) {
+    throw new ApiError(422, "INVALID_REFUND_DATE", "Data do reembolso inválida.");
+  }
+  let receiptUrl = null;
+  if (body.receiptUrl) {
+    try {
+      const parsed = new URL(String(body.receiptUrl));
+      if (parsed.protocol !== "https:") throw new Error("protocol");
+      receiptUrl = parsed.toString();
+    } catch {
+      throw new ApiError(422, "INVALID_REFUND_RECEIPT", "O comprovante do reembolso precisa usar HTTPS.");
+    }
+  }
+
+  return withTransaction(async (connection) => {
+    const [rows] = await connection.execute(
+      "SELECT id, status, payment_status, total_cents FROM orders WHERE order_number = ? LIMIT 1 FOR UPDATE",
+      [orderNumber],
+    );
+    if (rows.length === 0) throw new ApiError(404, "ORDER_NOT_FOUND", "Pedido não encontrado.");
+    const order = rows[0];
+    if (order.status === "cancelled" || order.payment_status === "refunded") {
+      throw new ApiError(409, "ORDER_ALREADY_REFUNDED", "Este pedido já foi reembolsado e cancelado.");
+    }
+    if (order.payment_status !== "paid") {
+      throw new ApiError(409, "ORDER_NOT_PAID", "Somente um pedido pago pode receber registro de reembolso.");
+    }
+    if (amountCents !== Number(order.total_cents)) {
+      throw new ApiError(
+        422,
+        "FULL_REFUND_REQUIRED",
+        "Nesta etapa operacional, registre somente o reembolso integral do pedido.",
+        { expectedAmountCents: Number(order.total_cents) },
+      );
+    }
+    const [payments] = await connection.execute(
+      `SELECT id, provider FROM payments
+        WHERE order_id = ? AND status = 'paid'
+        ORDER BY confirmed_at DESC, id DESC LIMIT 1 FOR UPDATE`,
+      [order.id],
+    );
+    if (payments.length === 0) {
+      throw new ApiError(409, "CONFIRMED_PAYMENT_NOT_FOUND", "O pagamento confirmado do pedido não foi encontrado.");
+    }
+    const payment = payments[0];
+    try {
+      await connection.execute(
+        `INSERT INTO order_refunds
+          (order_id, payment_id, provider, provider_refund_id, amount_cents, reason, receipt_url, refunded_at, recorded_by_user_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [order.id, payment.id, payment.provider, providerRefundId, amountCents, reason, receiptUrl, refundedAt, staff.id],
+      );
+    } catch (error) {
+      if (error?.code === "ER_DUP_ENTRY") {
+        throw new ApiError(409, "REFUND_REFERENCE_ALREADY_USED", "Esta referência de reembolso já foi registrada.");
+      }
+      throw error;
+    }
+    await connection.execute("UPDATE payments SET status = 'refunded' WHERE id = ?", [payment.id]);
+    await connection.execute(
+      `UPDATE orders SET payment_status = 'refunded', status = 'cancelled',
+         cancelled_at = CURRENT_TIMESTAMP(3), cancellation_reason = ?, cancelled_by_user_id = ?
+       WHERE id = ?`,
+      [`Reembolso integral: ${reason}`.slice(0, 500), staff.id, order.id],
+    );
+    return {
+      number: orderNumber,
+      status: "cancelled",
+      paymentStatus: "refunded",
+      amountCents,
+      providerRefundId,
+    };
+  });
+}
+
 async function changeCampaignPhase(request, code) {
   const staff = await requireStaff(request);
   const body = await readJson(request);
@@ -1460,6 +1549,11 @@ async function route(request, response) {
   const cancelMatch = path.match(/^\/api\/admin\/orders\/([^/]+)\/cancel$/);
   if (request.method === "PATCH" && cancelMatch) {
     sendJson(response, 200, { order: await cancelOrder(request, cancelMatch[1].toUpperCase()) });
+    return;
+  }
+  const refundMatch = path.match(/^\/api\/admin\/orders\/([^/]+)\/refund$/);
+  if (request.method === "POST" && refundMatch) {
+    sendJson(response, 201, { refund: await registerOrderRefund(request, refundMatch[1].toUpperCase()) });
     return;
   }
   const deliveryMatch = path.match(/^\/api\/admin\/orders\/([^/]+)\/delivery$/);

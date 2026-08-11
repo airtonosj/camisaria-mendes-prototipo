@@ -65,8 +65,9 @@ o backup em um banco separado, valide a contagem e só então faça a troca cont
 
 ## Backup e restauração
 
-`npm run ops:backup` cria uma pasta com `database.sql`, cópia de `uploads/` e
-`manifest.json` com tamanho e SHA-256. A pasta só recebe o nome definitivo quando todas as
+`npm run ops:backup` cria uma pasta com `database.sql`, `triggers.sql`, cópia de `uploads/` e
+`manifest.json` com tamanho e SHA-256. Os triggers ficam separados para evitar dumps
+incompatíveis entre clientes MySQL e MariaDB. A pasta só recebe o nome definitivo quando todas as
 etapas terminam. Snapshots antigos são removidos apenas após um backup novo bem-sucedido.
 
 Teste de restauração, sempre em banco separado:
@@ -79,6 +80,14 @@ mysql -u camisaria_migrator -p camisaria_restore_test < /var/backups/camisaria-m
 Compare campanhas, pedidos, pagamentos e usuários com a origem. Para uploads, copie o
 snapshot para uma pasta temporária e confirme que as URLs de arte retornam HTTP 200 antes
 de substituir qualquer diretório ativo.
+
+O comando automatizado recusa banco existente e exige o sufixo `_restore_test`:
+
+```bash
+RESTORE_DB_NAME=camisaria_release_restore_test \
+RESTORE_UPLOADS_DIR=/tmp/camisaria-restore/uploads \
+npm run ops:restore:test -- /var/backups/camisaria-mendes/<snapshot>
+```
 
 ## Logs e diagnóstico
 

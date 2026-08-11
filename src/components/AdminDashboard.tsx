@@ -13,6 +13,7 @@ import {
   fetchProductionReport,
   fetchStaffSession,
   logoutStaff,
+  registerOrderRefundInApi,
   staffToken,
   updateStaffAccount,
   uploadCampaignArt,
@@ -1298,6 +1299,10 @@ function Orders({ data }: { data: PanelData }) {
   const [returnReason, setReturnReason] = useState("");
   const [cancellingOrder, setCancellingOrder] = useState("");
   const [cancellationReason, setCancellationReason] = useState("");
+  const [refundingOrder, setRefundingOrder] = useState("");
+  const [refundReference, setRefundReference] = useState("");
+  const [refundReason, setRefundReason] = useState("");
+  const [refundReceipt, setRefundReceipt] = useState("");
   const [busy, setBusy] = useState(false);
 
   const selected = campaigns.find((campaign) => campaign.code === selectedCode) ?? campaigns[0];
@@ -1331,6 +1336,10 @@ function Orders({ data }: { data: PanelData }) {
     setReturnReason("");
     setCancellingOrder("");
     setCancellationReason("");
+    setRefundingOrder("");
+    setRefundReference("");
+    setRefundReason("");
+    setRefundReceipt("");
   }
 
   async function movePhase(target: CampaignPhaseCode, reason?: string) {
@@ -1375,6 +1384,43 @@ function Orders({ data }: { data: PanelData }) {
       loadOrders(selected.code);
     } catch (cancellationError) {
       setFeedback(errorMessage(cancellationError, "Não foi possível cancelar o pedido."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function registerRefund(orderNumber: string) {
+    if (!selected) return;
+    if (mode !== "live") {
+      setFeedback("Sem sessão no servidor, o reembolso não pode ser registrado.");
+      return;
+    }
+    const order = campaignOrders.find((candidate) => candidate.number === orderNumber);
+    if (!order) return;
+    const providerRefundId = refundReference.trim();
+    const reason = refundReason.trim();
+    if (providerRefundId.length < 3 || reason.length < 3) {
+      setFeedback("Informe a referência da InfinitePay e o motivo do reembolso.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await registerOrderRefundInApi({
+        orderNumber,
+        amountCents: order.totalCents,
+        providerRefundId,
+        reason,
+        receiptUrl: refundReceipt.trim() || undefined,
+      });
+      setFeedback(`Reembolso integral de ${formatCents(order.totalCents)} registrado; o pedido ${orderNumber} foi cancelado.`);
+      setRefundingOrder("");
+      setRefundReference("");
+      setRefundReason("");
+      setRefundReceipt("");
+      reload();
+      loadOrders(selected.code);
+    } catch (refundError) {
+      setFeedback(errorMessage(refundError, "Não foi possível registrar o reembolso."));
     } finally {
       setBusy(false);
     }
@@ -1498,6 +1544,21 @@ function Orders({ data }: { data: PanelData }) {
                 </div>
               </section>
             )}
+            {refundingOrder && (
+              <section className="order-refund-form" aria-label={`Registrar reembolso do pedido ${refundingOrder}`}>
+                <div className="order-refund-heading">
+                  <span className="material-symbols-rounded" aria-hidden="true">currency_exchange</span>
+                  <div><strong>Reembolso integral de {refundingOrder}</strong><p>Faça primeiro o estorno no app InfinitePay. Este registro não movimenta dinheiro; ele guarda a referência e cancela o pedido local.</p></div>
+                </div>
+                <label><span>Referência do estorno na InfinitePay</span><input autoFocus value={refundReference} onChange={(event) => setRefundReference(event.target.value)} placeholder="Código ou identificação exibida pelo provedor" minLength={3} maxLength={190} /></label>
+                <label><span>Motivo</span><input value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="Ex.: desistência solicitada pelo cliente" minLength={3} maxLength={500} /></label>
+                <label><span>Link HTTPS do comprovante (opcional)</span><input type="url" value={refundReceipt} onChange={(event) => setRefundReceipt(event.target.value)} placeholder="https://..." maxLength={2048} /></label>
+                <div className="order-refund-actions">
+                  <button type="button" disabled={busy} onClick={() => { setRefundingOrder(""); setRefundReference(""); setRefundReason(""); setRefundReceipt(""); setFeedback("Registro descartado. Nenhum estado foi alterado."); }}>Voltar</button>
+                  <button type="button" disabled={busy || refundReference.trim().length < 3 || refundReason.trim().length < 3} onClick={() => registerRefund(refundingOrder)}>Confirmar registro e cancelar</button>
+                </div>
+              </section>
+            )}
             <div className="campaign-orders-scroll">
               <div className="campaign-orders-head"><span>Pedido</span><span>Cliente</span><span>Corte</span><span>Cor</span><span>Tam.</span><span>Qtd.</span><span>Pagamento</span><span>Entrega</span><span>Ação</span></div>
               {filteredOrders.map((order) => (
@@ -1514,7 +1575,13 @@ function Orders({ data }: { data: PanelData }) {
                     <span className="order-delivery"><span className="material-symbols-rounded" aria-hidden="true">schedule</span>{deliveryLabels[effectiveDelivery(order, selected.phase)]}</span>
                   )}
                   <span className="order-row-action">
-                    {order.status === "cancelled" ? <small title={order.cancellationReason ?? undefined}>No histórico</small> : order.paymentStatus === "paid" || order.paymentStatus === "partially_refunded" ? <small>Reembolso antes</small> : <button type="button" disabled={busy} onClick={() => { setCancellingOrder(order.number); setCancellationReason(""); setFeedback(`Informe o motivo para cancelar o pedido ${order.number}.`); }}>Cancelar</button>}
+                    {order.status === "cancelled"
+                      ? <small title={order.cancellationReason ?? undefined}>No histórico</small>
+                      : order.paymentStatus === "paid"
+                        ? <button className="order-refund-action" type="button" disabled={busy} onClick={() => { setCancellingOrder(""); setRefundingOrder(order.number); setRefundReference(""); setRefundReason(""); setRefundReceipt(""); setFeedback(`Faça o estorno integral na InfinitePay e registre a referência do pedido ${order.number}.`); }}>Reembolsar</button>
+                        : order.paymentStatus === "partially_refunded"
+                          ? <small>Atendimento manual</small>
+                          : <button type="button" disabled={busy} onClick={() => { setRefundingOrder(""); setCancellingOrder(order.number); setCancellationReason(""); setFeedback(`Informe o motivo para cancelar o pedido ${order.number}.`); }}>Cancelar</button>}
                   </span>
                 </div>
               ))}

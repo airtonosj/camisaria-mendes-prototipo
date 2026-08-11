@@ -1,4 +1,5 @@
 import { FormEvent, useMemo, useState } from "react";
+import { buildRoute } from "../App";
 import { createInfinitePayCheckout, createOrderInApi } from "../api";
 import type { PrivateCampaign, ShirtModelName, SizeCode } from "../data";
 import { defaultCampaignColors, defaultCampaignSizes, shirtModels, sizeCatalog, sizeGroupLabels } from "../data";
@@ -285,7 +286,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
                 <span className="sr-only">E-mail opcional</span>
                 <input name="email" type="email" placeholder="E-mail para confirmação" autoComplete="email" value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} required />
               </label>
-              <p className="checkout-privacy"><span className="material-symbols-rounded" aria-hidden="true">lock</span>Seus dados serão usados apenas para identificar o pedido.</p>
+              <p className="checkout-privacy"><span className="material-symbols-rounded" aria-hidden="true">lock</span><span>Seus dados serão usados para processar e acompanhar o pedido. <a href={buildRoute("politica-privacidade")} target="_blank">Leia a política de privacidade.</a></span></p>
             </section>
 
             <button className="checkout-payment-button" type="submit">Ir para pagamento<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>

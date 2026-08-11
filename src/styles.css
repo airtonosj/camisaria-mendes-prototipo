@@ -142,6 +142,8 @@ main > section[id] { scroll-margin-top: 78px; }
 .footer-grid nav a:hover, .footer-grid nav a:focus-visible { color: var(--blue); outline: 0; }
 .footer-meta { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 30px; }
 .footer-meta p { margin: 0; color: #737a7e; font-size: .59rem; line-height: 1.5; }
+.footer-policy-links { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 9px; color: #b8bec1; font-size: .56rem; }
+.footer-policy-links a:hover, .footer-policy-links a:focus-visible { color: var(--blue); outline: 0; }
 .footer-tagline { text-align: right; }
 
 /* access and shared actions */
@@ -351,6 +353,32 @@ main > section[id] { scroll-margin-top: 78px; }
 .checkout-customer-fields input:focus { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
 .checkout-privacy { display: flex; align-items: flex-start; gap: 10px; margin: 18px 0 0; color: #92999d; font-size: .65rem; line-height: 1.45; }
 .checkout-privacy .material-symbols-rounded { flex: 0 0 auto; font-size: 17px; }
+.checkout-privacy a { color: #b9def1; text-decoration: underline; text-underline-offset: 2px; }
+
+/* public policies */
+.policy-page { min-height: 100vh; color: #1d2326; background: #f3f5f4; }
+.policy-header { min-height: 84px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border-bottom: 1px solid #d9dddb; padding: 14px max(24px, calc((100vw - 1120px) / 2)); background: #fff; }
+.policy-header .brand img { width: 54px; height: 54px; }
+.policy-header > a:last-child { color: #087fca; font-size: .7rem; font-weight: 760; }
+.policy-main { width: min(100% - 48px, 920px); margin-inline: auto; padding: 66px 0 86px; }
+.policy-intro { max-width: 760px; }
+.policy-intro h1 { margin: 13px 0 18px; font-size: clamp(2.5rem, 6vw, 5rem); line-height: .95; letter-spacing: -.065em; }
+.policy-intro > p { max-width: 680px; margin: 0; color: #687075; font-size: .86rem; line-height: 1.75; }
+.policy-intro > small { display: block; margin-top: 15px; color: #8a9194; font-size: .59rem; }
+.policy-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 38px; border-bottom: 1px solid #cfd5d2; }
+.policy-tabs a { min-height: 43px; display: flex; align-items: center; border-bottom: 3px solid transparent; padding: 0 16px; color: #727a7e; font-size: .66rem; font-weight: 740; }
+.policy-tabs a.is-active { border-color: #087fca; color: #087fca; }
+.policy-content { margin-top: 22px; border: 1px solid #d9dddb; padding: 8px 42px; background: #fff; }
+.policy-content section { padding: 28px 0; }
+.policy-content section + section { border-top: 1px solid #e4e7e5; }
+.policy-content h2 { margin: 0 0 12px; color: #22282b; font-size: 1rem; }
+.policy-content p { margin: 0; color: #626a6e; font-size: .74rem; line-height: 1.8; }
+.policy-contact { display: flex; align-items: center; justify-content: space-between; gap: 30px; margin-top: 22px; border: 1px solid #075f91; padding: 24px 28px; color: #dcebf3; background: #07131b; }
+.policy-contact > div { display: flex; align-items: center; gap: 14px; }
+.policy-contact .material-symbols-rounded { color: #52bff4; font-size: 30px; }
+.policy-contact strong { color: #fff; font-size: .75rem; }
+.policy-contact p { margin: 5px 0 0; color: #8fa3ae; font-size: .61rem; line-height: 1.5; }
+.policy-contact > a { min-height: 45px; display: flex; align-items: center; flex: 0 0 auto; padding: 0 18px; color: #fff; background: #087fca; font-size: .62rem; font-weight: 760; }
 .checkout-payment-notice { grid-column: 2; display: flex; align-items: flex-start; gap: 9px; margin: 18px 0 0; border: 1px solid #315b4a; padding: 12px 14px; color: #a9d8c5; background: #0c1813; font-size: .64rem; line-height: 1.45; }
 .checkout-payment-notice .material-symbols-rounded { color: #4bd69d; font-size: 18px; }
 .checkout-payment-button { grid-column: 2; min-height: 62px; margin-top: 21px; border: 0; display: flex; align-items: center; justify-content: center; gap: 25px; cursor: pointer; color: #fff; background: #087fca; font-size: .83rem; font-weight: 760; }
@@ -1323,6 +1351,19 @@ main > section[id] { scroll-margin-top: 78px; }
 .order-cancellation-actions button { min-height: 34px; border: 1px solid #d9a9a3; border-radius: 3px; cursor: pointer; padding: 0 10px; color: #7a271a; background: #fff; font-size: .49rem; font-weight: 800; }
 .order-cancellation-actions button:last-child { border-color: #b42318; color: #fff; background: #b42318; }
 .order-cancellation-actions button:disabled { cursor: default; opacity: .5; }
+.order-row-action .order-refund-action { border-color: #c8b5e2; color: #6e3aa5; background: #fbf8ff; }
+.order-row-action .order-refund-action:hover:not(:disabled) { color: #fff; background: #6e3aa5; }
+.order-refund-form { display: grid; grid-template-columns: minmax(240px, 1.2fr) repeat(3, minmax(170px, .8fr)) auto; align-items: end; gap: 12px; border-bottom: 1px solid #d7c6e9; padding: 14px 16px; background: #fbf8ff; }
+.order-refund-heading { display: flex; align-items: flex-start; gap: 9px; }
+.order-refund-heading > span { color: #6e3aa5; font-size: 21px; }
+.order-refund-form strong { color: #56307d; font-size: .63rem; }
+.order-refund-form p { margin: 3px 0 0; color: #765f8e; font-size: .5rem; line-height: 1.45; }
+.order-refund-form label { display: grid; gap: 5px; color: #56307d; font-size: .5rem; font-weight: 800; }
+.order-refund-form input { min-height: 34px; min-width: 0; border: 1px solid #cdb9df; border-radius: 3px; padding: 0 10px; color: #2c3133; background: #fff; font: inherit; }
+.order-refund-actions { display: flex; gap: 7px; }
+.order-refund-actions button { min-height: 34px; border: 1px solid #cdb9df; border-radius: 3px; cursor: pointer; padding: 0 10px; color: #56307d; background: #fff; font-size: .49rem; font-weight: 800; white-space: nowrap; }
+.order-refund-actions button:last-child { border-color: #6e3aa5; color: #fff; background: #6e3aa5; }
+.order-refund-actions button:disabled { cursor: default; opacity: .5; }
 .campaign-orders-empty { min-height: 140px; display: grid; place-content: center; justify-items: center; gap: 8px; color: #82898d; text-align: center; }
 .campaign-orders-empty span { font-size: 30px; }
 .campaign-orders-empty p { margin: 0; font-size: .6rem; }
@@ -1612,12 +1653,26 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-orders-head, .campaign-orders-row { min-width: 920px; }
   .order-cancellation-form { grid-template-columns: 1fr; align-items: stretch; }
   .order-cancellation-actions { justify-content: flex-end; }
+  .order-refund-form { grid-template-columns: 1fr; align-items: stretch; }
+  .order-refund-actions { justify-content: flex-end; }
   .campaign-orders-table > footer { justify-content: space-between; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition-duration: .01ms !important; }
+}
+
+@media (max-width: 720px) {
+  .policy-header { min-height: 72px; padding-inline: 20px; }
+  .policy-main { width: min(100% - 32px, 920px); padding-block: 46px 64px; }
+  .policy-intro h1 { font-size: 2.65rem; }
+  .policy-tabs { display: grid; grid-template-columns: 1fr; border-bottom: 0; }
+  .policy-tabs a { min-height: 42px; border: 1px solid #d3d8d5; padding-inline: 13px; background: #fff; }
+  .policy-tabs a.is-active { border-color: #087fca; }
+  .policy-content { padding: 4px 22px; }
+  .policy-contact { align-items: stretch; flex-direction: column; padding: 22px; }
+  .policy-contact > a { justify-content: center; }
 }
 
 @media print {
