@@ -297,8 +297,8 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-color-options label:focus-within { outline: 2px solid #75caf4; outline-offset: 2px; }
 .campaign-color-note { margin: 11px 0 0; color: #8d9498; font-size: .6rem; line-height: 1.5; }
 .campaign-size-group-label { margin: 16px 0 0; color: #8d9498; font-size: .58rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
-.campaign-size-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 9px; margin-top: 9px; }
-.campaign-size-options label { position: relative; cursor: pointer; }
+.campaign-size-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 9px; }
+.campaign-size-options label { position: relative; flex: 0 1 62px; width: 62px; cursor: pointer; }
 .campaign-size-options input { position: absolute; opacity: 0; pointer-events: none; }
 .campaign-size-options span { min-height: 50px; display: grid; place-content: center; border: 1px solid #444a4f; color: #d6dadd; font-size: .74rem; }
 .campaign-size-options label.is-selected span { border-color: var(--blue); color: #fff; background: #0a6098; }
@@ -681,7 +681,8 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-choice-stage { margin-top: 10px; padding: 12px 0; }
   .campaign-stage-heading { align-items: flex-end; }
   .campaign-stage-heading button { font-size: .58rem; }
-  .campaign-size-options { grid-template-columns: repeat(6, 1fr); gap: 5px; margin-top: 7px; }
+  .campaign-size-options { gap: 5px; margin-top: 7px; }
+  .campaign-size-options label { flex-basis: calc((100% - 25px) / 6); width: auto; }
   .campaign-size-group-label { margin-top: 11px; font-size: .5rem; }
   .campaign-size-options span { min-height: 38px; font-size: .63rem; }
   .campaign-quantity-picker { grid-template-columns: 45px 56px 45px; }
