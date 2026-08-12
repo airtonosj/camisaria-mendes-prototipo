@@ -322,14 +322,20 @@ try {
   const campaign = campaignPayload.campaign;
   const variant = campaign.variants.find((candidate) => candidate.model.code === "common");
   const allowedSize = campaign.sizes.find((size) => size.model.code === variant.model.code);
-  assert.ok(variant && allowedSize);
+  const secondVariant = campaign.variants.find((candidate) => candidate.id !== variant.id);
+  const secondAllowedSize = campaign.sizes.find((size) => size.model.code === secondVariant.model.code && size.code !== allowedSize.code)
+    ?? campaign.sizes.find((size) => size.model.code === secondVariant.model.code);
+  assert.ok(variant && allowedSize && secondVariant && secondAllowedSize);
   step("campanha pública carrega variantes e tamanhos persistidos");
 
   const firstKey = randomUUID();
   const firstOrderBody = {
     campaignCode: campaign.code,
     customer: { name: "Cliente Smoke Pago", whatsapp: "5598999991001", email: "pago@example.com" },
-    items: [{ variantId: variant.id, size: allowedSize.code, quantity: 2 }],
+    items: [
+      { variantId: variant.id, size: allowedSize.code, quantity: 2 },
+      { variantId: secondVariant.id, size: secondAllowedSize.code, quantity: 1 },
+    ],
   };
   await request("/api/orders", {
     method: "POST",
@@ -356,6 +362,13 @@ try {
 
   const pendingTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
   assert.equal(pendingTracking.order.status, "pending");
+  assert.equal(pendingTracking.order.items.length, 2);
+  assert.equal(pendingTracking.order.items.reduce((total, item) => total + item.quantity, 0), 3);
+  const campaignOrders = await request(`/api/admin/campaigns/${campaign.code}/orders`, { token });
+  const groupedOrder = campaignOrders.orders.find((order) => order.number === firstCreated.order.number);
+  assert.equal(groupedOrder.items.length, 2);
+  assert.equal(campaignOrders.orders.filter((order) => order.number === firstCreated.order.number).length, 1);
+  step("pedido com cores e tamanhos diferentes permanece agrupado como uma compra");
   let production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
   assert.equal(production.rows.length, 0);
   step("pedido pendente fica fora do relatório oficial");
@@ -378,6 +391,7 @@ try {
   assert.equal(fakeInfinitePay.links.length, 1);
   assert.equal(fakeInfinitePay.links[0].handle, "smoke-infinitepay");
   assert.equal(fakeInfinitePay.links[0].order_nsu, firstCreated.order.number);
+  assert.equal(fakeInfinitePay.links[0].items.length, 2);
   assert.equal(fakeInfinitePay.links[0].items.reduce((sum, item) => sum + item.price * item.quantity, 0), firstCreated.order.totalCents);
   assert.match(fakeInfinitePay.links[0].webhook_url, /\/api\/payments\/infinitepay\/webhook$/);
   const checkoutReplay = await request(`/api/orders/${firstCreated.order.number}/checkout`, {
@@ -435,7 +449,7 @@ try {
   step("pagamento confirmado agenda e entrega um único e-mail com código e link de acompanhamento");
 
   production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
-  assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 2);
+  assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 3);
   step("confirmação validada do provedor inclui somente o pedido pago na produção");
 
   const divergentCreated = await request("/api/orders", {
@@ -474,7 +488,7 @@ try {
   const divergentTracking = await request(`/api/orders/${divergentCreated.order.number}?whatsapp=5598999991003`);
   assert.equal(divergentTracking.order.status, "pending");
   production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
-  assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 2);
+  assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 3);
   step("payment_check com valor divergente não confirma nem inclui o pedido na produção");
 
   const secondCreated = await request("/api/orders", {
@@ -496,7 +510,7 @@ try {
   assert.equal(cancelledTracking.order.status, "cancelled");
   assert.equal(cancelledTracking.order.cancellationReason, "Pedido duplicado no smoke test");
   production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
-  assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 2);
+  assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 3);
   step("cancelamento exige motivo, continua consultável e não altera produção");
 
   for (const targetPhase of ["orders_closed", "production", "ready_for_delivery"]) {

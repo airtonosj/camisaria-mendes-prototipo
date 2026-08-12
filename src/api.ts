@@ -42,9 +42,7 @@ export type ApiSettings = {
 type CreateOrderInput = {
   campaignCode: string;
   customer: { name: string; whatsapp: string; email: string };
-  variantId: number;
-  size: string;
-  quantity: number;
+  items: Array<{ variantId: number; size: string; quantity: number }>;
   idempotencyKey: string;
 };
 
@@ -188,7 +186,7 @@ export async function createOrderInApi(input: CreateOrderInput) {
     body: JSON.stringify({
       campaignCode: input.campaignCode,
       customer: input.customer,
-      items: [{ variantId: input.variantId, size: input.size, quantity: input.quantity }],
+      items: input.items,
     }),
   });
   return payload.order;
@@ -352,14 +350,15 @@ export type ApiCampaignOrder = {
   deliveryStatus: DeliveryStatusCode;
   totalCents: number;
   createdAt: string;
-  item: {
+  items: Array<{
     modelName: string;
     color: { name: string; hex: string };
     size: string;
     sizeGroup: "standard" | "baby_look";
     quantity: number;
     unitPriceCents: number;
-  };
+    lineTotalCents: number;
+  }>;
 };
 
 export type ApiProductionRow = {

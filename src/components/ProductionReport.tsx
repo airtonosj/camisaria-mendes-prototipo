@@ -275,9 +275,14 @@ export function printProductionReport(filename: string) {
     document.body.classList.remove("printing-production-report");
     document.title = previousTitle;
   };
+
+  // A prévia de impressão é assíncrona em navegadores móveis. Um timeout curto
+  // pode remover esta classe antes de Android/iOS capturarem o documento e fazer
+  // o navegador imprimir a tabela administrativa antiga. O `afterprint` indica
+  // que a impressão começou ou que a prévia foi fechada, então é o momento seguro
+  // para restaurar a tela.
   window.addEventListener("afterprint", restore, { once: true });
   window.requestAnimationFrame(() => {
     window.print();
-    window.setTimeout(restore, 500);
   });
 }

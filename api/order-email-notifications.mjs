@@ -19,6 +19,9 @@ function formatCents(value) {
 
 export function paymentConfirmationMessage(order) {
   const orderNumber = String(order.order_number);
+  const itemLines = String(order.item_summary ?? "")
+    .split("\n")
+    .filter(Boolean);
   return {
     to: order.recipient_email,
     subject: `Pagamento confirmado - pedido ${orderNumber}`,
@@ -31,6 +34,7 @@ export function paymentConfirmationMessage(order) {
       `Código da compra: ${orderNumber}`,
       `Campanha: ${order.campaign_title}`,
       `Valor confirmado: ${formatCents(order.total_cents)}`,
+      ...(itemLines.length ? ["", "Peças do pedido:", ...itemLines.map((item) => `- ${item}`)] : []),
       "",
       "Acompanhe seu pedido pelo endereço abaixo:",
       trackingUrl(orderNumber),
@@ -78,11 +82,20 @@ export async function processPaymentConfirmationEmails({ database = pool, send =
 
     const [rows] = await database.execute(
       `SELECT n.id, n.recipient_email, o.order_number, o.customer_name, o.total_cents,
-              c.title AS campaign_title
+              c.title AS campaign_title,
+              GROUP_CONCAT(CONCAT(oi.quantity, 'x ', sm.name, ' - ', co.name, ' - ', sz.code)
+                ORDER BY oi.id SEPARATOR '\n') AS item_summary
          FROM order_email_notifications n
          JOIN orders o ON o.id = n.order_id
          JOIN campaigns c ON c.id = o.campaign_id
-        WHERE n.id = ? AND n.notification_type = ? LIMIT 1`,
+         JOIN order_items oi ON oi.order_id = o.id
+         JOIN campaign_variants cv ON cv.id = oi.campaign_variant_id
+         JOIN shirt_models sm ON sm.id = cv.shirt_model_id
+         JOIN colors co ON co.id = cv.color_id
+         JOIN sizes sz ON sz.id = oi.size_id
+        WHERE n.id = ? AND n.notification_type = ?
+        GROUP BY n.id, n.recipient_email, o.order_number, o.customer_name, o.total_cents, c.title
+        LIMIT 1`,
       [candidate.id, notificationType],
     );
 

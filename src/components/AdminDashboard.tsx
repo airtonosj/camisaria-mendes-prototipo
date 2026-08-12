@@ -141,7 +141,19 @@ type PanelOrder = {
   /** Ausente nos dados de demonstração, que só têm pedidos ativos. */
   status?: "active" | "cancelled";
   cancellationReason?: string | null;
+  items?: Array<{ model: string; color: string; colorHex: string; size: SizeCode; quantity: number; unitPriceCents: number }>;
 };
+
+function panelOrderItems(order: PanelOrder) {
+  return order.items?.length ? order.items : [{
+    model: order.model,
+    color: order.color,
+    colorHex: order.colorHex,
+    size: order.size,
+    quantity: order.quantity,
+    unitPriceCents: order.quantity ? Math.round(order.totalCents / order.quantity) : order.totalCents,
+  }];
+}
 
 /* ------------------------------------------------------------------ */
 /* Dados de demonstração, no mesmo formato que a API devolve            */
@@ -216,15 +228,15 @@ function productionFromOrders(campaigns: PanelCampaign[], orders: Record<string,
   return campaigns.flatMap((campaign) =>
     (orders[campaign.code] ?? [])
       .filter((order) => order.paymentStatus === "paid" && order.status !== "cancelled")
-      .map((order) => ({
+      .flatMap((order) => panelOrderItems(order).map((item) => ({
         campaignCode: campaign.code,
         campaignTitle: campaign.title,
-        modelName: order.model,
-        color: { name: order.color, hex: order.colorHex },
-        size: order.size,
-        sizeGroup: (order.size.endsWith("B") ? "baby_look" : "standard") as "standard" | "baby_look",
-        quantity: order.quantity,
-      })),
+        modelName: item.model,
+        color: { name: item.color, hex: item.colorHex },
+        size: item.size,
+        sizeGroup: (item.size.endsWith("B") ? "baby_look" : "standard") as "standard" | "baby_look",
+        quantity: item.quantity,
+      }))),
   );
 }
 
@@ -232,19 +244,19 @@ function deliveryFromOrders(campaigns: PanelCampaign[], orders: Record<string, P
   return campaigns.flatMap((campaign) =>
     (orders[campaign.code] ?? [])
       .filter((order) => order.paymentStatus === "paid" && order.status !== "cancelled")
-      .map((order) => ({
+      .flatMap((order) => panelOrderItems(order).map((item) => ({
         campaignCode: campaign.code,
         campaignTitle: campaign.title,
         representativeName: campaign.representative,
         orderNumber: order.number,
         customerName: order.customer,
         customerWhatsapp: order.whatsapp,
-        modelName: order.model,
-        colorName: order.color,
-        size: order.size,
-        quantity: order.quantity,
+        modelName: item.model,
+        colorName: item.color,
+        size: item.size,
+        quantity: item.quantity,
         deliveryStatus: effectiveDelivery(order, campaign.phase),
-      })),
+      }))),
   );
 }
 
@@ -370,21 +382,25 @@ function usePanelData(): PanelData {
       .then((list) => {
         setOrders((current) => ({
           ...current,
-          [code]: list.map((order) => ({
-            number: order.number,
-            customer: order.customer.name,
-            whatsapp: order.customer.whatsapp,
-            model: order.item.modelName,
-            color: order.item.color.name,
-            colorHex: order.item.color.hex,
-            size: order.item.size as SizeCode,
-            quantity: order.item.quantity,
-            paymentStatus: order.paymentStatus,
-            deliveryStatus: order.deliveryStatus,
-            totalCents: order.totalCents,
-            status: order.status,
-            cancellationReason: order.cancellationReason,
-          })),
+          [code]: list.map((order) => {
+            const first = order.items[0];
+            return {
+              number: order.number,
+              customer: order.customer.name,
+              whatsapp: order.customer.whatsapp,
+              model: first?.modelName ?? "—",
+              color: first?.color.name ?? "—",
+              colorHex: first?.color.hex ?? "#777f83",
+              size: (first?.size ?? "M") as SizeCode,
+              quantity: order.items.reduce((total, item) => total + item.quantity, 0),
+              paymentStatus: order.paymentStatus,
+              deliveryStatus: order.deliveryStatus,
+              totalCents: order.totalCents,
+              status: order.status,
+              cancellationReason: order.cancellationReason,
+              items: order.items.map((item) => ({ model: item.modelName, color: item.color.name, colorHex: item.color.hex, size: item.size as SizeCode, quantity: item.quantity, unitPriceCents: item.unitPriceCents })),
+            };
+          }),
         }));
       })
       .catch(() => {
@@ -1322,7 +1338,7 @@ function Orders({ data }: { data: PanelData }) {
 
   const filteredOrders = campaignOrders.filter((order) => {
     const query = search.trim().toLocaleLowerCase("pt-BR");
-    const matchesSearch = !query || [order.number, order.customer, order.model, order.color, order.size].some((value) => String(value).toLocaleLowerCase("pt-BR").includes(query));
+    const matchesSearch = !query || [order.number, order.customer, ...panelOrderItems(order).flatMap((item) => [item.model, item.color, item.size])].some((value) => String(value).toLocaleLowerCase("pt-BR").includes(query));
     const matchesPayment = paymentFilter === "all" || order.paymentStatus === paymentFilter;
     return matchesSearch && matchesPayment;
   });
@@ -1562,10 +1578,10 @@ function Orders({ data }: { data: PanelData }) {
             <div className="campaign-orders-scroll">
               <div className="campaign-orders-head"><span>Pedido</span><span>Cliente</span><span>Corte</span><span>Cor</span><span>Tam.</span><span>Qtd.</span><span>Pagamento</span><span>Entrega</span><span>Ação</span></div>
               {filteredOrders.map((order) => (
-                <div className="campaign-orders-row" key={`${order.number}-${order.size}-${order.color}`}>
-                  <span className="campaign-order-number"><strong>#{order.number}</strong>{order.status === "cancelled" && <small>Cancelado</small>}</span><span>{order.customer}</span><span>{order.model}</span>
-                  <span className="campaign-order-color"><i style={{ backgroundColor: order.colorHex }} />{order.color}</span>
-                  <span>{order.size}</span><span>{order.quantity}</span>
+                <div className="campaign-orders-row" key={order.number}>
+                  <span className="campaign-order-number"><strong>#{order.number}</strong>{order.status === "cancelled" && <small>Cancelado</small>}</span><span>{order.customer}</span><span>{panelOrderItems(order).length === 1 ? order.model : `${panelOrderItems(order).length} combinações`}</span>
+                  <span className="campaign-order-color">{panelOrderItems(order).length === 1 ? <><i style={{ backgroundColor: order.colorHex }} />{order.color}</> : <small className="campaign-order-items-summary">{panelOrderItems(order).map((item) => `${item.color} ${item.size}`).join(" · ")}</small>}</span>
+                  <span>{panelOrderItems(order).length === 1 ? order.size : "Vários"}</span><span>{order.quantity}</span>
                   <span className={`order-payment order-payment--${order.paymentStatus}`}>
                     <i />{paymentLabels[order.paymentStatus]}
                   </span>

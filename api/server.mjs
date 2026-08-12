@@ -1056,24 +1056,34 @@ async function listCampaignOrders(code) {
       ORDER BY o.created_at DESC, oi.id`,
     [code],
   );
-  return rows.map((row) => ({
-    number: row.order_number,
-    customer: { name: row.customer_name, whatsapp: row.customer_whatsapp, email: row.customer_email },
-    status: row.status,
-    cancellationReason: row.cancellation_reason,
-    paymentStatus: row.payment_status,
-    deliveryStatus: row.delivery_status,
-    totalCents: row.total_cents,
-    createdAt: row.created_at,
-    item: {
+  const orders = new Map();
+  for (const row of rows) {
+    let order = orders.get(row.order_number);
+    if (!order) {
+      order = {
+        number: row.order_number,
+        customer: { name: row.customer_name, whatsapp: row.customer_whatsapp, email: row.customer_email },
+        status: row.status,
+        cancellationReason: row.cancellation_reason,
+        paymentStatus: row.payment_status,
+        deliveryStatus: row.delivery_status,
+        totalCents: row.total_cents,
+        createdAt: row.created_at,
+        items: [],
+      };
+      orders.set(row.order_number, order);
+    }
+    order.items.push({
       modelName: row.model_name,
       color: { name: row.color_name, hex: row.hex_color },
       size: row.size,
       sizeGroup: row.size_group,
-      quantity: row.quantity,
-      unitPriceCents: row.unit_price_cents,
-    },
-  }));
+      quantity: Number(row.quantity),
+      unitPriceCents: Number(row.unit_price_cents),
+      lineTotalCents: Number(row.quantity) * Number(row.unit_price_cents),
+    });
+  }
+  return [...orders.values()];
 }
 
 async function changeDeliveryStatus(request, orderNumber) {

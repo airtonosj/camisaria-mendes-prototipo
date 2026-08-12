@@ -22,6 +22,15 @@ type DemoOrder = {
   colorName?: string;
   size?: string;
   quantity?: number;
+  items?: Array<{
+    modelName: string;
+    colorName: string;
+    colorHex: string;
+    size: string;
+    quantity: number;
+    unitPriceCents: number;
+    lineTotalCents: number;
+  }>;
   totalCents?: number;
   artFront?: string | null;
   artBack?: string | null;
@@ -156,7 +165,6 @@ export function OrderTrackingPage() {
     setSearching(true);
     try {
       const persisted = await trackOrderInApi(normalizedNumber, phone);
-      const item = persisted.items[0];
       const copyByStatus = {
         pending: ["Seu pedido está em análise.", "Acompanhe cada etapa até a retirada com o representante.", "Aguardando confirmação", "hourglass_top"],
         confirmed: ["Pagamento confirmado!", "Seu pedido está confirmado e aguarda o avanço da campanha para produção.", "Pagamento confirmado", "verified"],
@@ -185,10 +193,15 @@ export function OrderTrackingPage() {
         campaignCode: persisted.campaign.code,
         campaignTitle: persisted.campaign.title,
         representative: persisted.campaign.representativeName,
-        modelName: item?.modelName,
-        colorName: item?.color.name,
-        size: item?.size,
-        quantity: item?.quantity,
+        items: persisted.items.map((item) => ({
+          modelName: item.modelName,
+          colorName: item.color.name,
+          colorHex: item.color.hex,
+          size: item.size,
+          quantity: item.quantity,
+          unitPriceCents: item.unitPriceCents,
+          lineTotalCents: item.lineTotalCents,
+        })),
         totalCents: persisted.totalCents,
         artFront: assetUrl(persisted.campaign.artFrontUrl),
         artBack: assetUrl(persisted.campaign.artBackUrl),
@@ -271,9 +284,18 @@ export function OrderTrackingPage() {
   const displayedCampaignTitle = order?.campaignTitle ?? "Campanha da turma";
   const trackedArt = { front: order?.artFront ?? shirtModels[0].image, back: order?.artBack ?? null };
   const displayedModel = order?.modelName ?? "—";
-  const displayedColor = order?.colorName ? ` · ${order.colorName}` : "";
   const displayedSize = order?.size ?? "—";
   const displayedQuantity = order?.quantity ?? 1;
+  const displayedItems = order?.items?.length ? order.items : [{
+    modelName: displayedModel,
+    colorName: order?.colorName ?? "",
+    colorHex: "#777f83",
+    size: displayedSize,
+    quantity: displayedQuantity,
+    unitPriceCents: order?.totalCents ? Math.round(order.totalCents / displayedQuantity) : 0,
+    lineTotalCents: order?.totalCents ?? 0,
+  }];
+  const displayedUnits = displayedItems.reduce((total, item) => total + item.quantity, 0);
   const displayedTotal = order?.totalCents === undefined
     ? "—"
     : (order.totalCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -382,10 +404,18 @@ export function OrderTrackingPage() {
                     {trackedArt.back && <img src={trackedArt.back} alt={`${displayedCampaignTitle} — costas`} />}
                   </div>
                   <div className="received-product-copy">
-                    <strong>{displayedModel}{displayedColor} · {displayedSize}</strong>
-                    <span>{displayedQuantity} {displayedQuantity === 1 ? "unidade" : "unidades"} · Arte da campanha</span>
+                    <div className="tracking-item-list">
+                      {displayedItems.map((item, index) => (
+                        <article key={`${item.modelName}-${item.colorName}-${item.size}-${index}`}>
+                          <i style={{ backgroundColor: item.colorHex }} />
+                          <div><strong>{item.modelName}{item.colorName ? ` · ${item.colorName}` : ""} · {item.size}</strong><span>{item.quantity} {item.quantity === 1 ? "unidade" : "unidades"}</span></div>
+                          <b>{(item.lineTotalCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</b>
+                        </article>
+                      ))}
+                    </div>
                     <dl>
                       <div><dt>Pagamento</dt><dd>{order.paymentLabel}</dd></div>
+                      <div><dt>Peças</dt><dd>{displayedUnits}</dd></div>
                       <div><dt>Total</dt><dd>{displayedTotal}</dd></div>
                     </dl>
                   </div>
