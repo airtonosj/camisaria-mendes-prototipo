@@ -760,9 +760,10 @@ async function updateCampaign(request, code) {
   return getCampaign(code);
 }
 
-/** Deixa cores, preços e tamanhos da campanha iguais ao que foi enviado. */
+/** Atualiza o que segue à venda, mantendo no banco o histórico necessário aos pedidos antigos. */
 async function applyCampaignModels(connection, campaignId, models) {
   const { modelIds, colorIds, sizeIds } = await resolveCatalogIds(connection, models);
+  const wantedModelIds = new Set(modelIds.values());
   const wantedVariants = new Set();
   const wantedSizes = new Set();
   for (const model of models) {
@@ -781,6 +782,12 @@ async function applyCampaignModels(connection, campaignId, models) {
   );
   for (const variant of currentVariants) {
     if (wantedVariants.has(`${variant.shirt_model_id}:${variant.color_id}`)) continue;
+    // Retirar um corte inteiro encerra somente novas vendas. A variante permanece no
+    // banco, inativa, para que pedidos anteriores continuem em relatórios e produção.
+    if (!wantedModelIds.has(variant.shirt_model_id)) {
+      await connection.execute("UPDATE campaign_variants SET active = FALSE WHERE id = ?", [variant.id]);
+      continue;
+    }
     const [used] = await connection.execute(
       `SELECT o.order_number FROM order_items oi
          JOIN orders o ON o.id = oi.order_id AND o.status = 'active'
@@ -809,6 +816,9 @@ async function applyCampaignModels(connection, campaignId, models) {
   );
   for (const size of currentSizes) {
     if (wantedSizes.has(`${size.shirt_model_id}:${size.size_id}`)) continue;
+    // Os tamanhos do corte retirado ficam como histórico. Sem variante ativa, eles não
+    // aparecem no checkout nem podem ser usados para criar um novo pedido.
+    if (!wantedModelIds.has(size.shirt_model_id)) continue;
     const [used] = await connection.execute(
       `SELECT o.order_number FROM order_items oi
          JOIN orders o ON o.id = oi.order_id AND o.status = 'active'

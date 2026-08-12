@@ -310,6 +310,40 @@ try {
   assert.equal(customVariant.color.hex, "#8B5CF6");
   step("campanha aceita e publica cor personalizada com nome e código HEX");
 
+  const removedModelVariant = customCampaign.variants.find((candidate) => candidate.model.code === "oversized");
+  const removedModelSize = customCampaign.sizes.find((candidate) => candidate.model.code === "oversized");
+  assert.ok(removedModelVariant && removedModelSize);
+  const historicalOrder = await request("/api/orders", {
+    method: "POST",
+    expected: 201,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: {
+      campaignCode: customCampaign.code,
+      customer: { name: "Cliente do corte retirado", whatsapp: "5598999992026", email: "historico@example.com" },
+      items: [{ variantId: removedModelVariant.id, size: removedModelSize.code, quantity: 1 }],
+    },
+  });
+  await request(`/api/admin/campaigns/${customCampaign.code}`, {
+    method: "PATCH",
+    token,
+    body: { models: [customCampaignPayload.models[0]] },
+  });
+  const campaignWithoutOversized = (await request(`/api/campaigns/${customCampaign.code}`)).campaign;
+  assert.equal(campaignWithoutOversized.variants.some((candidate) => candidate.model.code === "oversized"), false);
+  const preservedHistoricalOrder = await request(`/api/orders/${historicalOrder.order.number}?whatsapp=5598999992026`);
+  assert.equal(preservedHistoricalOrder.order.items[0].modelName, "Oversized");
+  await request("/api/orders", {
+    method: "POST",
+    expected: 422,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: {
+      campaignCode: customCampaign.code,
+      customer: { name: "Nova compra bloqueada", whatsapp: "5598999992027", email: "bloqueada@example.com" },
+      items: [{ variantId: removedModelVariant.id, size: removedModelSize.code, quantity: 1 }],
+    },
+  });
+  step("edição retira o corte do checkout, bloqueia novas compras e preserva pedidos anteriores");
+
   runNode("api/create-user.mjs", ["Representante Smoke", "representante@smoke.test", "senha-representante", "representative"]);
   await request("/api/auth/login", {
     method: "POST",

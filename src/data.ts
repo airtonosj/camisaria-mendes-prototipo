@@ -33,6 +33,8 @@ export type PrivateCampaign = {
   title: string;
   subtitle: string;
   art: CampaignArt;
+  /** Cortes oferecidos nesta campanha. Ausente apenas em dados demonstrativos antigos. */
+  models?: ShirtModelName[];
   prices: Record<ShirtModelName, number>;
   sizes: Record<ShirtModelName, SizeCode[]>;
   deadline: string;
@@ -143,6 +145,7 @@ export const privateCampaigns: Record<string, PrivateCampaign> = {
     title: "Engenharia Civil — Turma 2026",
     subtitle: "Campanha exclusiva para os alunos da turma",
     art: { front: campaignEngineering, back: null },
+    models: ["Comum", "Oversized"],
     prices: { Comum: 59.9, Oversized: 69.9 },
     sizes: {
       Comum: ["PP", "P", "M", "G", "GG", "PPB", "PB", "MB", "GB", "GGB"],
@@ -161,6 +164,7 @@ export const privateCampaigns: Record<string, PrivateCampaign> = {
     title: "Análise e Desenvolvimento de Sistemas — 2026.2",
     subtitle: "Campanha exclusiva para os alunos da turma",
     art: { front: campaignAdmin, back: null },
+    models: ["Comum", "Oversized"],
     prices: { Comum: 59.9, Oversized: 69.9 },
     sizes: defaultCampaignSizes,
     deadline: "Pedidos até 12 de setembro de 2026",

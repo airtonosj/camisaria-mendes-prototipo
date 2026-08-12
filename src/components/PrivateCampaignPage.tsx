@@ -61,13 +61,26 @@ const oversizedColumns: MeasurementColumn[] = [
 
 const sizeGroupOf = new Map(sizeCatalog.map((item) => [item.code, item.group]));
 
+function campaignModels(campaign: PrivateCampaign) {
+  if (campaign.models?.length) {
+    return shirtModels.filter((model) => campaign.models?.includes(model.name));
+  }
+  if (campaign.variantIds) {
+    return shirtModels.filter((model) => Object.keys(campaign.variantIds?.[model.name] ?? {}).length > 0);
+  }
+  // Compatibilidade somente com campanhas demonstrativas salvas antes deste campo existir.
+  return shirtModels;
+}
+
 function campaignSizes(campaign: PrivateCampaign, model: ShirtModelName) {
   const configured = campaign.sizes?.[model];
+  if (campaign.models || campaign.variantIds) return configured ?? [];
   return configured?.length ? configured : defaultCampaignSizes[model];
 }
 
 function campaignColors(campaign: PrivateCampaign, model: ShirtModelName) {
   const configured = campaign.colors?.[model];
+  if (campaign.models || campaign.variantIds) return configured ?? [];
   return configured?.length ? configured : defaultCampaignColors[model];
 }
 
@@ -86,13 +99,15 @@ function readCart(campaign: PrivateCampaign): CartItem[] {
     const stored = JSON.parse(raw);
     if (!Array.isArray(stored)) return [];
     const validated: CartItem[] = [];
+    const availableModels = campaignModels(campaign);
     for (const candidate of stored) {
       const modelName = candidate?.modelName as ShirtModelName;
+      if (!availableModels.some((model) => model.name === modelName)) continue;
       const color = campaignColors(campaign, modelName).find((option) => option.name === candidate?.color?.name);
       const size = candidate?.size as SizeCode;
       const variantId = campaign.variantIds?.[modelName]?.[color?.name ?? ""];
       const quantity = Number(candidate?.quantity);
-      if (!shirtModels.some((model) => model.name === modelName) || !color || !campaignSizes(campaign, modelName).includes(size)) continue;
+      if (!color || !campaignSizes(campaign, modelName).includes(size)) continue;
       if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 20) continue;
       if (!variantId && !import.meta.env.DEV) continue;
       validated.push({
@@ -234,11 +249,12 @@ function CartLines({ items, editable = false, onQuantity, onRemove }: {
 }
 
 export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: PrivateCampaign; resumePayment?: string }) {
+  const initialModel = campaignModels(campaign)[0]?.name ?? shirtModels[0].name;
   const [step, setStep] = useState<CampaignStep>(resumePayment ? "payment" : "model");
-  const [model, setModel] = useState<ShirtModelName>(shirtModels[0].name);
+  const [model, setModel] = useState<ShirtModelName>(initialModel);
   const [previewSide, setPreviewSide] = useState<"front" | "back">("front");
-  const [color, setColor] = useState(() => campaignColors(campaign, shirtModels[0].name)[0].name);
-  const [size, setSize] = useState<SizeCode>(() => campaignSizes(campaign, shirtModels[0].name)[0]);
+  const [color, setColor] = useState(() => campaignColors(campaign, initialModel)[0]?.name ?? "");
+  const [size, setSize] = useState<SizeCode>(() => campaignSizes(campaign, initialModel)[0] ?? "M");
   const [quantity, setQuantity] = useState(1);
   const [cart, setCart] = useState<CartItem[]>(() => readCart(campaign));
   const [cartMessage, setCartMessage] = useState("");
@@ -252,16 +268,46 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [simulated, setSimulated] = useState(false);
   const idempotency = useRef({ signature: "", key: "" });
+  const availableModels = useMemo(() => campaignModels(campaign), [campaign]);
+
+  /**
+   * A campanha local pode aparecer por um instante enquanto a API carrega. Quando chega
+   * a configuração persistida (inclusive após uma edição), troca o corte selecionado e
+   * remove do carrinho qualquer opção que já não esteja à venda.
+   */
+  useEffect(() => {
+    const firstAvailable = availableModels[0]?.name;
+    if (!firstAvailable) return;
+    if (!availableModels.some((item) => item.name === model)) {
+      setModel(firstAvailable);
+      setColor(campaignColors(campaign, firstAvailable)[0]?.name ?? "");
+      setSize(campaignSizes(campaign, firstAvailable)[0] ?? "M");
+    }
+    setCart((current) => current.flatMap((item) => {
+      if (!availableModels.some((available) => available.name === item.modelName)) return [];
+      const variantId = campaign.variantIds?.[item.modelName]?.[item.color.name];
+      const stillAvailable = campaignColors(campaign, item.modelName).some((option) => option.name === item.color.name)
+        && campaignSizes(campaign, item.modelName).includes(item.size)
+        && (Boolean(variantId) || import.meta.env.DEV && !campaign.variantIds);
+      if (!stillAvailable) return [];
+      return [{
+        ...item,
+        variantId: variantId ?? item.variantId,
+        unitPriceCents: Math.round(campaign.prices[item.modelName] * 100),
+      }];
+    }));
+  }, [availableModels, campaign, model]);
 
   useEffect(() => {
     if (cart.length) sessionStorage.setItem(cartStorageKey(campaign.code), JSON.stringify(cart));
     else sessionStorage.removeItem(cartStorageKey(campaign.code));
   }, [campaign.code, cart]);
 
-  const selectedModel = shirtModels.find((item) => item.name === model) ?? shirtModels[0];
-  const availableColors = campaignColors(campaign, model);
+  const selectedModel = availableModels.find((item) => item.name === model) ?? availableModels[0] ?? shirtModels[0];
+  const activeModel = selectedModel.name;
+  const availableColors = campaignColors(campaign, activeModel);
   const selectedColor = availableColors.find((item) => item.name === color) ?? availableColors[0];
-  const availableSizes = campaignSizes(campaign, model);
+  const availableSizes = campaignSizes(campaign, activeModel);
   const sizeGroups = useMemo(() => {
     const groups: Array<{ group: "standard" | "baby_look"; sizes: SizeCode[] }> = [];
     for (const group of ["standard", "baby_look"] as const) {
@@ -273,7 +319,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
 
   const art = campaign.art;
   const displayedArt = previewSide === "back" && art.back ? art.back : art.front;
-  const unitPriceCents = Math.round(campaign.prices[model] * 100);
+  const unitPriceCents = Math.round(campaign.prices[activeModel] * 100);
   const cartTotal = cart.reduce((total, item) => total + item.unitPriceCents * item.quantity, 0);
   const cartUnits = cart.reduce((total, item) => total + item.quantity, 0);
 
@@ -293,13 +339,13 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   }
 
   function addSelection() {
-    const persistedVariantId = campaign.variantIds?.[model]?.[selectedColor.name];
+    const persistedVariantId = campaign.variantIds?.[activeModel]?.[selectedColor.name];
     if (!persistedVariantId && !import.meta.env.DEV) {
       setCartMessage("Esta combinação não está disponível. Escolha outra opção ou fale com o representante da turma.");
       return false;
     }
-    const fallbackVariantId = -((shirtModels.findIndex((item) => item.name === model) + 1) * 100 + availableColors.findIndex((item) => item.name === selectedColor.name) + 1);
-    const nextItem: CartItem = { variantId: persistedVariantId ?? fallbackVariantId, modelName: model, color: selectedColor, size, quantity, unitPriceCents };
+    const fallbackVariantId = -((shirtModels.findIndex((item) => item.name === activeModel) + 1) * 100 + availableColors.findIndex((item) => item.name === selectedColor.name) + 1);
+    const nextItem: CartItem = { variantId: persistedVariantId ?? fallbackVariantId, modelName: activeModel, color: selectedColor, size, quantity, unitPriceCents };
     const key = itemKey(nextItem);
     const existing = cart.find((item) => itemKey(item) === key);
     if (!existing && cart.length >= 10) {
@@ -430,7 +476,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
             </section>
             <section className="campaign-choice-stage campaign-cut-stage">
               <h2>1. Escolha o corte</h2>
-              <div className="campaign-cut-options" role="radiogroup" aria-label="Corte da camiseta">{shirtModels.map((item) => <label className={model === item.name ? "is-selected" : ""} key={item.name}><input type="radio" name="model" checked={model === item.name} onChange={() => selectModel(item.name)} /><span className="campaign-cut-head"><strong>{item.name}</strong><span className="campaign-cut-check material-symbols-rounded" aria-hidden="true">check</span></span><small>{item.description}</small><b>{formatCents(Math.round(campaign.prices[item.name] * 100))}</b></label>)}</div>
+              <div className="campaign-cut-options" role="radiogroup" aria-label="Corte da camiseta">{availableModels.map((item) => <label className={activeModel === item.name ? "is-selected" : ""} key={item.name}><input type="radio" name="model" checked={activeModel === item.name} onChange={() => selectModel(item.name)} /><span className="campaign-cut-head"><strong>{item.name === "Comum" ? "Padrão" : item.name}</strong><span className="campaign-cut-check material-symbols-rounded" aria-hidden="true">check</span></span><small>{item.description}</small><b>{formatCents(Math.round(campaign.prices[item.name] * 100))}</b></label>)}</div>
             </section>
             <section className="campaign-choice-stage campaign-color-stage">
               <div className="campaign-stage-heading"><h2>2. Escolha a cor</h2><span>{availableColors.length} {availableColors.length === 1 ? "opção" : "opções"}</span></div>
@@ -440,7 +486,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
             <section className="campaign-choice-stage campaign-size-stage" id="size-guide">
               <div className="campaign-stage-heading"><h2>3. Escolha o tamanho</h2><button type="button" aria-expanded={showSizeGuide} aria-controls="campaign-size-guide-table" onClick={() => setShowSizeGuide((value) => !value)}>{showSizeGuide ? "Fechar tabela" : "Qual o meu tamanho?"}</button></div>
               {sizeGroups.map(({ group, sizes }) => <div className="campaign-size-group" key={group}><p className="campaign-size-group-label">{sizeGroupLabels[group]}</p><div className="campaign-size-options" role="radiogroup" aria-label={`Tamanho ${sizeGroupLabels[group]}`}>{sizes.map((item) => <label className={size === item ? "is-selected" : ""} key={item}><input type="radio" name="size" checked={size === item} onChange={() => { setSize(item); setCartMessage(""); }} /><span>{item}</span></label>)}</div></div>)}
-              <SizeGuide model={model} open={showSizeGuide} onClose={() => setShowSizeGuide(false)} />
+              <SizeGuide model={activeModel} open={showSizeGuide} onClose={() => setShowSizeGuide(false)} />
             </section>
             <section className="campaign-choice-stage campaign-quantity-stage"><h2>4. Quantidade</h2><div className="campaign-quantity-picker"><button type="button" aria-label="Diminuir quantidade" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>−</button><output aria-live="polite">{quantity}</output><button type="button" aria-label="Aumentar quantidade" onClick={() => setQuantity((value) => Math.min(20, value + 1))}>+</button></div></section>
             {cartMessage && <p className={`campaign-order-notice${cartMessage.includes("adicionado") ? "" : " is-error"}`} role="status" aria-live="polite"><span className="material-symbols-rounded" aria-hidden="true">{cartMessage.includes("adicionado") ? "check_circle" : "error"}</span>{cartMessage}</p>}

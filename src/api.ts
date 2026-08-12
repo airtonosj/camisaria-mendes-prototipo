@@ -132,9 +132,11 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
   const colors = {} as Record<ShirtModelName, ShirtColorOption[]>;
   const sizes = {} as Record<ShirtModelName, SizeCode[]>;
   const variantIds: NonNullable<PrivateCampaign["variantIds"]> = {};
+  const models: ShirtModelName[] = [];
 
   for (const model of shirtModels) {
     const variants = campaign.variants.filter((variant) => variant.model.name === model.name);
+    if (variants.length > 0) models.push(model.name);
     prices[model.name] = (variants[0]?.unitPriceCents ?? 0) / 100;
     colors[model.name] = variants.map((variant) => {
       const known = shirtColors.find((color) => color.name === variant.color.name);
@@ -157,6 +159,7 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
       front: assetUrl(campaign.artFrontUrl) ?? shirtModels[0].image,
       back: assetUrl(campaign.artBackUrl),
     },
+    models,
     prices,
     sizes,
     deadline: Number.isNaN(deadline.getTime())
