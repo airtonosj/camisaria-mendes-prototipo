@@ -776,6 +776,7 @@ function Campaigns({ data }: { data: PanelData }) {
   const [deadline, setDeadline] = useState("");
   const [commonPrice, setCommonPrice] = useState("59,90");
   const [oversizedPrice, setOversizedPrice] = useState("69,90");
+  const [selectedModels, setSelectedModels] = useState<Record<ShirtModelName, boolean>>({ Comum: true, Oversized: true });
   const [front, setFront] = useState<ArtDraft>({ file: null, preview: "" });
   const [back, setBack] = useState<ArtDraft>({ file: null, preview: "" });
   const [artError, setArtError] = useState("");
@@ -819,6 +820,7 @@ function Campaigns({ data }: { data: PanelData }) {
     setColorModel("Comum");
     setSizeError("");
     setSizeModel("Comum");
+    setSelectedModels({ Comum: true, Oversized: true });
     setFormError("");
   }
 
@@ -874,10 +876,47 @@ function Campaigns({ data }: { data: PanelData }) {
         detail.sizes.filter((size) => size.model.name === model).map((size) => size.code as SizeCode),
       );
       setModelSizes({ Comum: sizesOf("Comum"), Oversized: sizesOf("Oversized") });
+      const availableModels = new Set(detail.variants.map((variant) => variant.model.name as ShirtModelName));
+      const nextSelectedModels = { Comum: availableModels.has("Comum"), Oversized: availableModels.has("Oversized") };
+      setSelectedModels(nextSelectedModels);
+      const firstAvailableModel = shirtModels.find((model) => nextSelectedModels[model.name])?.name ?? "Comum";
+      setColorModel(firstAvailableModel);
+      setSizeModel(firstAvailableModel);
     } catch (detailError) {
       setFormError(errorMessage(detailError, "Não foi possível carregar a campanha para edição."));
     } finally {
       setLoadingDetail(false);
+    }
+  }
+
+  function toggleCampaignModel(model: ShirtModelName) {
+    const currentlySelected = selectedModels[model];
+    const selectedCount = shirtModels.filter((item) => selectedModels[item.name]).length;
+    if (currentlySelected && selectedCount === 1) {
+      setFormError("A campanha precisa manter pelo menos um corte disponível.");
+      return;
+    }
+
+    const nextSelected = !currentlySelected;
+    setSelectedModels((current) => ({ ...current, [model]: nextSelected }));
+    setFormError("");
+
+    if (nextSelected) {
+      setModelColors((current) => current[model].length > 0
+        ? current
+        : { ...current, [model]: defaultCampaignColors[model].map((color) => color.name) });
+      setModelSizes((current) => current[model].length > 0
+        ? current
+        : { ...current, [model]: [...defaultCampaignSizes[model]] });
+      setColorModel(model);
+      setSizeModel(model);
+      return;
+    }
+
+    const remainingModel = shirtModels.find((item) => item.name !== model && selectedModels[item.name])?.name;
+    if (remainingModel) {
+      if (colorModel === model) setColorModel(remainingModel);
+      if (sizeModel === model) setSizeModel(remainingModel);
     }
   }
 
@@ -993,7 +1032,7 @@ function Campaigns({ data }: { data: PanelData }) {
   }
 
   function campaignModels() {
-    return shirtModels.map((model) => ({
+    return shirtModels.filter((model) => selectedModels[model.name]).map((model) => ({
       modelCode: model.code,
       unitPriceCents: Math.round(parseCampaignPrice(model.name === "Comum" ? commonPrice : oversizedPrice) * 100),
       colors: modelColors[model.name].map((name) => {
@@ -1012,13 +1051,18 @@ function Campaigns({ data }: { data: PanelData }) {
       return;
     }
     if (!variantsLocked) {
-      const modelWithoutColor = shirtModels.find((item) => modelColors[item.name].length === 0);
+      const selectedCampaignModels = shirtModels.filter((item) => selectedModels[item.name]);
+      if (selectedCampaignModels.length === 0) {
+        setFormError("Selecione pelo menos um corte para a campanha.");
+        return;
+      }
+      const modelWithoutColor = selectedCampaignModels.find((item) => modelColors[item.name].length === 0);
       if (modelWithoutColor) {
         setColorModel(modelWithoutColor.name);
         setColorError(`Selecione pelo menos uma cor para o corte ${modelWithoutColor.name}.`);
         return;
       }
-      const modelWithoutSize = shirtModels.find((item) => modelSizes[item.name].length === 0);
+      const modelWithoutSize = selectedCampaignModels.find((item) => modelSizes[item.name].length === 0);
       if (modelWithoutSize) {
         setSizeModel(modelWithoutSize.name);
         setSizeError(`Selecione pelo menos um tamanho para o corte ${modelWithoutSize.name}.`);
@@ -1123,14 +1167,25 @@ function Campaigns({ data }: { data: PanelData }) {
             <label className="campaign-field"><span>Instruções de retirada</span><input value={pickup} onChange={(event) => setPickup(event.target.value)} maxLength={255} required /></label>
 
             <fieldset className="campaign-model-pricing" disabled={variantsLocked}><legend>Cortes e preços</legend><div>
-              <article><span className="material-symbols-rounded" aria-hidden="true">check</span><strong>Comum</strong><small>Caimento tradicional</small><div className="campaign-price-field"><b>R$</b><input aria-label="Preço do corte Comum" inputMode="decimal" value={commonPrice} onChange={(event) => setCommonPrice(event.target.value)} required /></div></article>
-              <article><span className="material-symbols-rounded" aria-hidden="true">check</span><strong>Oversized</strong><small>Amplo e contemporâneo</small><div className="campaign-price-field"><b>R$</b><input aria-label="Preço do corte Oversized" inputMode="decimal" value={oversizedPrice} onChange={(event) => setOversizedPrice(event.target.value)} required /></div></article>
-            </div><small>{editing && !variantsLocked ? "Trocar o preço vale para os próximos pedidos. Os já registrados guardam o valor da compra." : "O preço é do corte e vale para todos os tamanhos dele, inclusive os baby look."}</small></fieldset>
+              {shirtModels.map((model) => {
+                const selected = selectedModels[model.name];
+                const price = model.name === "Comum" ? commonPrice : oversizedPrice;
+                const setPrice = model.name === "Comum" ? setCommonPrice : setOversizedPrice;
+                return <article className={selected ? "is-selected" : ""} key={model.name}>
+                  <label className="campaign-model-toggle">
+                    <input type="checkbox" checked={selected} onChange={() => toggleCampaignModel(model.name)} />
+                    <span className="material-symbols-rounded" aria-hidden="true">{selected ? "check" : "add"}</span>
+                    <span><strong>{model.name === "Comum" ? "Padrão" : model.name}</strong><small>{model.description}</small></span>
+                  </label>
+                  <div className="campaign-price-field"><b>R$</b><input aria-label={`Preço do corte ${model.name}`} inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} required={selected} disabled={!selected || variantsLocked} /></div>
+                </article>;
+              })}
+            </div><small>Marque somente os cortes que a campanha oferecerá. {editing && !variantsLocked ? "Trocar o preço vale para os próximos pedidos; os já registrados guardam o valor da compra." : "O preço vale para todos os tamanhos do corte, inclusive os baby look."}</small></fieldset>
 
             <fieldset className="campaign-color-setup" disabled={variantsLocked}><legend>Cores disponíveis por corte</legend>
               <p>O aluno verá somente as cores liberadas aqui. Use uma das cinco opções padrão ou cadastre uma cor pelo nome e código HEX.</p>
               <div className="campaign-color-tabs" role="group" aria-label="Corte para configurar as cores">
-                {shirtModels.map((item) => <button className={colorModel === item.name ? "is-active" : ""} type="button" aria-pressed={colorModel === item.name} onClick={() => { setColorModel(item.name); setColorError(""); }} key={item.name}>{item.name}<span>{modelColors[item.name].length}</span></button>)}
+                {shirtModels.filter((item) => selectedModels[item.name]).map((item) => <button className={colorModel === item.name ? "is-active" : ""} type="button" aria-pressed={colorModel === item.name} onClick={() => { setColorModel(item.name); setColorError(""); }} key={item.name}>{item.name === "Comum" ? "Padrão" : item.name}<span>{modelColors[item.name].length}</span></button>)}
               </div>
               <div className="campaign-color-palette" aria-label={`Cores disponíveis para ${colorModel}`}>
                 {campaignColorOptions.map((color) => {
@@ -1152,13 +1207,13 @@ function Campaigns({ data }: { data: PanelData }) {
                 )}
               </div>
               {colorError && <p className="campaign-color-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{colorError}</p>}
-              <p className="campaign-color-summary"><span className="material-symbols-rounded" aria-hidden="true">palette</span><strong>{modelColors[colorModel].length}</strong> {modelColors[colorModel].length === 1 ? "cor liberada" : "cores liberadas"} para {colorModel}.</p>
+              <p className="campaign-color-summary"><span className="material-symbols-rounded" aria-hidden="true">palette</span><strong>{modelColors[colorModel].length}</strong> {modelColors[colorModel].length === 1 ? "cor liberada" : "cores liberadas"} para {colorModel === "Comum" ? "Padrão" : colorModel}.</p>
             </fieldset>
 
             <fieldset className="campaign-size-setup" disabled={variantsLocked}><legend>Tamanhos disponíveis por corte</legend>
               <p>{editing ? "Um tamanho que já tenha pedido não pode sair: o painel avisa qual pedido trava." : "Já vem pré-marcado. Desmarque só o que a turma não vai pedir."} Os tamanhos com <b>B</b> são de modelagem baby look.</p>
               <div className="campaign-size-tabs" role="group" aria-label="Corte para configurar os tamanhos">
-                {shirtModels.map((item) => <button className={sizeModel === item.name ? "is-active" : ""} type="button" aria-pressed={sizeModel === item.name} onClick={() => { setSizeModel(item.name); setSizeError(""); }} key={item.name}>{item.name}<span>{modelSizes[item.name].length}</span></button>)}
+                {shirtModels.filter((item) => selectedModels[item.name]).map((item) => <button className={sizeModel === item.name ? "is-active" : ""} type="button" aria-pressed={sizeModel === item.name} onClick={() => { setSizeModel(item.name); setSizeError(""); }} key={item.name}>{item.name === "Comum" ? "Padrão" : item.name}<span>{modelSizes[item.name].length}</span></button>)}
               </div>
               {(["standard", "baby_look"] as SizeGroup[]).map((group) => {
                 const groupSizes = sizesInGroup(group);
@@ -1179,7 +1234,7 @@ function Campaigns({ data }: { data: PanelData }) {
                 );
               })}
               {sizeError && <p className="campaign-size-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{sizeError}</p>}
-              <p className="campaign-size-summary"><span className="material-symbols-rounded" aria-hidden="true">straighten</span><strong>{modelSizes[sizeModel].length}</strong> {modelSizes[sizeModel].length === 1 ? "tamanho liberado" : "tamanhos liberados"} para {sizeModel}.</p>
+              <p className="campaign-size-summary"><span className="material-symbols-rounded" aria-hidden="true">straighten</span><strong>{modelSizes[sizeModel].length}</strong> {modelSizes[sizeModel].length === 1 ? "tamanho liberado" : "tamanhos liberados"} para {sizeModel === "Comum" ? "Padrão" : sizeModel}.</p>
             </fieldset>
 
             <fieldset className="campaign-artwork"><legend>Arte da campanha</legend>

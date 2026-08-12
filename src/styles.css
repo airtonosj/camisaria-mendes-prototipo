@@ -1198,18 +1198,25 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-price-field input { min-width: 0; height: 48px; border: 0; outline: 0; padding: 0 11px; color: #202528; background: transparent; font-size: .7rem; }
 .campaign-model-pricing { grid-column: 1 / -1; margin: 3px 0 0; border: 0; border-top: 1px solid #e3e6e4; padding: 21px 0 0; }
 .campaign-model-pricing legend { padding: 0 12px 0 0; }
-.campaign-model-pricing > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.campaign-model-pricing > div > article { position: relative; display: grid; grid-template-columns: 25px minmax(0, 1fr) 112px; align-items: center; gap: 9px; border: 1px solid #d7deda; padding: 13px; }
-.campaign-model-pricing > div > article > .material-symbols-rounded { width: 24px; height: 24px; display: grid; grid-row: 1 / span 2; place-content: center; border: 1px solid #0799e3; color: #fff; background: #0799e3; font-size: 15px; }
-.campaign-model-pricing > div > article > strong { color: #24292c; font-size: .65rem; }
-.campaign-model-pricing > div > article > small { grid-column: 2; color: #858c90; font-size: .52rem; }
-.campaign-model-pricing .campaign-price-field { grid-column: 3; grid-row: 1 / span 2; min-height: 42px; }
+.campaign-model-pricing > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.campaign-model-pricing > div > article { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 112px; align-items: center; gap: 9px; border: 1px solid #d7deda; padding: 13px; background: #f6f7f6; }
+.campaign-model-pricing > div > article.is-selected { border-color: #75caf4; background: #fff; box-shadow: inset 0 0 0 1px #75caf4; }
+.campaign-model-toggle { min-width: 0; display: grid; grid-template-columns: 25px minmax(0, 1fr); align-items: center; gap: 9px; cursor: pointer; }
+.campaign-model-toggle > input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.campaign-model-toggle > .material-symbols-rounded { width: 24px; height: 24px; display: grid; place-content: center; border: 1px solid #aeb6b2; color: #727b77; background: #fff; font-size: 15px; }
+.campaign-model-pricing article.is-selected .campaign-model-toggle > .material-symbols-rounded { border-color: #0799e3; color: #fff; background: #0799e3; }
+.campaign-model-toggle > span:last-child { min-width: 0; display: grid; gap: 4px; }
+.campaign-model-toggle strong { color: #24292c; font-size: .65rem; }
+.campaign-model-toggle small { color: #858c90; font-size: .52rem; }
+.campaign-model-toggle:focus-within > .material-symbols-rounded { outline: 2px solid #75caf4; outline-offset: 2px; }
+.campaign-model-pricing .campaign-price-field { min-height: 42px; }
+.campaign-model-pricing article:not(.is-selected) .campaign-price-field { opacity: .52; }
 .campaign-model-pricing .campaign-price-field input { height: 40px; }
 .campaign-model-pricing > small { display: block; margin-top: 10px; color: #858c90; font-size: .56rem; }
 .campaign-color-setup { grid-column: 1 / -1; min-width: 0; margin: 3px 0 0; border: 0; border-top: 1px solid #e3e6e4; padding: 21px 0 0; }
 .campaign-color-setup legend { padding: 0 12px 0 0; color: #4e5559; font-size: .61rem; font-weight: 700; }
 .campaign-color-setup > p { margin: 0 0 14px; color: #747c80; font-size: .57rem; line-height: 1.5; }
-.campaign-color-tabs, .campaign-size-tabs { display: grid; grid-template-columns: repeat(2, 1fr); border: 1px solid #d7deda; background: #f2f4f3; }
+.campaign-color-tabs, .campaign-size-tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); border: 1px solid #d7deda; background: #f2f4f3; }
 .campaign-color-tabs button { min-width: 0; min-height: 43px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-left: 1px solid #d7deda; cursor: pointer; color: #687176; background: transparent; font-size: .59rem; font-weight: 700; }
 .campaign-color-tabs button:first-child { border-left: 0; }
 .campaign-color-tabs button > span { min-width: 20px; border-radius: 10px; padding: 3px 6px; color: #556066; background: #dfe4e1; font-size: .48rem; }
@@ -1704,7 +1711,7 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-create-panel { padding: 19px 16px; }
   .campaign-create-panel form { grid-template-columns: 1fr; gap: 14px; }
   .campaign-field--wide, .campaign-model-pricing, .campaign-color-setup, .campaign-artwork, .campaign-create-actions { grid-column: 1; }
-  .campaign-model-pricing > div > article { grid-template-columns: 25px minmax(0, 1fr) 105px; padding: 11px; }
+  .campaign-model-pricing > div > article { grid-template-columns: minmax(0, 1fr) 105px; padding: 11px; }
   .campaign-color-palette { grid-template-columns: 1fr 1fr; gap: 7px; }
   .campaign-color-palette label { padding-inline: 9px; }
   .campaign-custom-color { padding: 13px 11px; }
@@ -2137,7 +2144,7 @@ main > section[id] { scroll-margin-top: 78px; }
   .report-toolbar input,
   .campaign-phase-reason input { font-size: .76rem; }
   .campaign-price-field b,
-  .campaign-model-pricing > div > article > strong,
+  .campaign-model-toggle strong,
   .campaign-artwork-guidance strong,
   .campaign-share-options > article strong,
   .campaign-admin-card-body dd,
@@ -2148,7 +2155,7 @@ main > section[id] { scroll-margin-top: 78px; }
   .report-tabs strong,
   .production-report-card h3,
   .delivery-report-card h3 { font-size: .74rem; }
-  .campaign-model-pricing > div > article > small,
+  .campaign-model-toggle small,
   .campaign-model-pricing > small,
   .campaign-color-setup > p,
   .campaign-color-palette label > span:not(.material-symbols-rounded),
