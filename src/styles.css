@@ -303,27 +303,32 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-size-options span { min-height: 50px; display: grid; place-content: center; border: 1px solid #444a4f; color: #d6dadd; font-size: .74rem; }
 .campaign-size-options label.is-selected span { border-color: var(--blue); color: #fff; background: #0a6098; }
 .campaign-size-options label:focus-within span { outline: 2px solid #75caf4; outline-offset: 2px; }
-.campaign-size-guide { box-sizing: border-box; width: min(900px, calc(100% - 48px)); max-width: none; max-height: min(88vh, 760px); margin: auto; border: 1px solid #465159; padding: 24px; overflow: auto; color: #fff; background: #0d1113; box-shadow: 0 24px 80px rgba(0, 0, 0, .68); }
+.campaign-size-guide { box-sizing: border-box; width: min(1100px, calc(100% - 64px)); max-width: none; max-height: min(90vh, 820px); margin: auto; border: 1px solid #465159; padding: 32px; overflow: auto; color: #fff; background: #0d1113; box-shadow: 0 24px 80px rgba(0, 0, 0, .68); }
 .campaign-size-guide::backdrop { background: rgba(2, 4, 6, .82); backdrop-filter: blur(3px); }
-.campaign-size-guide > header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: flex-start; gap: 12px; }
-.campaign-size-guide > header > .material-symbols-rounded { color: #45bfff; font-size: 21px; }
-.campaign-size-guide h3 { margin: 0; color: #f5f7f8; font-size: .7rem; }
-.campaign-size-guide > header p { margin: 4px 0 0; color: #949ca1; font-size: .56rem; line-height: 1.45; }
-.campaign-size-guide > header button { width: 34px; height: 34px; display: grid; place-content: center; border: 1px solid #465159; cursor: pointer; padding: 0; color: #c9d0d4; background: transparent; }
+.campaign-size-guide > header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: flex-start; gap: 15px; }
+.campaign-size-guide > header > .material-symbols-rounded { color: #45bfff; font-size: 27px; }
+.campaign-size-guide h3 { margin: 0; color: #f5f7f8; font-size: 1rem; }
+.campaign-size-guide > header p { margin: 6px 0 0; color: #a7afb4; font-size: .68rem; line-height: 1.5; }
+.campaign-size-guide > header button { width: 42px; height: 42px; display: grid; place-content: center; border: 1px solid #465159; cursor: pointer; padding: 0; color: #c9d0d4; background: transparent; }
 .campaign-size-guide > header button:hover, .campaign-size-guide > header button:focus-visible { border-color: #45bfff; color: #fff; outline: 2px solid #75caf4; outline-offset: 2px; }
-.campaign-size-guide > header button .material-symbols-rounded { font-size: 19px; }
-.campaign-measurement-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 22px; }
-.campaign-measurement-grid.is-single { grid-template-columns: minmax(0, 620px); justify-content: center; }
+.campaign-size-guide > header button .material-symbols-rounded { font-size: 22px; }
+.campaign-size-guide-tabs { display: grid; grid-template-columns: repeat(2, 1fr); margin-top: 26px; border: 1px solid #465159; }
+.campaign-size-guide-tabs button { min-height: 50px; border: 0; cursor: pointer; color: #aeb6bb; background: #121719; font-size: .7rem; font-weight: 720; }
+.campaign-size-guide-tabs button + button { border-left: 1px solid #465159; }
+.campaign-size-guide-tabs button.is-active { color: #fff; background: #087fca; }
+.campaign-size-guide-tabs button:focus-visible { position: relative; z-index: 1; outline: 2px solid #75caf4; outline-offset: -3px; }
+.campaign-measurement-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 28px; }
+.campaign-measurement-grid.is-single { grid-template-columns: minmax(0, 760px); justify-content: center; }
 .campaign-measurement-card { min-width: 0; }
-.campaign-measurement-card h4 { margin: 0 0 7px; color: #45bfff; font-size: .58rem; letter-spacing: .06em; text-transform: uppercase; }
+.campaign-measurement-card h4 { margin: 0 0 10px; color: #45bfff; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; }
 .campaign-measurement-scroll { max-width: 100%; overflow-x: auto; }
-.campaign-measurement-card table { width: 100%; border-collapse: collapse; color: #dfe3e5; font-size: .56rem; font-variant-numeric: tabular-nums; text-align: center; }
-.campaign-measurement-card th, .campaign-measurement-card td { min-width: 48px; border: 1px solid #394147; padding: 8px 5px; }
-.campaign-measurement-card thead th { color: #aeb5b9; background: #161b1e; font-size: .48rem; font-weight: 650; }
-.campaign-measurement-card thead small { display: block; margin-top: 2px; color: #727c82; font-size: .43rem; font-weight: 500; }
+.campaign-measurement-card table { width: 100%; border-collapse: collapse; color: #e8ecee; font-size: .72rem; font-variant-numeric: tabular-nums; text-align: center; }
+.campaign-measurement-card th, .campaign-measurement-card td { min-width: 60px; border: 1px solid #465159; padding: 12px 8px; }
+.campaign-measurement-card thead th { color: #c0c7cb; background: #181e21; font-size: .58rem; font-weight: 680; }
+.campaign-measurement-card thead small { display: block; margin-top: 3px; color: #818b91; font-size: .5rem; font-weight: 500; }
 .campaign-measurement-card tbody th { color: #fff; background: #151a1d; font-weight: 750; }
 .campaign-measurement-card tbody td { background: #0a0d0f; }
-.campaign-measurement-tolerance { margin: 11px 0 0; color: #8f989d; font-size: .51rem; line-height: 1.45; }
+.campaign-measurement-tolerance { margin: 15px 0 0; color: #a2abb0; font-size: .61rem; line-height: 1.5; }
 .campaign-quantity-stage { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .campaign-quantity-picker { display: grid; grid-template-columns: 56px 70px 56px; border: 1px solid #444a4f; }
 .campaign-quantity-picker button { min-height: 50px; border: 0; cursor: pointer; color: #aeb4b8; background: transparent; font-size: 1.3rem; }
@@ -708,8 +713,15 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-size-guide h3 { font-size: .63rem; }
   .campaign-size-guide > header p { font-size: .5rem; }
   .campaign-size-guide > header button { width: 30px; height: 30px; }
+  .campaign-size-guide-tabs { margin-top: 15px; }
+  .campaign-size-guide-tabs button { min-height: 40px; padding-inline: 5px; font-size: .55rem; }
   .campaign-measurement-grid, .campaign-measurement-grid.is-single { grid-template-columns: 1fr; gap: 14px; margin-top: 16px; }
+  .campaign-measurement-card h4 { margin-bottom: 7px; font-size: .58rem; }
+  .campaign-measurement-card table { font-size: .56rem; }
   .campaign-measurement-card th, .campaign-measurement-card td { min-width: 45px; padding: 7px 4px; }
+  .campaign-measurement-card thead th { font-size: .48rem; }
+  .campaign-measurement-card thead small { font-size: .43rem; }
+  .campaign-measurement-tolerance { margin-top: 11px; font-size: .51rem; }
   .campaign-quantity-picker { grid-template-columns: 45px 56px 45px; }
   .campaign-quantity-picker button { min-height: 38px; }
   .campaign-order-bar { margin: 10px -14px -38px; padding: 10px 14px; }

@@ -130,7 +130,8 @@ function MeasurementTable({ title, columns, rows }: { title: string; columns: Me
 
 function SizeGuide({ model, open, onClose }: { model: ShirtModelName; open: boolean; onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const isOversized = model === "Oversized";
+  const [guideModel, setGuideModel] = useState<ShirtModelName>(model);
+  const showOversized = guideModel === "Oversized";
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -138,6 +139,10 @@ function SizeGuide({ model, open, onClose }: { model: ShirtModelName; open: bool
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
   }, [open]);
+
+  useEffect(() => {
+    if (open) setGuideModel(model);
+  }, [model, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -166,8 +171,12 @@ function SizeGuide({ model, open, onClose }: { model: ShirtModelName; open: bool
       onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
       <header><span className="material-symbols-rounded" aria-hidden="true">straighten</span><div><h3 id="campaign-size-guide-title">Guia de medidas</h3><p>Compare com uma camiseta sua estendida sobre uma superfície plana.</p></div><button type="button" aria-label="Fechar guia de medidas" onClick={onClose}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
-      <div className={`campaign-measurement-grid${isOversized ? " is-single" : ""}`}>
-        {isOversized ? (
+      <div className="campaign-size-guide-tabs" role="tablist" aria-label="Modelagem da camiseta">
+        <button id="size-guide-common-tab" type="button" role="tab" aria-selected={!showOversized} aria-controls="size-guide-measurements" className={!showOversized ? "is-active" : ""} onClick={() => setGuideModel("Comum")}>Padrão e Baby look</button>
+        <button id="size-guide-oversized-tab" type="button" role="tab" aria-selected={showOversized} aria-controls="size-guide-measurements" className={showOversized ? "is-active" : ""} onClick={() => setGuideModel("Oversized")}>Oversized</button>
+      </div>
+      <div className={`campaign-measurement-grid${showOversized ? " is-single" : ""}`} id="size-guide-measurements" role="tabpanel" aria-labelledby={showOversized ? "size-guide-oversized-tab" : "size-guide-common-tab"}>
+        {showOversized ? (
           <MeasurementTable title="Oversized" columns={oversizedColumns} rows={oversizedMeasurements} />
         ) : (
           <>
@@ -176,7 +185,7 @@ function SizeGuide({ model, open, onClose }: { model: ShirtModelName; open: bool
           </>
         )}
       </div>
-      {!isOversized && <p className="campaign-measurement-tolerance">As medidas da Padrão e Baby look podem variar até 2,5 cm.</p>}
+      {!showOversized && <p className="campaign-measurement-tolerance">As medidas da Padrão e Baby look podem variar até 2,5 cm.</p>}
     </dialog>
   );
 }
