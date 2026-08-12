@@ -296,15 +296,29 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-color-options label.is-selected .material-symbols-rounded { color: #fff; }
 .campaign-color-options label:focus-within { outline: 2px solid #75caf4; outline-offset: 2px; }
 .campaign-color-note { margin: 11px 0 0; color: #8d9498; font-size: .6rem; line-height: 1.5; }
-.campaign-size-group { width: fit-content; max-width: 100%; margin-inline: auto; }
 .campaign-size-group-label { margin: 16px 0 0; color: #8d9498; font-size: .58rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
-.campaign-size-options { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 9px; }
-.campaign-size-options label { position: relative; flex: 0 1 62px; width: 62px; cursor: pointer; }
+.campaign-size-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 9px; margin-top: 9px; }
+.campaign-size-options label { position: relative; cursor: pointer; }
 .campaign-size-options input { position: absolute; opacity: 0; pointer-events: none; }
 .campaign-size-options span { min-height: 50px; display: grid; place-content: center; border: 1px solid #444a4f; color: #d6dadd; font-size: .74rem; }
 .campaign-size-options label.is-selected span { border-color: var(--blue); color: #fff; background: #0a6098; }
 .campaign-size-options label:focus-within span { outline: 2px solid #75caf4; outline-offset: 2px; }
-.campaign-size-help { margin: 13px 0 0; color: #8d9498; font-size: .63rem; line-height: 1.55; }
+.campaign-size-guide { margin-top: 17px; border: 1px solid #394147; padding: 16px; background: #0d1113; }
+.campaign-size-guide > header { display: flex; align-items: flex-start; gap: 10px; }
+.campaign-size-guide > header > .material-symbols-rounded { color: #45bfff; font-size: 21px; }
+.campaign-size-guide h3 { margin: 0; color: #f5f7f8; font-size: .7rem; }
+.campaign-size-guide > header p { margin: 4px 0 0; color: #949ca1; font-size: .56rem; line-height: 1.45; }
+.campaign-measurement-grid { display: grid; gap: 15px; margin-top: 15px; }
+.campaign-measurement-card { min-width: 0; }
+.campaign-measurement-card h4 { margin: 0 0 7px; color: #45bfff; font-size: .58rem; letter-spacing: .06em; text-transform: uppercase; }
+.campaign-measurement-scroll { max-width: 100%; overflow-x: auto; }
+.campaign-measurement-card table { width: 100%; border-collapse: collapse; color: #dfe3e5; font-size: .56rem; font-variant-numeric: tabular-nums; text-align: center; }
+.campaign-measurement-card th, .campaign-measurement-card td { min-width: 48px; border: 1px solid #394147; padding: 8px 5px; }
+.campaign-measurement-card thead th { color: #aeb5b9; background: #161b1e; font-size: .48rem; font-weight: 650; }
+.campaign-measurement-card thead small { display: block; margin-top: 2px; color: #727c82; font-size: .43rem; font-weight: 500; }
+.campaign-measurement-card tbody th { color: #fff; background: #151a1d; font-weight: 750; }
+.campaign-measurement-card tbody td { background: #0a0d0f; }
+.campaign-measurement-tolerance { margin: 11px 0 0; color: #8f989d; font-size: .51rem; line-height: 1.45; }
 .campaign-quantity-stage { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .campaign-quantity-picker { display: grid; grid-template-columns: 56px 70px 56px; border: 1px solid #444a4f; }
 .campaign-quantity-picker button { min-height: 50px; border: 0; cursor: pointer; color: #aeb4b8; background: transparent; font-size: 1.3rem; }
@@ -682,10 +696,14 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-choice-stage { margin-top: 10px; padding: 12px 0; }
   .campaign-stage-heading { align-items: flex-end; }
   .campaign-stage-heading button { font-size: .58rem; }
-  .campaign-size-options { gap: 5px; margin-top: 7px; }
-  .campaign-size-options label { flex-basis: calc((100% - 25px) / 6); width: auto; }
+  .campaign-size-options { grid-template-columns: repeat(6, 1fr); gap: 5px; margin-top: 7px; }
   .campaign-size-group-label { margin-top: 11px; font-size: .5rem; }
   .campaign-size-options span { min-height: 38px; font-size: .63rem; }
+  .campaign-size-guide { margin-top: 12px; padding: 12px 10px; }
+  .campaign-size-guide h3 { font-size: .63rem; }
+  .campaign-size-guide > header p { font-size: .5rem; }
+  .campaign-measurement-grid { gap: 12px; margin-top: 12px; }
+  .campaign-measurement-card th, .campaign-measurement-card td { min-width: 45px; padding: 7px 4px; }
   .campaign-quantity-picker { grid-template-columns: 45px 56px 45px; }
   .campaign-quantity-picker button { min-height: 38px; }
   .campaign-order-bar { margin: 10px -14px -38px; padding: 10px 14px; }

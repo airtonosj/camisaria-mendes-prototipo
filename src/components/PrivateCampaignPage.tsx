@@ -16,6 +16,49 @@ type CartItem = {
   unitPriceCents: number;
 };
 
+type MeasurementRow = { size: string; [measurement: string]: string };
+type MeasurementColumn = { key: string; label: string };
+
+const standardMeasurements: MeasurementRow[] = [
+  { size: "P", length: "67", width: "46,5", shoulder: "38" },
+  { size: "M", length: "72", width: "49,5", shoulder: "42,5" },
+  { size: "G", length: "77", width: "54", shoulder: "45" },
+  { size: "GG", length: "78", width: "59", shoulder: "48" },
+  { size: "XG", length: "80,5", width: "67", shoulder: "55" },
+];
+
+const babyLookMeasurements: MeasurementRow[] = [
+  { size: "PB", length: "57", width: "45", shoulder: "31", waist: "39" },
+  { size: "MB", length: "61,5", width: "47,5", shoulder: "34", waist: "42,5" },
+  { size: "GB", length: "64", width: "51", shoulder: "38", waist: "45" },
+];
+
+const oversizedMeasurements: MeasurementRow[] = [
+  { size: "PP", width: "51,4", length: "73,8", sleeve: "21" },
+  { size: "P", width: "54,4", length: "76,3", sleeve: "22,5" },
+  { size: "M", width: "57,4", length: "78,8", sleeve: "24" },
+  { size: "G", width: "60,4", length: "81,3", sleeve: "25,5" },
+  { size: "GG", width: "63,4", length: "83,8", sleeve: "27" },
+  { size: "XG", width: "66,4", length: "86,3", sleeve: "28,5" },
+];
+
+const standardColumns: MeasurementColumn[] = [
+  { key: "length", label: "Comprimento" },
+  { key: "width", label: "Largura" },
+  { key: "shoulder", label: "Ombro" },
+];
+
+const babyLookColumns: MeasurementColumn[] = [
+  ...standardColumns,
+  { key: "waist", label: "Cintura" },
+];
+
+const oversizedColumns: MeasurementColumn[] = [
+  { key: "width", label: "Largura" },
+  { key: "length", label: "Comprimento" },
+  { key: "sleeve", label: "Manga" },
+];
+
 const sizeGroupOf = new Map(sizeCatalog.map((item) => [item.code, item.group]));
 
 function campaignSizes(campaign: PrivateCampaign, model: ShirtModelName) {
@@ -69,6 +112,40 @@ function readCart(campaign: PrivateCampaign): CartItem[] {
 
 function formatCents(value: number) {
   return (value / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function MeasurementTable({ title, columns, rows }: { title: string; columns: MeasurementColumn[]; rows: MeasurementRow[] }) {
+  return (
+    <section className="campaign-measurement-card" aria-labelledby={`measurement-${title.toLowerCase().replace(/\s/g, "-")}`}>
+      <h4 id={`measurement-${title.toLowerCase().replace(/\s/g, "-")}`}>{title}</h4>
+      <div className="campaign-measurement-scroll">
+        <table>
+          <thead><tr><th scope="col">Tamanho</th>{columns.map((column) => <th scope="col" key={column.key}>{column.label}<small>cm</small></th>)}</tr></thead>
+          <tbody>{rows.map((row) => <tr key={row.size}><th scope="row">{row.size}</th>{columns.map((column) => <td key={column.key}>{row[column.key]}</td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function SizeGuide({ model }: { model: ShirtModelName }) {
+  const isOversized = model === "Oversized";
+  return (
+    <div className="campaign-size-guide" id="campaign-size-guide-table" role="region" aria-label={`Tabela de medidas ${model}`}>
+      <header><span className="material-symbols-rounded" aria-hidden="true">straighten</span><div><h3>Guia de medidas</h3><p>Compare com uma camiseta sua estendida sobre uma superfície plana.</p></div></header>
+      <div className={`campaign-measurement-grid${isOversized ? " is-single" : ""}`}>
+        {isOversized ? (
+          <MeasurementTable title="Oversized" columns={oversizedColumns} rows={oversizedMeasurements} />
+        ) : (
+          <>
+            <MeasurementTable title="Padrão" columns={standardColumns} rows={standardMeasurements} />
+            <MeasurementTable title="Baby look" columns={babyLookColumns} rows={babyLookMeasurements} />
+          </>
+        )}
+      </div>
+      {!isOversized && <p className="campaign-measurement-tolerance">As medidas da Padrão e Baby look podem variar até 2,5 cm.</p>}
+    </div>
+  );
 }
 
 /** Mostra a arte da campanha. Se não houver imagem de costas, mostra só a frente. */
@@ -157,7 +234,6 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   const unitPriceCents = Math.round(campaign.prices[model] * 100);
   const cartTotal = cart.reduce((total, item) => total + item.unitPriceCents * item.quantity, 0);
   const cartUnits = cart.reduce((total, item) => total + item.quantity, 0);
-  const hasBabyLook = sizeGroups.some((group) => group.group === "baby_look");
 
   function selectModel(nextModel: ShirtModelName) {
     setModel(nextModel);
@@ -320,9 +396,9 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
               <p className="campaign-color-note">A arte permanece fixa; a cor escolhida será aplicada à peça.</p>
             </section>
             <section className="campaign-choice-stage campaign-size-stage" id="size-guide">
-              <div className="campaign-stage-heading"><h2>3. Escolha o tamanho</h2><button type="button" onClick={() => setShowSizeGuide((value) => !value)}>Qual o meu tamanho?</button></div>
+              <div className="campaign-stage-heading"><h2>3. Escolha o tamanho</h2><button type="button" aria-expanded={showSizeGuide} aria-controls="campaign-size-guide-table" onClick={() => setShowSizeGuide((value) => !value)}>{showSizeGuide ? "Fechar tabela" : "Qual o meu tamanho?"}</button></div>
               {sizeGroups.map(({ group, sizes }) => <div className="campaign-size-group" key={group}><p className="campaign-size-group-label">{sizeGroupLabels[group]}</p><div className="campaign-size-options" role="radiogroup" aria-label={`Tamanho ${sizeGroupLabels[group]}`}>{sizes.map((item) => <label className={size === item ? "is-selected" : ""} key={item}><input type="radio" name="size" checked={size === item} onChange={() => { setSize(item); setCartMessage(""); }} /><span>{item}</span></label>)}</div></div>)}
-              {showSizeGuide && <p className="campaign-size-help">Compare uma camiseta que veste bem com as medidas informadas pelo representante da turma.{hasBabyLook && " Os tamanhos com B são de modelagem baby look, mais ajustada ao corpo."}</p>}
+              {showSizeGuide && <SizeGuide model={model} />}
             </section>
             <section className="campaign-choice-stage campaign-quantity-stage"><h2>4. Quantidade</h2><div className="campaign-quantity-picker"><button type="button" aria-label="Diminuir quantidade" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>−</button><output aria-live="polite">{quantity}</output><button type="button" aria-label="Aumentar quantidade" onClick={() => setQuantity((value) => Math.min(20, value + 1))}>+</button></div></section>
             {cartMessage && <p className={`campaign-order-notice${cartMessage.includes("adicionado") ? "" : " is-error"}`} role="status" aria-live="polite"><span className="material-symbols-rounded" aria-hidden="true">{cartMessage.includes("adicionado") ? "check_circle" : "error"}</span>{cartMessage}</p>}
