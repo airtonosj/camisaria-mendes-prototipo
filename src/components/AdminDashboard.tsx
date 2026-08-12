@@ -130,6 +130,7 @@ type PanelOrder = {
   number: string;
   customer: string;
   whatsapp: string;
+  email?: string | null;
   model: string;
   color: string;
   colorHex: string;
@@ -388,6 +389,7 @@ function usePanelData(): PanelData {
               number: order.number,
               customer: order.customer.name,
               whatsapp: order.customer.whatsapp,
+              email: order.customer.email,
               model: first?.modelName ?? "—",
               color: first?.color.name ?? "—",
               colorHex: first?.color.hex ?? "#777f83",
@@ -1319,6 +1321,7 @@ function Orders({ data }: { data: PanelData }) {
   const [refundReference, setRefundReference] = useState("");
   const [refundReason, setRefundReason] = useState("");
   const [refundReceipt, setRefundReceipt] = useState("");
+  const [viewingOrderNumber, setViewingOrderNumber] = useState("");
   const [busy, setBusy] = useState(false);
 
   const selected = campaigns.find((campaign) => campaign.code === selectedCode) ?? campaigns[0];
@@ -1328,6 +1331,7 @@ function Orders({ data }: { data: PanelData }) {
   }, [selected?.code, loadOrders]);
 
   const campaignOrders = selected ? orders[selected.code] ?? [] : [];
+  const viewingOrder = campaignOrders.find((order) => order.number === viewingOrderNumber);
   const currentPhaseIndex = selected ? phaseOrder.indexOf(selected.phase) : 0;
   const production = useMemo(
     () => (selected ? groupProduction(productionFromOrders([selected], orders)) : []),
@@ -1356,7 +1360,17 @@ function Orders({ data }: { data: PanelData }) {
     setRefundReference("");
     setRefundReason("");
     setRefundReceipt("");
+    setViewingOrderNumber("");
   }
+
+  useEffect(() => {
+    if (!viewingOrderNumber) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setViewingOrderNumber("");
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [viewingOrderNumber]);
 
   async function movePhase(target: CampaignPhaseCode, reason?: string) {
     if (!selected) return;
@@ -1579,7 +1593,7 @@ function Orders({ data }: { data: PanelData }) {
               <div className="campaign-orders-head"><span>Pedido</span><span>Cliente</span><span>Corte</span><span>Cor</span><span>Tam.</span><span>Qtd.</span><span>Pagamento</span><span>Entrega</span><span>Ação</span></div>
               {filteredOrders.map((order) => (
                 <div className="campaign-orders-row" key={order.number}>
-                  <span className="campaign-order-number"><strong>#{order.number}</strong>{order.status === "cancelled" && <small>Cancelado</small>}</span><span>{order.customer}</span><span>{panelOrderItems(order).length === 1 ? order.model : `${panelOrderItems(order).length} combinações`}</span>
+                  <button className="campaign-order-number" type="button" title={`Ver detalhes do pedido ${order.number}`} onClick={() => setViewingOrderNumber(order.number)}><strong>#{order.number}</strong><small className={order.status === "cancelled" ? "is-cancelled" : ""}>{order.status === "cancelled" ? "Cancelado" : "Ver detalhes"}</small></button><span>{order.customer}</span><span>{panelOrderItems(order).length === 1 ? order.model : `${panelOrderItems(order).length} combinações`}</span>
                   <span className="campaign-order-color">{panelOrderItems(order).length === 1 ? <><i style={{ backgroundColor: order.colorHex }} />{order.color}</> : <small className="campaign-order-items-summary">{panelOrderItems(order).map((item) => `${item.color} ${item.size}`).join(" · ")}</small>}</span>
                   <span>{panelOrderItems(order).length === 1 ? order.size : "Vários"}</span><span>{order.quantity}</span>
                   <span className={`order-payment order-payment--${order.paymentStatus}`}>
@@ -1603,6 +1617,38 @@ function Orders({ data }: { data: PanelData }) {
               ))}
               {filteredOrders.length === 0 && <div className="campaign-orders-empty"><span className="material-symbols-rounded" aria-hidden="true">search_off</span><p>Nenhum pedido encontrado com esses filtros.</p></div>}
             </div>
+            {viewingOrder && (
+              <div className="order-detail-modal">
+                <button className="order-detail-backdrop" type="button" aria-label="Fechar detalhes do pedido" onClick={() => setViewingOrderNumber("")} />
+                <section className="order-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="order-detail-title">
+                  <header>
+                    <div><span>Detalhes do pedido</span><h3 id="order-detail-title">#{viewingOrder.number}</h3></div>
+                    <button type="button" aria-label="Fechar detalhes" onClick={() => setViewingOrderNumber("")}><span className="material-symbols-rounded" aria-hidden="true">close</span></button>
+                  </header>
+                  <div className="order-detail-summary">
+                    <article><span>Cliente</span><strong>{viewingOrder.customer}</strong><small>{viewingOrder.whatsapp}</small>{viewingOrder.email && <small>{viewingOrder.email}</small>}</article>
+                    <article><span>Pagamento</span><strong className={`order-payment order-payment--${viewingOrder.paymentStatus}`}><i />{paymentLabels[viewingOrder.paymentStatus]}</strong><small>{viewingOrder.status === "cancelled" ? "Pedido cancelado" : deliveryLabels[effectiveDelivery(viewingOrder, selected.phase)]}</small></article>
+                    <article><span>Resumo</span><strong>{viewingOrder.quantity} {viewingOrder.quantity === 1 ? "peça" : "peças"}</strong><small>{panelOrderItems(viewingOrder).length} {panelOrderItems(viewingOrder).length === 1 ? "combinação" : "combinações"}</small></article>
+                    <article><span>Total do pedido</span><strong>{formatCents(viewingOrder.totalCents)}</strong><small>Valor único da compra</small></article>
+                  </div>
+                  {viewingOrder.cancellationReason && <p className="order-detail-cancellation"><span className="material-symbols-rounded" aria-hidden="true">cancel</span><span><strong>Motivo do cancelamento</strong>{viewingOrder.cancellationReason}</span></p>}
+                  <div className="order-detail-items">
+                    <div className="order-detail-items-head"><span>Peça</span><span>Cor</span><span>Tamanho</span><span>Qtd.</span><span>Unitário</span><span>Subtotal</span></div>
+                    {panelOrderItems(viewingOrder).map((item, index) => (
+                      <article key={`${item.model}-${item.color}-${item.size}-${index}`}>
+                        <span data-label="Peça"><strong>{item.model}</strong></span>
+                        <span className="campaign-order-color" data-label="Cor"><i style={{ backgroundColor: item.colorHex }} />{item.color}</span>
+                        <span data-label="Tamanho"><strong>{item.size}</strong></span>
+                        <span data-label="Quantidade">{item.quantity}</span>
+                        <span data-label="Unitário">{formatCents(item.unitPriceCents)}</span>
+                        <span data-label="Subtotal"><strong>{formatCents(item.unitPriceCents * item.quantity)}</strong></span>
+                      </article>
+                    ))}
+                  </div>
+                  <footer><span>Somente pedidos pagos entram no relatório oficial de produção.</span><button type="button" onClick={() => setViewingOrderNumber("")}>Fechar</button></footer>
+                </section>
+              </div>
+            )}
           </section>
         </div>
       </section>
@@ -1685,12 +1731,19 @@ function Reports({ data }: { data: PanelData }) {
         if (!active) return;
         setLiveProduction(production);
         setLiveDelivery(delivery);
+        setFeedback("Relatórios sincronizados com os pagamentos confirmados.");
       })
       .catch((reportError) => {
         if (active) setFeedback(errorMessage(reportError, "Não foi possível carregar os relatórios."));
       });
     return () => { active = false; };
   }, [mode, campaignCode, loadCount]);
+
+  useEffect(() => {
+    if (mode !== "live") return;
+    const timer = window.setInterval(() => setLoadCount((value) => value + 1), 30000);
+    return () => window.clearInterval(timer);
+  }, [mode]);
 
   const productionRows = mode === "live" ? liveProduction : demoProduction;
   const deliveryRows = mode === "live" ? liveDelivery : demoDelivery;
@@ -1766,6 +1819,7 @@ function Reports({ data }: { data: PanelData }) {
       <section className="reports-intro">
         <div><span className="kicker">Operação</span><h2>Relatórios da camisaria</h2><p>Produção consolidada para a oficina e checklist nominal para o representante da turma.</p></div>
         <div className="reports-intro-actions">
+          <button className="outline-action" type="button" onClick={() => { setFeedback("Atualizando dados confirmados..."); setLoadCount((value) => value + 1); reload(); }}>Atualizar dados<span className="material-symbols-rounded" aria-hidden="true">refresh</span></button>
           <button className="outline-action" type="button" onClick={report === "production" ? generateProductionPdf : () => window.print()}>{report === "production" ? "Gerar PDF" : "Imprimir"}<span className="material-symbols-rounded" aria-hidden="true">{report === "production" ? "picture_as_pdf" : "print"}</span></button>
           <button className="primary-action" type="button" onClick={exportCurrentReport}>{report === "production" ? "Exportar Excel" : "Exportar CSV"}<span className="material-symbols-rounded" aria-hidden="true">download</span></button>
         </div>

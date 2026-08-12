@@ -450,7 +450,12 @@ try {
 
   production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
   assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 3);
-  step("confirmação validada do provedor inclui somente o pedido pago na produção");
+  for (const item of pendingTracking.order.items) {
+    const productionItem = production.rows.find((row) => row.modelName === item.modelName && row.color.name === item.color.name && row.size === item.size);
+    assert.ok(productionItem, `combinação paga ausente da produção: ${item.modelName}/${item.color.name}/${item.size}`);
+    assert.equal(productionItem.quantity, item.quantity);
+  }
+  step("confirmação validada inclui cada cor, tamanho e corte pago na produção");
 
   const divergentCreated = await request("/api/orders", {
     method: "POST",
