@@ -155,7 +155,6 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   const art = campaign.art;
   const displayedArt = previewSide === "back" && art.back ? art.back : art.front;
   const unitPriceCents = Math.round(campaign.prices[model] * 100);
-  const selectionTotal = unitPriceCents * quantity;
   const cartTotal = cart.reduce((total, item) => total + item.unitPriceCents * item.quantity, 0);
   const cartUnits = cart.reduce((total, item) => total + item.quantity, 0);
   const hasBabyLook = sizeGroups.some((group) => group.group === "baby_look");
@@ -297,6 +296,19 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
               {art.back && <div className="campaign-side-switch" role="group" aria-label="Visualizar lado da camiseta"><button className={previewSide === "front" ? "is-active" : ""} type="button" aria-pressed={previewSide === "front"} onClick={() => setPreviewSide("front")}>Frente</button><button className={previewSide === "back" ? "is-active" : ""} type="button" aria-pressed={previewSide === "back"} onClick={() => setPreviewSide("back")}>Costas</button></div>}
               <div className="campaign-art-viewer"><img src={displayedArt} alt={`Arte da campanha ${campaign.title}${art.back ? ` — ${previewSide === "front" ? "frente" : "costas"}` : ""}`} /></div>
               <p className="campaign-art-note">A arte é a mesma em todos os cortes e tamanhos.</p>
+              {cart.length > 0 && (
+                <section className="campaign-cart-preview" aria-labelledby="cart-preview-title">
+                  <header>
+                    <div><h2 id="cart-preview-title">Seu carrinho</h2><span>{cartUnits} {cartUnits === 1 ? "peça" : "peças"}</span></div>
+                    <button type="button" onClick={() => setCart([])}>Limpar</button>
+                  </header>
+                  <CartLines items={cart} editable onQuantity={updateCartQuantity} onRemove={(key) => setCart((current) => current.filter((item) => itemKey(item) !== key))} />
+                  <footer className="campaign-cart-summary">
+                    <div><span>Total</span><strong>{formatCents(cartTotal)}</strong></div>
+                    <button type="button" onClick={() => goToStep("details")}>Revisar pedido</button>
+                  </footer>
+                </section>
+              )}
             </section>
             <section className="campaign-choice-stage campaign-cut-stage">
               <h2>1. Escolha o corte</h2>
@@ -313,12 +325,9 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
               {showSizeGuide && <p className="campaign-size-help">Compare uma camiseta que veste bem com as medidas informadas pelo representante da turma.{hasBabyLook && " Os tamanhos com B são de modelagem baby look, mais ajustada ao corpo."}</p>}
             </section>
             <section className="campaign-choice-stage campaign-quantity-stage"><h2>4. Quantidade</h2><div className="campaign-quantity-picker"><button type="button" aria-label="Diminuir quantidade" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>−</button><output aria-live="polite">{quantity}</output><button type="button" aria-label="Aumentar quantidade" onClick={() => setQuantity((value) => Math.min(20, value + 1))}>+</button></div></section>
-            {cart.length > 0 && <section className="campaign-cart-preview" aria-labelledby="cart-preview-title"><header><div><h2 id="cart-preview-title">Seu carrinho</h2><span>{cartUnits} {cartUnits === 1 ? "peça" : "peças"}</span></div><button type="button" onClick={() => setCart([])}>Limpar</button></header><CartLines items={cart} editable onQuantity={updateCartQuantity} onRemove={(key) => setCart((current) => current.filter((item) => itemKey(item) !== key))} /></section>}
             {cartMessage && <p className={`campaign-order-notice${cartMessage.includes("adicionado") ? "" : " is-error"}`} role="status" aria-live="polite"><span className="material-symbols-rounded" aria-hidden="true">{cartMessage.includes("adicionado") ? "check_circle" : "error"}</span>{cartMessage}</p>}
             <aside className="campaign-order-bar">
-              <div><small>{cart.length ? "Carrinho" : "Seleção"}</small><strong>{formatCents(cart.length ? cartTotal : selectionTotal)}</strong></div>
-              <p>{quantity} {quantity === 1 ? "camiseta" : "camisetas"} · {selectedModel.name} · {selectedColor.name} · {size}</p>
-              <div className="campaign-order-actions"><button type="submit"><span className="material-symbols-rounded" aria-hidden="true">add_shopping_cart</span>Adicionar</button><button type="button" disabled={!cart.length} onClick={() => goToStep("details")}>Revisar pedido<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button></div>
+              <div className="campaign-order-actions"><button type="submit">Adicionar</button></div>
             </aside>
           </form>
         </main>
