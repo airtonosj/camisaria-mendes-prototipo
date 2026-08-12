@@ -128,11 +128,44 @@ function MeasurementTable({ title, columns, rows }: { title: string; columns: Me
   );
 }
 
-function SizeGuide({ model }: { model: ShirtModelName }) {
+function SizeGuide({ model, open, onClose }: { model: ShirtModelName; open: boolean; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const isOversized = model === "Oversized";
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open, onClose]);
+
   return (
-    <div className="campaign-size-guide" id="campaign-size-guide-table" role="region" aria-label={`Tabela de medidas ${model}`}>
-      <header><span className="material-symbols-rounded" aria-hidden="true">straighten</span><div><h3>Guia de medidas</h3><p>Compare com uma camiseta sua estendida sobre uma superfície plana.</p></div></header>
+    <dialog
+      className="campaign-size-guide"
+      id="campaign-size-guide-table"
+      ref={dialogRef}
+      aria-labelledby="campaign-size-guide-title"
+      onCancel={(event) => { event.preventDefault(); onClose(); }}
+      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
+    >
+      <header><span className="material-symbols-rounded" aria-hidden="true">straighten</span><div><h3 id="campaign-size-guide-title">Guia de medidas</h3><p>Compare com uma camiseta sua estendida sobre uma superfície plana.</p></div><button type="button" aria-label="Fechar guia de medidas" onClick={onClose}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
       <div className={`campaign-measurement-grid${isOversized ? " is-single" : ""}`}>
         {isOversized ? (
           <MeasurementTable title="Oversized" columns={oversizedColumns} rows={oversizedMeasurements} />
@@ -144,7 +177,7 @@ function SizeGuide({ model }: { model: ShirtModelName }) {
         )}
       </div>
       {!isOversized && <p className="campaign-measurement-tolerance">As medidas da Padrão e Baby look podem variar até 2,5 cm.</p>}
-    </div>
+    </dialog>
   );
 }
 
@@ -398,7 +431,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
             <section className="campaign-choice-stage campaign-size-stage" id="size-guide">
               <div className="campaign-stage-heading"><h2>3. Escolha o tamanho</h2><button type="button" aria-expanded={showSizeGuide} aria-controls="campaign-size-guide-table" onClick={() => setShowSizeGuide((value) => !value)}>{showSizeGuide ? "Fechar tabela" : "Qual o meu tamanho?"}</button></div>
               {sizeGroups.map(({ group, sizes }) => <div className="campaign-size-group" key={group}><p className="campaign-size-group-label">{sizeGroupLabels[group]}</p><div className="campaign-size-options" role="radiogroup" aria-label={`Tamanho ${sizeGroupLabels[group]}`}>{sizes.map((item) => <label className={size === item ? "is-selected" : ""} key={item}><input type="radio" name="size" checked={size === item} onChange={() => { setSize(item); setCartMessage(""); }} /><span>{item}</span></label>)}</div></div>)}
-              {showSizeGuide && <SizeGuide model={model} />}
+              <SizeGuide model={model} open={showSizeGuide} onClose={() => setShowSizeGuide(false)} />
             </section>
             <section className="campaign-choice-stage campaign-quantity-stage"><h2>4. Quantidade</h2><div className="campaign-quantity-picker"><button type="button" aria-label="Diminuir quantidade" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>−</button><output aria-live="polite">{quantity}</output><button type="button" aria-label="Aumentar quantidade" onClick={() => setQuantity((value) => Math.min(20, value + 1))}>+</button></div></section>
             {cartMessage && <p className={`campaign-order-notice${cartMessage.includes("adicionado") ? "" : " is-error"}`} role="status" aria-live="polite"><span className="material-symbols-rounded" aria-hidden="true">{cartMessage.includes("adicionado") ? "check_circle" : "error"}</span>{cartMessage}</p>}
