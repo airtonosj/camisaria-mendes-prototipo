@@ -826,7 +826,7 @@ function Campaigns({ data }: { data: PanelData }) {
   const [front, setFront] = useState<ArtDraft>({ file: null, preview: "" });
   const [back, setBack] = useState<ArtDraft>({ file: null, preview: "" });
   const [artMode, setArtMode] = useState<EditableArtMode>("overlay");
-  const [mockupEnabled, setMockupEnabled] = useState(true);
+  const [mockupEnabled, setMockupEnabled] = useState(false);
   const [realPhotosEnabled, setRealPhotosEnabled] = useState(false);
   const [artScope, setArtScope] = useState<"base" | "variant">("base");
   const [baseTransforms, setBaseTransforms] = useState<{ front: ArtworkTransform; back: ArtworkTransform }>({ front: { ...defaultTransform }, back: { ...defaultTransform } });
@@ -914,7 +914,7 @@ function Campaigns({ data }: { data: PanelData }) {
     setFront({ file: null, preview: "" });
     setBack({ file: null, preview: "" });
     setArtMode("overlay");
-    setMockupEnabled(true);
+    setMockupEnabled(false);
     setRealPhotosEnabled(false);
     setArtScope("base");
     setBaseTransforms({ front: { ...defaultTransform }, back: { ...defaultTransform } });
@@ -1020,7 +1020,10 @@ function Campaigns({ data }: { data: PanelData }) {
       });
       setVariantArts(loadedVariantArts);
       const sizesOf = (model: ShirtModelName) => sortSizes(
-        detail.sizes.filter((size) => size.model.name === model).map((size) => size.code as SizeCode),
+        detail.sizes
+          .filter((size) => size.model.name === model)
+          .map((size) => size.code as SizeCode)
+          .filter((size) => defaultCampaignSizes[model].includes(size)),
       );
       setModelSizes({ Comum: sizesOf("Comum"), Oversized: sizesOf("Oversized") });
       const availableModels = new Set(detail.variants.map((variant) => variant.model.name as ShirtModelName));
@@ -1444,7 +1447,7 @@ function Campaigns({ data }: { data: PanelData }) {
         const color = campaignColorOptions.find((option) => colorKey(option.name) === colorKey(name));
         return { name, hex: color?.hex.toUpperCase() ?? "" };
       }),
-      sizes: modelSizes[model.name],
+      sizes: modelSizes[model.name].filter((size) => defaultCampaignSizes[model.name].includes(size)),
     }));
   }
 
