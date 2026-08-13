@@ -1387,8 +1387,20 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-card-action--share { justify-content: space-between; border-color: #087fca; color: #fff; background: #087fca; box-shadow: 0 5px 14px rgba(8, 127, 202, .16); }
 .campaign-card-action--share:hover { border-color: #076eaf; background: #076eaf; box-shadow: 0 7px 18px rgba(8, 127, 202, .24); transform: translateY(-1px); }
 .campaign-card-action--share:hover .material-symbols-rounded { transform: translateX(2px); }
+.campaign-card-action--delete { grid-column: 1 / -1; min-height: 38px; border-color: #e6c7c3; color: #a23a2e; background: #fffafa; }
+.campaign-card-action--delete:hover:not(:disabled) { border-color: #c96a5e; color: #8f2e24; background: #fff1ef; transform: translateY(-1px); }
+.campaign-card-action--delete:disabled { cursor: not-allowed; border-color: #dde1df; color: #8b9295; background: #f4f6f5; opacity: .76; }
 .campaign-card-action:active { box-shadow: none; transform: translateY(0); }
 .campaign-card-action:focus-visible { position: relative; z-index: 1; outline: 2px solid #75caf4; outline-offset: 2px; }
+.campaign-delete-confirmation { display: grid; gap: 8px; margin-top: 15px; border: 1px solid #d8958d; padding: 13px; background: #fff6f4; }
+.campaign-delete-confirmation > strong { color: #7c251d; font-size: .65rem; }
+.campaign-delete-confirmation > span { color: #76534f; font-size: .54rem; line-height: 1.5; }
+.campaign-delete-confirmation > p { margin: 0; color: #a12920; font-size: .54rem; line-height: 1.45; }
+.campaign-delete-confirmation > div { display: grid; grid-template-columns: .8fr 1.2fr; gap: 7px; }
+.campaign-delete-confirmation button { min-height: 38px; border: 1px solid #d9b5b0; cursor: pointer; padding: 0 8px; color: #744942; background: #fff; font: inherit; font-size: .55rem; font-weight: 720; }
+.campaign-delete-confirmation button:last-child { border-color: #a83a2f; color: #fff; background: #a83a2f; }
+.campaign-delete-confirmation button:disabled { cursor: wait; opacity: .58; }
+.campaign-delete-confirmation button:focus-visible { outline: 2px solid #d77a70; outline-offset: 2px; }
 
 /* campaign-scoped order operations */
 .admin-orders-workspace { width: 100%; max-width: none; padding: 0; }

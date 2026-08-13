@@ -312,6 +312,21 @@ try {
   assert.equal(customVariant.color.hex, "#8B5CF6");
   step("campanha aceita e publica cor personalizada com nome e código HEX");
 
+  const disposableCampaignPayload = {
+    ...customCampaignPayload,
+    code: "MENDES-EXCLUIR-26",
+    title: "Campanha descartável sem pedidos",
+    artFrontUrl: "/uploads/smoke-disposable.png",
+  };
+  await request("/api/admin/campaigns", { method: "POST", expected: 201, token, body: disposableCampaignPayload });
+  const campaignsBeforeDelete = await request("/api/admin/campaigns", { token });
+  assert.equal(campaignsBeforeDelete.campaigns.find((candidate) => candidate.code === disposableCampaignPayload.code)?.canDelete, true);
+  await request(`/api/admin/campaigns/${disposableCampaignPayload.code}`, { method: "DELETE", expected: 401 });
+  const deletedCampaign = await request(`/api/admin/campaigns/${disposableCampaignPayload.code}`, { method: "DELETE", token });
+  assert.deepEqual(deletedCampaign.campaign, { code: disposableCampaignPayload.code, deleted: true });
+  await request(`/api/campaigns/${disposableCampaignPayload.code}`, { expected: 404 });
+  step("campanha sem pedidos pode ser excluída somente por uma sessão administrativa");
+
   const removedModelVariant = customCampaign.variants.find((candidate) => candidate.model.code === "oversized");
   const removedModelSize = customCampaign.sizes.find((candidate) => candidate.model.code === "oversized");
   assert.ok(removedModelVariant && removedModelSize);
@@ -325,6 +340,9 @@ try {
       items: [{ variantId: removedModelVariant.id, size: removedModelSize.code, quantity: 1 }],
     },
   });
+  await request(`/api/admin/campaigns/${customCampaign.code}`, { method: "DELETE", expected: 409, token });
+  const campaignsAfterProtectedDelete = await request("/api/admin/campaigns", { token });
+  assert.equal(campaignsAfterProtectedDelete.campaigns.find((candidate) => candidate.code === customCampaign.code)?.canDelete, false);
   await request(`/api/admin/campaigns/${customCampaign.code}`, {
     method: "PATCH",
     token,
@@ -344,7 +362,7 @@ try {
       items: [{ variantId: removedModelVariant.id, size: removedModelSize.code, quantity: 1 }],
     },
   });
-  step("edição retira o corte do checkout, bloqueia novas compras e preserva pedidos anteriores");
+  step("campanha com pedido não pode ser excluída; edição preserva o histórico e bloqueia novas compras retiradas");
 
   runNode("api/create-user.mjs", ["Representante Smoke", "representante@smoke.test", "senha-representante", "representative"]);
   await request("/api/auth/login", {

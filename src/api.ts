@@ -345,6 +345,7 @@ export type ApiAdminCampaign = {
   artRenderMode: "overlay" | "legacy_mockup";
   orderCount: number;
   paidTotalCents: number;
+  canDelete: boolean;
 };
 
 export type ApiCampaignOrder = {
@@ -465,6 +466,14 @@ export async function updateCampaignInApi(code: string, input: UpdateCampaignPay
   const payload = await staffRequest<{ campaign: { code: string } }>(
     `/admin/campaigns/${encodeURIComponent(code)}`,
     { method: "PATCH", body: JSON.stringify(input) },
+  );
+  return payload.campaign;
+}
+
+export async function deleteCampaignInApi(code: string) {
+  const payload = await staffRequest<{ campaign: { code: string; deleted: true } }>(
+    `/admin/campaigns/${encodeURIComponent(code)}`,
+    { method: "DELETE" },
   );
   return payload.campaign;
 }

@@ -545,7 +545,8 @@ async function listCampaigns() {
     `SELECT c.id, c.code, c.title, c.subtitle, c.phase, c.deadline_at, c.pickup_instructions,
             c.representative_name, c.representative_whatsapp, c.art_front_url, c.art_back_url, c.art_render_mode,
             COUNT(DISTINCT o.id) AS order_count,
-            COALESCE(SUM(CASE WHEN o.payment_status = 'paid' THEN o.total_cents ELSE 0 END), 0) AS paid_total_cents
+            COALESCE(SUM(CASE WHEN o.payment_status = 'paid' THEN o.total_cents ELSE 0 END), 0) AS paid_total_cents,
+            NOT EXISTS (SELECT 1 FROM orders order_history WHERE order_history.campaign_id = c.id) AS can_delete
        FROM campaigns c
        LEFT JOIN orders o ON o.campaign_id = c.id AND o.status = 'active'
       GROUP BY c.id
@@ -565,6 +566,7 @@ async function listCampaigns() {
     artRenderMode: row.art_render_mode,
     orderCount: Number(row.order_count),
     paidTotalCents: Number(row.paid_total_cents),
+    canDelete: Boolean(row.can_delete),
   }));
 }
 
@@ -767,6 +769,42 @@ async function updateCampaign(request, code) {
   if (body.artFrontUrl !== undefined) await removeOrphanUpload(changed.artFrontUrl);
   if (body.artBackUrl !== undefined) await removeOrphanUpload(changed.artBackUrl);
   return getCampaign(code);
+}
+
+/**
+ * Exclui somente campanhas que nunca receberam pedidos. Variantes, tamanhos e
+ * histórico de fase são dependências de configuração e saem pelo ON DELETE CASCADE;
+ * pedidos, inclusive cancelados, preservam a campanha e bloqueiam esta operação.
+ */
+async function deleteCampaign(request, code) {
+  await requireStaff(request);
+  const deleted = await withTransaction(async (connection) => {
+    const [rows] = await connection.execute(
+      "SELECT id, art_front_url, art_back_url FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE",
+      [code],
+    );
+    if (rows.length === 0) throw new ApiError(404, "CAMPAIGN_NOT_FOUND", "Campanha não encontrada.");
+    const campaign = rows[0];
+    const [orders] = await connection.execute(
+      "SELECT order_number FROM orders WHERE campaign_id = ? ORDER BY id LIMIT 1",
+      [campaign.id],
+    );
+    if (orders.length > 0) {
+      throw new ApiError(
+        409,
+        "CAMPAIGN_HAS_ORDERS",
+        "Esta campanha não pode ser excluída porque possui pedidos. O histórico precisa ser preservado.",
+        { orderNumber: orders[0].order_number },
+      );
+    }
+    await connection.execute("DELETE FROM campaigns WHERE id = ?", [campaign.id]);
+    return { code, artFrontUrl: campaign.art_front_url, artBackUrl: campaign.art_back_url };
+  });
+
+  // A exclusão do arquivo só ocorre depois do commit e respeita o compartilhamento entre campanhas.
+  await removeOrphanUpload(deleted.artFrontUrl);
+  await removeOrphanUpload(deleted.artBackUrl);
+  return { code: deleted.code, deleted: true };
 }
 
 /** Atualiza o que segue à venda, mantendo no banco o histórico necessário aos pedidos antigos. */
@@ -1565,6 +1603,10 @@ async function route(request, response) {
   const campaignMatch = path.match(/^\/api\/admin\/campaigns\/([^/]+)$/);
   if (request.method === "PATCH" && campaignMatch) {
     sendJson(response, 200, { campaign: await updateCampaign(request, campaignMatch[1].toUpperCase()) });
+    return;
+  }
+  if (request.method === "DELETE" && campaignMatch) {
+    sendJson(response, 200, { campaign: await deleteCampaign(request, campaignMatch[1].toUpperCase()) });
     return;
   }
   const phaseMatch = path.match(/^\/api\/admin\/campaigns\/([^/]+)\/phase$/);

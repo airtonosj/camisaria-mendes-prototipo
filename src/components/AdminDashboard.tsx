@@ -5,6 +5,7 @@ import {
   changeCampaignPhaseInApi,
   changeOrderDeliveryInApi,
   createCampaignInApi,
+  deleteCampaignInApi,
   fetchAdminCampaigns,
   fetchCampaignDetail,
   updateCampaignInApi,
@@ -125,6 +126,7 @@ type PanelCampaign = {
   artFront: string;
   orderCount: number;
   paidTotalCents: number;
+  canDelete: boolean;
 };
 
 type PanelOrder = {
@@ -162,10 +164,10 @@ function panelOrderItems(order: PanelOrder) {
 /* ------------------------------------------------------------------ */
 
 const demoCampaigns: PanelCampaign[] = [
-  { code: "MENDES-ENG-26", title: "Engenharia Civil — Turma 2026", subtitle: "Ficha de corte e confecção", phase: "production", deadlineLabel: "Pedidos até 31 de agosto de 2026", representative: "Lucas Pereira", artFront: showcaseCampaigns[0].image, orderCount: 6, paidTotalCents: 491180 },
-  { code: "MENDES-ENF-26", title: "Enfermagem — 8º período", subtitle: "Ficha de corte e confecção", phase: "ready_for_delivery", deadlineLabel: "Pedidos encerrados em 18 de julho de 2026", representative: "Juliana Costa", artFront: showcaseCampaigns[1].image, orderCount: 3, paidTotalCents: 401330 },
-  { code: "MENDES-ADM-26", title: "Administração — Noturno", subtitle: "Ficha de corte e confecção", phase: "completed", deadlineLabel: "Campanha concluída em 22 de julho de 2026", representative: "Rafael Lima", artFront: showcaseCampaigns[2].image, orderCount: 2, paidTotalCents: 305490 },
-  { code: "MENDES-ADS-26", title: "Análise e Desenvolvimento de Sistemas — 2026.2", subtitle: "Ficha de corte e confecção", phase: "receiving_orders", deadlineLabel: "Pedidos até 12 de setembro de 2026", representative: "Carla Sousa", artFront: showcaseCampaigns[3].image, orderCount: 3, paidTotalCents: 59900 },
+  { code: "MENDES-ENG-26", title: "Engenharia Civil — Turma 2026", subtitle: "Ficha de corte e confecção", phase: "production", deadlineLabel: "Pedidos até 31 de agosto de 2026", representative: "Lucas Pereira", artFront: showcaseCampaigns[0].image, orderCount: 6, paidTotalCents: 491180, canDelete: false },
+  { code: "MENDES-ENF-26", title: "Enfermagem — 8º período", subtitle: "Ficha de corte e confecção", phase: "ready_for_delivery", deadlineLabel: "Pedidos encerrados em 18 de julho de 2026", representative: "Juliana Costa", artFront: showcaseCampaigns[1].image, orderCount: 3, paidTotalCents: 401330, canDelete: false },
+  { code: "MENDES-ADM-26", title: "Administração — Noturno", subtitle: "Ficha de corte e confecção", phase: "completed", deadlineLabel: "Campanha concluída em 22 de julho de 2026", representative: "Rafael Lima", artFront: showcaseCampaigns[2].image, orderCount: 2, paidTotalCents: 305490, canDelete: false },
+  { code: "MENDES-ADS-26", title: "Análise e Desenvolvimento de Sistemas — 2026.2", subtitle: "Ficha de corte e confecção", phase: "receiving_orders", deadlineLabel: "Pedidos até 12 de setembro de 2026", representative: "Carla Sousa", artFront: showcaseCampaigns[3].image, orderCount: 3, paidTotalCents: 59900, canDelete: false },
 ];
 
 const demoOrders: Record<string, PanelOrder[]> = {
@@ -358,6 +360,7 @@ function usePanelData(): PanelData {
             artFront: campaign.artFrontUrl ?? shirtModels[0].image,
             orderCount: campaign.orderCount,
             paidTotalCents: campaign.paidTotalCents,
+            canDelete: campaign.canDelete,
           })),
         );
         setMode("live");
@@ -763,6 +766,9 @@ function Campaigns({ data }: { data: PanelData }) {
   const [creating, setCreating] = useState(false);
   const [shared, setShared] = useState<PanelCampaign | null>(null);
   const [notice, setNotice] = useState("");
+  const [deleteConfirmation, setDeleteConfirmation] = useState<PanelCampaign | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   /** Fora de `null`, o formulário está editando a campanha deste código. */
   const [editing, setEditing] = useState<{ code: string; phase: CampaignPhaseCode; hadBackArt: boolean; artRenderMode: "overlay" | "legacy_mockup" } | null>(null);
@@ -901,6 +907,29 @@ function Campaigns({ data }: { data: PanelData }) {
       setFormError(errorMessage(detailError, "Não foi possível carregar a campanha para edição."));
     } finally {
       setLoadingDetail(false);
+    }
+  }
+
+  async function confirmDeleteCampaign() {
+    if (!deleteConfirmation) return;
+    if (mode !== "live") {
+      setDeleteError("Sem sessão no servidor, a campanha não pode ser excluída.");
+      return;
+    }
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await deleteCampaignInApi(deleteConfirmation.code);
+      const deletedCode = deleteConfirmation.code;
+      setDeleteConfirmation(null);
+      setNotice(`Campanha ${deletedCode} excluída.`);
+      if (editing?.code === deletedCode) closeForm();
+      if (shared?.code === deletedCode) setShared(null);
+      reload();
+    } catch (deleteFailure) {
+      setDeleteError(errorMessage(deleteFailure, "Não foi possível excluir a campanha."));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -1165,6 +1194,7 @@ function Campaigns({ data }: { data: PanelData }) {
         artFront: front.preview,
         orderCount: 0,
         paidTotalCents: 0,
+        canDelete: true,
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (submitError) {
@@ -1357,7 +1387,24 @@ function Campaigns({ data }: { data: PanelData }) {
           {filtered.map((campaign) => (
             <article className="campaign-admin-card" key={campaign.code}>
               <div className="campaign-admin-card-image"><img src={campaign.artFront} alt={`Arte da campanha ${campaign.title}`} /><span className={`campaign-state campaign-state--${phaseMeta[campaign.phase].tone}`}>{phaseMeta[campaign.phase].label}</span></div>
-              <div className="campaign-admin-card-body"><small>{campaign.code}</small><h3>{campaign.title}</h3><p><span className="material-symbols-rounded" aria-hidden="true">person</span>{campaign.representative}</p><dl><div><dt>Pedidos</dt><dd>{campaign.orderCount}</dd></div><div><dt>Vendas</dt><dd>{formatCents(campaign.paidTotalCents)}</dd></div><div><dt>Prazo</dt><dd>{campaign.deadlineLabel.replace("Pedidos até ", "")}</dd></div></dl><div className="campaign-admin-card-actions"><button className="campaign-card-action campaign-card-action--edit" type="button" onClick={() => startEdit(campaign)}><span className="material-symbols-rounded" aria-hidden="true">edit</span><span>Editar</span></button><button className="campaign-card-action campaign-card-action--share" type="button" onClick={() => { closeForm(); setNotice(""); setShared(campaign); window.scrollTo({ top: 0, behavior: "smooth" }); }}><span>Ver e compartilhar</span><span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button></div></div>
+              <div className="campaign-admin-card-body">
+                <small>{campaign.code}</small><h3>{campaign.title}</h3><p><span className="material-symbols-rounded" aria-hidden="true">person</span>{campaign.representative}</p>
+                <dl><div><dt>Pedidos</dt><dd>{campaign.orderCount}</dd></div><div><dt>Vendas</dt><dd>{formatCents(campaign.paidTotalCents)}</dd></div><div><dt>Prazo</dt><dd>{campaign.deadlineLabel.replace("Pedidos até ", "")}</dd></div></dl>
+                {deleteConfirmation?.code === campaign.code ? (
+                  <div className="campaign-delete-confirmation" role="alert">
+                    <strong>Excluir esta campanha?</strong>
+                    <span>Esta ação é definitiva e remove também suas configurações de cortes e cores.</span>
+                    {deleteError && <p>{deleteError}</p>}
+                    <div><button type="button" onClick={() => { setDeleteConfirmation(null); setDeleteError(""); }} disabled={deleting}>Cancelar</button><button type="button" onClick={confirmDeleteCampaign} disabled={deleting}>{deleting ? "Excluindo..." : "Excluir definitivamente"}</button></div>
+                  </div>
+                ) : (
+                  <div className="campaign-admin-card-actions">
+                    <button className="campaign-card-action campaign-card-action--edit" type="button" onClick={() => startEdit(campaign)}><span className="material-symbols-rounded" aria-hidden="true">edit</span><span>Editar</span></button>
+                    <button className="campaign-card-action campaign-card-action--share" type="button" onClick={() => { closeForm(); setNotice(""); setShared(campaign); window.scrollTo({ top: 0, behavior: "smooth" }); }}><span>Ver e compartilhar</span><span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
+                    <button className="campaign-card-action campaign-card-action--delete" type="button" disabled={!campaign.canDelete} title={campaign.canDelete ? "Excluir esta campanha" : "Campanhas com pedidos não podem ser excluídas"} onClick={() => { setDeleteConfirmation(campaign); setDeleteError(""); setNotice(""); }}><span className="material-symbols-rounded" aria-hidden="true">delete</span><span>{campaign.canDelete ? "Excluir campanha" : "Exclusão bloqueada: há pedidos"}</span></button>
+                  </div>
+                )}
+              </div>
             </article>
           ))}
           {filtered.length === 0 && (
