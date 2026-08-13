@@ -1414,6 +1414,13 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-artwork-error .material-symbols-rounded, .campaign-artwork-status .material-symbols-rounded { flex: 0 0 auto; font-size: 16px; }
 .campaign-create-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 3px; }
 .campaign-create-actions .primary-action:disabled { cursor: not-allowed; opacity: .45; }
+.campaign-validation-toast { position: fixed; top: 18px; right: 18px; z-index: 120; width: min(420px, calc(100vw - 36px)); min-height: 58px; display: grid; grid-template-columns: 28px minmax(0, 1fr) 30px; gap: 10px; align-items: center; border: 1px solid #e4bbb5; border-left: 4px solid #b73c31; padding: 11px 10px 11px 13px; color: #692a24; background: rgba(255, 249, 248, .98); box-shadow: 0 14px 38px rgba(39, 22, 19, .18); animation: campaign-toast-in .18s ease-out; }
+.campaign-validation-toast > span { color: #b73c31; font-size: 22px; }
+.campaign-validation-toast p { margin: 0; font-size: .72rem; font-weight: 650; line-height: 1.45; }
+.campaign-validation-toast button { width: 30px; height: 30px; display: grid; place-content: center; border: 0; cursor: pointer; color: #875650; background: transparent; }
+.campaign-validation-toast button:hover, .campaign-validation-toast button:focus-visible { color: #7e231b; background: #f7e6e3; outline: 0; }
+.campaign-validation-toast button .material-symbols-rounded { font-size: 18px; }
+@keyframes campaign-toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 .campaign-share-panel { padding: 0; overflow: hidden; }
 .campaign-share-panel > header { padding: 23px 25px; color: #fff; background: #0a0d0f; }
 .campaign-share-panel > header h3 { color: #fff; }
@@ -1823,6 +1830,7 @@ main > section[id] { scroll-margin-top: 78px; }
   .admin-topbar h1 { font-size: 1.12rem; }
   .admin-user > span { width: 34px; height: 34px; }
   .admin-content { padding: 26px 14px 98px; }
+  .campaign-validation-toast { top: 10px; right: 10px; width: calc(100vw - 20px); grid-template-columns: 25px minmax(0, 1fr) 30px; padding-left: 11px; }
   .admin-page-intro { margin-bottom: 23px; }
   .admin-page-intro h2 { font-size: clamp(2.2rem, 11vw, 2.75rem); }
   .admin-page-intro p { font-size: .68rem; }

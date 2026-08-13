@@ -610,12 +610,17 @@ try {
   await request(`/api/admin/campaigns/${customCampaign.code}`, {
     method: "PATCH",
     token,
-    body: { models: [customCampaignPayload.models[0]] },
+    body: {
+      models: [customCampaignPayload.models[0]],
+      realPhotos: [customCampaignPayload.realPhotos[0]],
+      realVideos: [],
+    },
   });
   const campaignWithoutOversized = (await request(`/api/campaigns/${customCampaign.code}`)).campaign;
   assert.equal(campaignWithoutOversized.variants.some((candidate) => candidate.model.code === "oversized"), false);
   assert.deepEqual(campaignWithoutOversized.realPhotos.find((gallery) => gallery.colorName === "Preto").urls, customCampaignPayload.realPhotos[1].urls);
   assert.equal(campaignWithoutOversized.realVideos.find((video) => video.colorName === "Preto").url, uploadedVideoForInactiveColor.url);
+  step("foto e vídeo não são exigidos para a cor de um corte removido da campanha");
   const preservedHistoricalOrder = await request(`/api/orders/${historicalOrder.order.number}?whatsapp=5598999992026`);
   assert.equal(preservedHistoricalOrder.order.items[0].modelName, "Oversized");
   await request("/api/orders", {

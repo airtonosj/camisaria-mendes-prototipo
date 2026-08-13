@@ -954,7 +954,40 @@ function Campaigns({ data }: { data: PanelData }) {
   const activeRealPhotoColors = campaignColorOptions.filter((option) => shirtModels.some((model) =>
     selectedModels[model.name] && modelColors[model.name].some((name) => colorKey(name) === colorKey(option.name)),
   ));
-  const videoUploadInProgress = Object.values(realVideosByColor).some((video) => video.status === "processing" || video.status === "uploading");
+  const videoUploadInProgress = activeRealPhotoColors.some((color) => {
+    const video = realVideosByColor[colorKey(color.name)];
+    return video?.status === "processing" || video?.status === "uploading";
+  });
+  const campaignAlert = formError || artError || colorError || sizeError;
+
+  useEffect(() => {
+    if (!campaignAlert) return;
+    const timeout = window.setTimeout(() => {
+      setFormError("");
+      setArtError("");
+      setColorError("");
+      setSizeError("");
+    }, 6500);
+    return () => window.clearTimeout(timeout);
+  }, [campaignAlert]);
+
+  function clearCampaignAlert() {
+    setFormError("");
+    setArtError("");
+    setColorError("");
+    setSizeError("");
+  }
+
+  function handleCampaignInvalid(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const field = event.target as HTMLInputElement;
+    if (event.currentTarget.querySelector(":invalid") !== field) return;
+    const label = field.closest("label")?.querySelector(":scope > span")?.textContent?.trim()
+      || field.getAttribute("aria-label")
+      || "o campo obrigatório";
+    setFormError(field.validity.valueMissing ? `Preencha ${label}.` : `Revise ${label}.`);
+    window.setTimeout(() => field.focus({ preventScroll: true }), 0);
+  }
 
   function resetForm() {
     setCampaignName("");
@@ -1006,6 +1039,7 @@ function Campaigns({ data }: { data: PanelData }) {
     setCreating(false);
     setEditing(null);
     setLoadingDetail(false);
+    clearCampaignAlert();
   }
 
   function startCampaign() {
@@ -1388,10 +1422,12 @@ function Campaigns({ data }: { data: PanelData }) {
     } catch (error) {
       if (videoUploadControllers.current[key] !== controller) return;
       delete videoUploadControllers.current[key];
+      const message = error instanceof Error ? error.message : "Não foi possível preparar o vídeo.";
       setRealVideosByColor((current) => current[key] ? {
         ...current,
-        [key]: { ...current[key], status: "error", error: error instanceof Error ? error.message : "Não foi possível preparar o vídeo." },
+        [key]: { ...current[key], status: "error", error: message },
       } : current);
+      setArtError(message);
     }
   }
 
@@ -1628,7 +1664,7 @@ function Campaigns({ data }: { data: PanelData }) {
 
   async function submitCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setFormError("");
+    clearCampaignAlert();
     if (!mockupEnabled && !realPhotosEnabled) {
       setFormError("Ative o mockup, as fotos reais ou ambos.");
       return;
@@ -1736,6 +1772,11 @@ function Campaigns({ data }: { data: PanelData }) {
 
   return (
     <div className="admin-content admin-campaigns-page">
+      {campaignAlert && <div className="campaign-validation-toast" role="alert" aria-live="assertive">
+        <span className="material-symbols-rounded" aria-hidden="true">error</span>
+        <p>{campaignAlert}</p>
+        <button type="button" onClick={clearCampaignAlert} aria-label="Fechar aviso"><span className="material-symbols-rounded" aria-hidden="true">close</span></button>
+      </div>}
       <div className="section-actions">
         <div><span className="kicker">Gestão</span><h2>Campanhas da camisaria</h2><p>Crie o acesso privado e acompanhe cada turma até a entrega.</p></div>
         <button className="primary-action" type="button" onClick={startCampaign}>Nova campanha<span className="material-symbols-rounded" aria-hidden="true">add</span></button>
@@ -1754,7 +1795,7 @@ function Campaigns({ data }: { data: PanelData }) {
           {loadingDetail ? (
             <p className="admin-loading" aria-live="polite"><span className="material-symbols-rounded" aria-hidden="true">progress_activity</span>Carregando a campanha...</p>
           ) : (
-          <form onSubmit={submitCampaign}>
+          <form onSubmit={submitCampaign} onInvalid={handleCampaignInvalid}>
             {variantsLocked && (
               <p className="campaign-locked-note" role="status">
                 <span className="material-symbols-rounded" aria-hidden="true">lock</span>
@@ -1809,7 +1850,6 @@ function Campaigns({ data }: { data: PanelData }) {
                   </div>
                 )}
               </div>
-              {colorError && <p className="campaign-color-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{colorError}</p>}
               <p className="campaign-color-summary"><span className="material-symbols-rounded" aria-hidden="true">palette</span><strong>{modelColors[colorModel].length}</strong> {modelColors[colorModel].length === 1 ? "cor liberada" : "cores liberadas"} para {colorModel === "Comum" ? "Padrão" : colorModel}.</p>
             </fieldset>
 
@@ -1838,7 +1878,6 @@ function Campaigns({ data }: { data: PanelData }) {
                   </div>
                 );
               })}
-              {sizeError && <p className="campaign-size-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{sizeError}</p>}
               <p className="campaign-size-summary"><span className="material-symbols-rounded" aria-hidden="true">straighten</span><strong>{modelSizes[sizeModel].length}</strong> {modelSizes[sizeModel].length === 1 ? "tamanho liberado" : "tamanhos liberados"} para {sizeModel === "Comum" ? "Padrão" : sizeModel}.</p>
             </fieldset>
 
@@ -1925,7 +1964,6 @@ function Campaigns({ data }: { data: PanelData }) {
                   {artMode === "variant_mockup" && <p className="campaign-artwork-status"><span className="material-symbols-rounded" aria-hidden="true">checklist</span>{activeVariantCombinations.filter((item) => { const saved = variantArts[item.key]?.variant_mockup; return saved?.front.source === "custom" || saved?.back.source === "custom"; }).length} de {activeVariantCombinations.length} combinações preenchidas.</p>}
                 </>
               )}
-              {artError && <p className="campaign-artwork-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{artError}</p>}
             </fieldset>}
 
             <fieldset className="campaign-visual-options campaign-visual-options--secondary"><legend className="sr-only">Exibição das fotos reais</legend>
@@ -1952,7 +1990,6 @@ function Campaigns({ data }: { data: PanelData }) {
                       <div className="campaign-real-video-status">
                         <strong>{video.status === "processing" ? "Processando vídeo..." : video.status === "uploading" ? `Enviando ${video.progress}%` : video.status === "ready" ? `${video.durationSeconds.toFixed(1)} s · ${(video.bytes / 1024 / 1024).toFixed(1)} MB` : "Falha no vídeo"}</strong>
                         {(video.status === "processing" || video.status === "uploading") && <progress max="100" value={video.progress} aria-label={`Progresso do vídeo da cor ${color.name}`} />}
-                        {video.error && <small role="alert">{video.error}</small>}
                       </div>
                       <button type="button" className="campaign-real-video-remove" onClick={() => removeRealVideo(color.name)}>{video.status === "processing" || video.status === "uploading" ? "Cancelar envio" : "Remover vídeo"}</button>
                     </div> : <label className="campaign-real-video-add"><span className="material-symbols-rounded" aria-hidden="true">video_call</span>Adicionar vídeo MP4<input type="file" accept="video/mp4,.mp4" onChange={(event) => chooseRealVideo(event, color.name)} aria-label={`Adicionar vídeo da cor ${color.name}`} /></label>}
@@ -1961,7 +1998,6 @@ function Campaigns({ data }: { data: PanelData }) {
               </div>
             </fieldset>}
 
-            {formError && <p className="campaign-form-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{formError}</p>}
             <div className="campaign-create-actions">
               <button className="outline-action" type="button" onClick={closeForm}>Cancelar</button>
               <button className="primary-action" type="submit" disabled={submitting || videoUploadInProgress || (!mockupEnabled && !realPhotosEnabled)} title={videoUploadInProgress ? "Aguarde ou cancele o envio do vídeo." : !mockupEnabled && !realPhotosEnabled ? "Ative o mockup ou as fotos reais para salvar a campanha." : undefined}>
