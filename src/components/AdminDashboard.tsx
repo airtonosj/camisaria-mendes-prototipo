@@ -777,6 +777,7 @@ type RealVideoDraft = {
   error?: string;
 };
 type EditableArtMode = "overlay" | "variant_mockup" | "legacy_mockup";
+type CampaignFormStep = "information" | "products" | "images" | "review";
 type ArtSideDraft = {
   file: File | null;
   preview: string;
@@ -786,6 +787,14 @@ type ArtSideDraft = {
   transform: ArtworkTransform;
 };
 type VariantArtDraft = { front: ArtSideDraft; back: ArtSideDraft };
+
+const campaignFormSteps: Array<{ id: CampaignFormStep; label: string; description: string }> = [
+  { id: "information", label: "Informações", description: "Dados básicos da campanha" },
+  { id: "products", label: "Produtos", description: "Cores e tamanhos disponíveis" },
+  { id: "images", label: "Imagens", description: "Arte, fotos e vídeo" },
+  { id: "review", label: "Revisão", description: "Resumo e publicação" },
+];
+const campaignDraftKey = "camisaria-mendes-campaign-draft-v1";
 
 const defaultTransform: ArtworkTransform = { x: 0, y: 0, scale: 1, rotation: 0 };
 
@@ -898,6 +907,11 @@ function Campaigns({ data }: { data: PanelData }) {
   const [sizeError, setSizeError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
+  const [formStep, setFormStep] = useState<CampaignFormStep>("information");
+  const [productConfiguration, setProductConfiguration] = useState<ShirtModelName | null>(null);
+  const [customColorOpen, setCustomColorOpen] = useState(false);
+  const [advancedArtOpen, setAdvancedArtOpen] = useState(false);
+  const [draftFeedback, setDraftFeedback] = useState("");
 
   const filtered = phaseFilter === "all" ? campaigns : campaigns.filter((campaign) => campaign.phase === phaseFilter);
 
@@ -959,6 +973,30 @@ function Campaigns({ data }: { data: PanelData }) {
     return video?.status === "processing" || video?.status === "uploading";
   });
   const campaignAlert = formError || artError || colorError || sizeError;
+  const selectedCampaignModels = shirtModels.filter((model) => selectedModels[model.name]);
+  const summaryColorCount = new Set(selectedCampaignModels.flatMap((model) => modelColors[model.name].map(colorKey))).size;
+  const summarySizeCount = selectedCampaignModels.reduce((total, model) => total + modelSizes[model.name].length, 0);
+  const informationComplete = campaignName.trim().length >= 5
+    && representative.trim().length >= 3
+    && representativePhone.replace(/\D/g, "").length >= 10
+    && Boolean(deadline)
+    && Boolean(pickup.trim());
+  const productsComplete = selectedCampaignModels.length > 0 && selectedCampaignModels.every((model) => (
+    parseCampaignPrice(model.name === "Comum" ? commonPrice : oversizedPrice) > 0
+    && modelColors[model.name].length > 0
+    && modelSizes[model.name].length > 0
+  ));
+  const variantMockupsComplete = activeVariantCombinations.every((item) => {
+    const saved = variantArts[item.key]?.variant_mockup;
+    return saved?.front.source === "custom" || saved?.back.source === "custom";
+  });
+  const mockupComplete = !mockupEnabled
+    || artMode === "legacy_mockup"
+    || (artMode === "overlay" ? Boolean(front.file || existingArt.front) : variantMockupsComplete);
+  const realPhotosComplete = !realPhotosEnabled || activeRealPhotoColors.every((color) => (
+    (realPhotosByColor[colorKey(color.name)]?.length ?? 0) > 0
+  ));
+  const imagesComplete = (mockupEnabled || realPhotosEnabled) && mockupComplete && realPhotosComplete && !videoUploadInProgress;
 
   useEffect(() => {
     if (!campaignAlert) return;
@@ -1031,6 +1069,71 @@ function Campaigns({ data }: { data: PanelData }) {
     setSizeModel("Comum");
     setSelectedModels({ Comum: true, Oversized: true });
     setFormError("");
+    setFormStep("information");
+    setProductConfiguration(null);
+    setCustomColorOpen(false);
+    setAdvancedArtOpen(false);
+    setDraftFeedback("");
+  }
+
+  function restoreCampaignDraft() {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(campaignDraftKey) ?? "null") as null | {
+        campaignName?: string;
+        campaignCodeInput?: string;
+        subtitle?: string;
+        pickup?: string;
+        representative?: string;
+        representativePhone?: string;
+        deadline?: string;
+        commonPrice?: string;
+        oversizedPrice?: string;
+        selectedModels?: Record<ShirtModelName, boolean>;
+        modelColors?: Record<ShirtModelName, ShirtColorName[]>;
+        modelSizes?: Record<ShirtModelName, SizeCode[]>;
+        campaignColorOptions?: ShirtColorOption[];
+      };
+      if (!saved) return;
+      if (saved.campaignName) setCampaignName(saved.campaignName);
+      setCampaignCodeInput(saved.campaignCodeInput ?? "");
+      setSubtitle(saved.subtitle ?? "");
+      if (saved.pickup) setPickup(saved.pickup);
+      setRepresentative(saved.representative ?? "");
+      setRepresentativePhone(saved.representativePhone ?? "");
+      setDeadline(saved.deadline ?? "");
+      if (saved.commonPrice) setCommonPrice(saved.commonPrice);
+      if (saved.oversizedPrice) setOversizedPrice(saved.oversizedPrice);
+      if (saved.selectedModels) setSelectedModels(saved.selectedModels);
+      if (saved.modelColors) setModelColors(saved.modelColors);
+      if (saved.modelSizes) setModelSizes(saved.modelSizes);
+      if (saved.campaignColorOptions) setCampaignColorOptions(mergeCampaignColors(shirtColors, saved.campaignColorOptions));
+      setDraftFeedback("Rascunho recuperado desta sessão. Os arquivos de imagem e vídeo precisam ser selecionados novamente.");
+    } catch {
+      sessionStorage.removeItem(campaignDraftKey);
+    }
+  }
+
+  function saveCampaignDraft() {
+    if (editing) {
+      setDraftFeedback("As alterações continuam nesta tela até você salvar a campanha.");
+      return;
+    }
+    sessionStorage.setItem(campaignDraftKey, JSON.stringify({
+      campaignName,
+      campaignCodeInput,
+      subtitle,
+      pickup,
+      representative,
+      representativePhone,
+      deadline,
+      commonPrice,
+      oversizedPrice,
+      selectedModels,
+      modelColors,
+      modelSizes,
+      campaignColorOptions,
+    }));
+    setDraftFeedback("Rascunho salvo nesta sessão. Imagens e vídeos continuam apenas nesta tela.");
   }
 
   function closeForm() {
@@ -1052,6 +1155,7 @@ function Campaigns({ data }: { data: PanelData }) {
     setOversizedPrice("69,90");
     setModelColors(defaultModelColorNames());
     setModelSizes(defaultModelSizes());
+    restoreCampaignDraft();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1662,9 +1766,155 @@ function Campaigns({ data }: { data: PanelData }) {
     }));
   }
 
+  function focusCampaignPanel() {
+    window.setTimeout(() => document.getElementById("campaign-create-title")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
+  function validateInformationStep() {
+    if (campaignName.trim().length < 5) {
+      setFormError("Informe um nome de campanha com pelo menos 5 caracteres.");
+      setFormStep("information");
+      focusCampaignPanel();
+      return false;
+    }
+    if (representative.trim().length < 3) {
+      setFormError("Informe o nome do representante da turma.");
+      setFormStep("information");
+      focusCampaignPanel();
+      return false;
+    }
+    if (representativePhone.replace(/\D/g, "").length < 10) {
+      setFormError("Informe um WhatsApp válido para o representante.");
+      setFormStep("information");
+      focusCampaignPanel();
+      return false;
+    }
+    if (!deadline) {
+      setFormError("Informe o prazo final dos pedidos.");
+      setFormStep("information");
+      focusCampaignPanel();
+      return false;
+    }
+    if (!pickup.trim()) {
+      setFormError("Informe como será feita a retirada dos pedidos.");
+      setFormStep("information");
+      focusCampaignPanel();
+      return false;
+    }
+    return true;
+  }
+
+  function validateProductsStep() {
+    if (variantsLocked) return true;
+    if (selectedCampaignModels.length === 0) {
+      setFormError("Selecione pelo menos um corte para a campanha.");
+      setFormStep("products");
+      focusCampaignPanel();
+      return false;
+    }
+    const modelWithoutPrice = selectedCampaignModels.find((model) => parseCampaignPrice(model.name === "Comum" ? commonPrice : oversizedPrice) <= 0);
+    if (modelWithoutPrice) {
+      setFormError(`Informe o preço do corte ${modelWithoutPrice.name === "Comum" ? "Padrão" : modelWithoutPrice.name}.`);
+      setFormStep("products");
+      setProductConfiguration(modelWithoutPrice.name);
+      focusCampaignPanel();
+      return false;
+    }
+    const modelWithoutColor = selectedCampaignModels.find((model) => modelColors[model.name].length === 0);
+    if (modelWithoutColor) {
+      setColorModel(modelWithoutColor.name);
+      setProductConfiguration(modelWithoutColor.name);
+      setColorError(`Selecione pelo menos uma cor para o corte ${modelWithoutColor.name === "Comum" ? "Padrão" : modelWithoutColor.name}.`);
+      setFormStep("products");
+      focusCampaignPanel();
+      return false;
+    }
+    const modelWithoutSize = selectedCampaignModels.find((model) => modelSizes[model.name].length === 0);
+    if (modelWithoutSize) {
+      setSizeModel(modelWithoutSize.name);
+      setProductConfiguration(modelWithoutSize.name);
+      setSizeError(`Selecione pelo menos um tamanho para o corte ${modelWithoutSize.name === "Comum" ? "Padrão" : modelWithoutSize.name}.`);
+      setFormStep("products");
+      focusCampaignPanel();
+      return false;
+    }
+    return true;
+  }
+
+  function validateImagesStep() {
+    if (!mockupEnabled && !realPhotosEnabled) {
+      setFormError("Escolha Mockup, Fotos reais ou Ambos.");
+      setFormStep("images");
+      focusCampaignPanel();
+      return false;
+    }
+    if (videoUploadInProgress) {
+      setArtError("Aguarde a conclusão do vídeo ou cancele o envio antes de continuar.");
+      setFormStep("images");
+      focusCampaignPanel();
+      return false;
+    }
+    if (mockupEnabled && artMode === "overlay" && !front.file && !existingArt.front) {
+      setArtError(editing?.artRenderMode === "legacy_mockup"
+        ? "Para converter esta campanha antiga, envie uma nova arte-base transparente de frente."
+        : "Envie a arte-base de frente antes de continuar.");
+      setFormStep("images");
+      focusCampaignPanel();
+      return false;
+    }
+    if (mockupEnabled && artMode === "variant_mockup" && !variantMockupsComplete) {
+      setArtError("Preencha pelo menos frente ou costas para cada combinação de corte e cor.");
+      setFormStep("images");
+      focusCampaignPanel();
+      return false;
+    }
+    if (realPhotosEnabled) {
+      const colorWithoutPhoto = activeRealPhotoColors.find((color) => !(realPhotosByColor[colorKey(color.name)]?.length));
+      if (colorWithoutPhoto) {
+        setArtError(`Envie pelo menos uma foto real para a cor ${colorWithoutPhoto.name}.`);
+        setFormStep("images");
+        focusCampaignPanel();
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function goToCampaignStep(next: CampaignFormStep) {
+    clearCampaignAlert();
+    const currentIndex = campaignFormSteps.findIndex((step) => step.id === formStep);
+    const nextIndex = campaignFormSteps.findIndex((step) => step.id === next);
+    if (nextIndex > currentIndex) {
+      if (currentIndex < 1 && !validateInformationStep()) return;
+      if (nextIndex > 1 && !validateProductsStep()) return;
+      if (nextIndex > 2 && !validateImagesStep()) return;
+    }
+    setFormStep(next);
+    setDraftFeedback("");
+    focusCampaignPanel();
+  }
+
+  function goToPreviousCampaignStep() {
+    const currentIndex = campaignFormSteps.findIndex((step) => step.id === formStep);
+    if (currentIndex > 0) goToCampaignStep(campaignFormSteps[currentIndex - 1].id);
+  }
+
+  function goToNextCampaignStep() {
+    const currentIndex = campaignFormSteps.findIndex((step) => step.id === formStep);
+    if (currentIndex < campaignFormSteps.length - 1) goToCampaignStep(campaignFormSteps[currentIndex + 1].id);
+  }
+
+  function chooseImagePresentation(modeName: "mockup" | "photos" | "both") {
+    setMockupEnabled(modeName !== "photos");
+    setRealPhotosEnabled(modeName !== "mockup");
+    setFormError("");
+    setArtError("");
+  }
+
   async function submitCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     clearCampaignAlert();
+    if (!validateInformationStep() || !validateProductsStep() || !validateImagesStep()) return;
     if (!mockupEnabled && !realPhotosEnabled) {
       setFormError("Ative o mockup, as fotos reais ou ambos.");
       return;
@@ -1756,6 +2006,7 @@ function Campaigns({ data }: { data: PanelData }) {
         realVideos,
         models: campaignModels(),
       });
+      sessionStorage.removeItem(campaignDraftKey);
       closeForm();
       reload();
       setShared({
@@ -1784,18 +2035,18 @@ function Campaigns({ data }: { data: PanelData }) {
         <p>{campaignAlert}</p>
         <button type="button" onClick={clearCampaignAlert} aria-label="Fechar aviso"><span className="material-symbols-rounded" aria-hidden="true">close</span></button>
       </div>}
-      <div className="section-actions">
+      {!creating && <div className="section-actions">
         <div><span className="kicker">Gestão</span><h2>Campanhas da camisaria</h2><p>Crie o acesso privado e acompanhe cada turma até a entrega.</p></div>
         <button className="primary-action" type="button" onClick={startCampaign}>Nova campanha<span className="material-symbols-rounded" aria-hidden="true">add</span></button>
-      </div>
+      </div>}
 
       {creating && (
-        <section className="campaign-create-panel" aria-labelledby="campaign-create-title">
+        <section className="campaign-create-panel campaign-create-panel--wizard" aria-labelledby="campaign-create-title">
           <header>
             <div>
               <span className="kicker">{editing ? "Editar campanha" : "Nova campanha"}</span>
-              <h3 id="campaign-create-title">{editing ? `Ajustar ${editing.code}.` : "Prepare o acesso da turma."}</h3>
-              <p>{editing ? "O link e o código já entregues à turma continuam valendo." : "Essas informações aparecem no link que será enviado ao representante."}</p>
+              <h3 id="campaign-create-title">{editing ? `Ajustar ${editing.code}` : "Configure a campanha"}</h3>
+              <p>{editing ? "O link e o código já entregues à turma continuam valendo." : "Preencha uma etapa de cada vez. Você poderá revisar tudo antes de publicar."}</p>
             </div>
             <button type="button" onClick={closeForm} aria-label="Fechar formulário"><span className="material-symbols-rounded" aria-hidden="true">close</span></button>
           </header>
@@ -1803,20 +2054,45 @@ function Campaigns({ data }: { data: PanelData }) {
             <p className="admin-loading" aria-live="polite"><span className="material-symbols-rounded" aria-hidden="true">progress_activity</span>Carregando a campanha...</p>
           ) : (
           <form onSubmit={submitCampaign} onInvalid={handleCampaignInvalid}>
+            <nav className="campaign-wizard-steps" aria-label="Etapas da campanha">
+              {campaignFormSteps.map((step, index) => {
+                const activeIndex = campaignFormSteps.findIndex((item) => item.id === formStep);
+                const stepComplete = step.id === "information" ? informationComplete : step.id === "products" ? productsComplete : step.id === "images" ? imagesComplete : false;
+                const complete = index < activeIndex && stepComplete;
+                return <button className={`${formStep === step.id ? "is-active" : ""} ${complete ? "is-complete" : ""}`} type="button" onClick={() => goToCampaignStep(step.id)} aria-current={formStep === step.id ? "step" : undefined} key={step.id}>
+                  <span>{complete && formStep !== step.id ? <span className="material-symbols-rounded" aria-hidden="true">check</span> : index + 1}</span>
+                  <span><strong>{step.label}</strong><small>{formStep === step.id ? "Em andamento" : complete ? "Concluído" : step.description}</small></span>
+                </button>;
+              })}
+            </nav>
             {variantsLocked && (
               <p className="campaign-locked-note" role="status">
                 <span className="material-symbols-rounded" aria-hidden="true">lock</span>
                 <span>Esta campanha está em <b>{phaseMeta[editing.phase].short}</b>. Preço, cores e tamanhos ficam travados a partir daqui, porque mudá-los com pedido pago no meio desalinha a produção e a cobrança. Título, prazo, retirada, representante e arte continuam editáveis.</span>
               </p>
             )}
-            <label className="campaign-field campaign-field--wide"><span>Nome da campanha</span><input value={campaignName} onChange={(event) => setCampaignName(event.target.value)} placeholder="Engenharia Civil — Turma 2026" minLength={5} required /></label>
-            <label className="campaign-field campaign-field--wide"><span>Subtítulo</span><input value={subtitle} onChange={(event) => setSubtitle(event.target.value)} placeholder="Campanha exclusiva para os alunos da turma" maxLength={255} /><small>Aparece abaixo do nome na página do aluno. Pode ficar vazio.</small></label>
-            <label className="campaign-field campaign-field--wide"><span>Código da campanha</span><input value={campaignCodeInput} onChange={(event) => setCampaignCodeInput(event.target.value.toUpperCase())} placeholder={suggestCode(campaignName)} autoCapitalize="characters" spellCheck={false} disabled={Boolean(editing)} /><small>{editing ? "O código não muda depois de criado: ele está no link e no QR Code que a turma já recebeu." : <>É o que o aluno digita para entrar. Deixe vazio para usar <b>{suggestCode(campaignName)}</b>.</>}</small></label>
-            <label className="campaign-field"><span>Representante da turma</span><input value={representative} onChange={(event) => setRepresentative(event.target.value)} placeholder="Nome do representante" minLength={3} required /></label>
-            <label className="campaign-field"><span>WhatsApp do representante</span><input type="tel" inputMode="tel" value={representativePhone} onChange={(event) => setRepresentativePhone(event.target.value)} placeholder="(98) 98888-1234" minLength={10} required /></label>
-            <label className="campaign-field"><span>Prazo final dos pedidos</span><input type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} required /></label>
-            <label className="campaign-field"><span>Instruções de retirada</span><input value={pickup} onChange={(event) => setPickup(event.target.value)} maxLength={255} required /></label>
+            <div className={`campaign-wizard-layout ${formStep === "images" ? "is-images-step" : ""}`}>
+              <main className="campaign-wizard-stage">
+                {formStep === "information" && <section className="campaign-step campaign-step--information" aria-labelledby="campaign-information-title">
+                  <header><span className="kicker">Etapa 1 de 4</span><h4 id="campaign-information-title">Informações da campanha</h4><p>Comece pelo que identifica a turma e orienta a retirada.</p></header>
+                  <div className="campaign-information-grid">
+                    <label className="campaign-field campaign-field--wide"><span>Nome da campanha</span><input value={campaignName} onChange={(event) => setCampaignName(event.target.value)} placeholder="Engenharia Civil — Turma 2026" minLength={5} required /></label>
+                    <label className="campaign-field"><span>Representante da turma</span><input value={representative} onChange={(event) => setRepresentative(event.target.value)} placeholder="Nome do representante" minLength={3} required /></label>
+                    <label className="campaign-field"><span>WhatsApp do representante</span><input type="tel" inputMode="tel" value={representativePhone} onChange={(event) => setRepresentativePhone(event.target.value)} placeholder="(98) 98888-1234" minLength={10} required /></label>
+                    <label className="campaign-field"><span>Prazo final dos pedidos</span><input type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} required /></label>
+                    <label className="campaign-field"><span>Instruções de retirada</span><input value={pickup} onChange={(event) => setPickup(event.target.value)} maxLength={255} required /></label>
+                  </div>
+                  <details className="campaign-advanced-details">
+                    <summary><span><strong>Opções avançadas</strong><small>Subtítulo e código de acesso</small></span><span className="material-symbols-rounded" aria-hidden="true">expand_more</span></summary>
+                    <div>
+                      <label className="campaign-field"><span>Subtítulo</span><input value={subtitle} onChange={(event) => setSubtitle(event.target.value)} placeholder="Campanha exclusiva para os alunos da turma" maxLength={255} /><small>Aparece abaixo do nome na página do aluno. Pode ficar vazio.</small></label>
+                      <label className="campaign-field"><span>Código da campanha</span><input value={campaignCodeInput} onChange={(event) => setCampaignCodeInput(event.target.value.toUpperCase())} placeholder={suggestCode(campaignName)} autoCapitalize="characters" spellCheck={false} disabled={Boolean(editing)} /><small>{editing ? "O código não muda depois de criado." : <>Deixe vazio para gerar automaticamente <b>{suggestCode(campaignName)}</b>.</>}</small></label>
+                    </div>
+                  </details>
+                </section>}
 
+                {formStep === "products" && <section className="campaign-step campaign-step--products" aria-labelledby="campaign-products-title">
+                  <header><span className="kicker">Etapa 2 de 4</span><h4 id="campaign-products-title">Produtos da campanha</h4><p>Escolha os cortes e depois ajuste cores e tamanhos de cada um.</p></header>
             <fieldset className="campaign-model-pricing" disabled={variantsLocked}><legend>Cortes e preços</legend><div>
               {shirtModels.map((model) => {
                 const selected = selectedModels[model.name];
@@ -1829,6 +2105,7 @@ function Campaigns({ data }: { data: PanelData }) {
                     <span><strong>{model.name === "Comum" ? "Padrão" : model.name}</strong><small>{model.description}</small></span>
                   </label>
                   <div className="campaign-price-field"><b>R$</b><input aria-label={`Preço do corte ${model.name}`} inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value)} required={selected} disabled={!selected || variantsLocked} /></div>
+                  {selected && <button className="campaign-product-configure" type="button" onClick={() => { setProductConfiguration(model.name); setColorModel(model.name); setSizeModel(model.name); }}>{productConfiguration === model.name ? "Configurando agora" : "Configurar cores e tamanhos"}<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>}
                 </article>;
               })}
             </div><small>Marque somente os cortes que a campanha oferecerá. {editing && !variantsLocked ? "Trocar o preço vale para os próximos pedidos; os já registrados guardam o valor da compra." : "O preço vale para todos os tamanhos do corte, inclusive os baby look."}</small></fieldset>
@@ -1844,13 +2121,13 @@ function Campaigns({ data }: { data: PanelData }) {
                   return <label className={checked ? "is-selected" : ""} key={color.name}><input type="checkbox" checked={checked} onChange={() => toggleCampaignColor(colorModel, color.name)} /><i style={{ backgroundColor: color.hex }} /><span>{color.name}</span><span className="material-symbols-rounded" aria-hidden="true">check</span></label>;
                 })}
               </div>
-              <div className="campaign-custom-color">
-                <div className="campaign-custom-color-heading"><span className="material-symbols-rounded" aria-hidden="true">add_circle</span><div><strong>Adicionar cor personalizada</strong><small>Ela será selecionada automaticamente para o corte {colorModel}.</small></div></div>
-                <div className="campaign-custom-color-fields">
+              <div className={`campaign-custom-color ${customColorOpen ? "is-open" : ""}`}>
+                <button className="campaign-custom-color-heading" type="button" onClick={() => setCustomColorOpen((current) => !current)} aria-expanded={customColorOpen}><span className="material-symbols-rounded" aria-hidden="true">add_circle</span><span><strong>Adicionar cor personalizada</strong><small>Nome e código HEX para uma cor exclusiva.</small></span><span className="material-symbols-rounded" aria-hidden="true">expand_more</span></button>
+                {customColorOpen && <div className="campaign-custom-color-fields">
                   <label><span>Nome da cor</span><input value={customColorName} onChange={(event) => { setCustomColorName(event.target.value); setColorError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomCampaignColor(); } }} placeholder="Ex.: Lilás lavanda" maxLength={80} /></label>
                   <label><span>Código HEX</span><div className="campaign-custom-hex"><input type="color" aria-label="Selecionar cor personalizada" value={validHexColor(customColorHex) ? customColorHex : "#808080"} onChange={(event) => { setCustomColorHex(event.target.value.toUpperCase()); setColorError(""); }} /><input aria-label="Código HEX da cor personalizada" value={customColorHex} onChange={(event) => { setCustomColorHex(event.target.value.toUpperCase()); setColorError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomCampaignColor(); } }} placeholder="#8B5CF6" maxLength={7} spellCheck={false} /></div></label>
                   <button type="button" onClick={addCustomCampaignColor}><span className="material-symbols-rounded" aria-hidden="true">add</span>Adicionar cor</button>
-                </div>
+                </div>}
                 {campaignColorOptions.some((color) => !shirtColors.some((standard) => colorKey(standard.name) === colorKey(color.name))) && (
                   <div className="campaign-custom-color-list" aria-label="Cores personalizadas desta campanha">
                     {campaignColorOptions.filter((color) => !shirtColors.some((standard) => colorKey(standard.name) === colorKey(color.name))).map((color) => <div key={color.name}><i style={{ backgroundColor: color.hex }} /><span><strong>{color.name}</strong><small>{color.hex.toUpperCase()}</small></span><button type="button" onClick={() => removeCustomCampaignColor(color.name)} aria-label={`Remover a cor personalizada ${color.name}`}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></div>)}
@@ -1887,11 +2164,15 @@ function Campaigns({ data }: { data: PanelData }) {
               })}
               <p className="campaign-size-summary"><span className="material-symbols-rounded" aria-hidden="true">straighten</span><strong>{modelSizes[sizeModel].length}</strong> {modelSizes[sizeModel].length === 1 ? "tamanho liberado" : "tamanhos liberados"} para {sizeModel === "Comum" ? "Padrão" : sizeModel}.</p>
             </fieldset>
+                </section>}
 
-            <fieldset className="campaign-visual-options"><legend>Exibição das imagens</legend>
-              <p>Escolha pelo menos uma opção antes de criar ou salvar a campanha.</p>
-              <div>
-                <label><span><strong>Usar mockup</strong><small>Montagem do site ou mockup individual.</small></span><input type="checkbox" role="switch" checked={mockupEnabled} onChange={(event) => { setMockupEnabled(event.target.checked); setFormError(""); }} /><i aria-hidden="true" /></label>
+                {formStep === "images" && <section className="campaign-step campaign-step--images" aria-labelledby="campaign-images-title">
+                  <header><span className="kicker">Etapa 3 de 4</span><h4 id="campaign-images-title">Imagens da campanha</h4><p>Escolha como a camisa será apresentada e prepare a arte.</p></header>
+            <fieldset className="campaign-image-presentation"><legend>Como deseja apresentar as camisas?</legend>
+              <div role="group" aria-label="Forma de apresentação das camisas">
+                <button className={mockupEnabled && !realPhotosEnabled ? "is-active" : ""} type="button" onClick={() => chooseImagePresentation("mockup")}><span className="material-symbols-rounded" aria-hidden="true">checkroom</span><span><strong>Mockup</strong><small>Monte a estampa sobre a camisa.</small></span></button>
+                <button className={!mockupEnabled && realPhotosEnabled ? "is-active" : ""} type="button" onClick={() => chooseImagePresentation("photos")}><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span><span><strong>Fotos reais</strong><small>Galeria e vídeo por cor.</small></span></button>
+                <button className={mockupEnabled && realPhotosEnabled ? "is-active" : ""} type="button" onClick={() => chooseImagePresentation("both")}><span className="material-symbols-rounded" aria-hidden="true">collections</span><span><strong>Ambos</strong><small>Mockup, fotos e vídeo juntos.</small></span></button>
               </div>
             </fieldset>
 
@@ -1928,11 +2209,13 @@ function Campaigns({ data }: { data: PanelData }) {
                     </div>
                   )}
 
-                  {(previewArtwork.front || previewArtwork.back) && (
+                  <div className="campaign-art-editor-grid">
+                  {(artMode === "overlay" || previewArtwork.front || previewArtwork.back) && (
                     <section className="campaign-artwork-composer-preview" aria-label="Prévia da camisa">
-                      <header><div><strong>{artMode === "overlay" ? "Editor da arte" : "Prévia do mockup"}</strong><small>{artScope === "base" ? "Arte-base" : `${previewModel === "Comum" ? "Padrão" : previewModel} · ${previewColor.name}`}</small></div><div role="group" aria-label="Lado da prévia"><button className={artPreviewSide === "front" ? "is-active" : ""} type="button" disabled={!previewArtwork.front} onClick={() => setArtPreviewSide("front")}>Frente</button><button className={artPreviewSide === "back" ? "is-active" : ""} type="button" disabled={!previewArtwork.back} onClick={() => setArtPreviewSide("back")}>Costas</button></div></header>
+                      <header><div><strong>{artMode === "overlay" ? "Editor da arte" : "Prévia do mockup"}</strong><small>{artScope === "base" ? "Arte-base" : `${previewModel === "Comum" ? "Padrão" : previewModel} · ${previewColor.name}`}</small></div><div role="group" aria-label="Lado da prévia"><button className={artPreviewSide === "front" ? "is-active" : ""} type="button" disabled={artMode !== "overlay" && !previewArtwork.front} onClick={() => setArtPreviewSide("front")}>Frente</button><button className={artPreviewSide === "back" ? "is-active" : ""} type="button" disabled={artMode !== "overlay" && !previewArtwork.back} onClick={() => setArtPreviewSide("back")}>Costas</button></div></header>
                       <div className="campaign-art-canvas"><ShirtMockupPreview model={previewModel} color={previewColor} art={previewArt} artwork={previewArtwork} side={artPreviewSide} interactive={artMode === "overlay"} onPointerDown={startArtworkDrag} label={`Prévia ${previewModel === "Comum" ? "Padrão" : previewModel}, ${previewColor.name}, ${artPreviewSide === "front" ? "frente" : "costas"}`} /></div>
-                      {artMode === "overlay" && previewArtwork[artPreviewSide] && (
+                      {artMode === "overlay" && previewArtwork[artPreviewSide] && <button className="campaign-art-advanced-toggle" type="button" onClick={() => setAdvancedArtOpen((current) => !current)} aria-expanded={advancedArtOpen}><span className="material-symbols-rounded" aria-hidden="true">tune</span>{advancedArtOpen ? "Ocultar ajustes avançados" : "Ajustar posição e tamanho"}</button>}
+                      {artMode === "overlay" && previewArtwork[artPreviewSide] && advancedArtOpen && (
                         <div className="campaign-art-controls">
                           <label><span>Posição horizontal</span><input type="range" min="-100" max="100" step="1" value={activeTransform.x} onChange={(event) => setCurrentTransform({ ...activeTransform, x: Number(event.target.value) })} /><output>{Math.round(activeTransform.x)}%</output></label>
                           <label><span>Posição vertical</span><input type="range" min="-100" max="100" step="1" value={activeTransform.y} onChange={(event) => setCurrentTransform({ ...activeTransform, y: Number(event.target.value) })} /><output>{Math.round(activeTransform.y)}%</output></label>
@@ -1966,18 +2249,13 @@ function Campaigns({ data }: { data: PanelData }) {
                       );
                     })}
                   </div>
+                  </div>
                   {artMode === "overlay" && artScope === "base" && (back.preview || existingArt.back) && <button className="campaign-artwork-remove" type="button" onClick={removeBackArt}><span className="material-symbols-rounded" aria-hidden="true">delete</span>Remover a arte-base de costas</button>}
                   {artMode === "overlay" && artScope === "variant" && <button className="campaign-art-inherit" type="button" onClick={restoreVariantInheritance}><span className="material-symbols-rounded" aria-hidden="true">link</span>Restaurar herança da arte-base</button>}
                   {artMode === "variant_mockup" && <p className="campaign-artwork-status"><span className="material-symbols-rounded" aria-hidden="true">checklist</span>{activeVariantCombinations.filter((item) => { const saved = variantArts[item.key]?.variant_mockup; return saved?.front.source === "custom" || saved?.back.source === "custom"; }).length} de {activeVariantCombinations.length} combinações preenchidas.</p>}
                 </>
               )}
             </fieldset>}
-
-            <fieldset className="campaign-visual-options campaign-visual-options--secondary"><legend className="sr-only">Exibição das fotos reais</legend>
-              <div>
-                <label><span><strong>Usar fotos reais</strong><small>Galeria enviada para cada cor.</small></span><input type="checkbox" role="switch" checked={realPhotosEnabled} onChange={(event) => { setRealPhotosEnabled(event.target.checked); setFormError(""); }} /><i aria-hidden="true" /></label>
-              </div>
-            </fieldset>
 
             {realPhotosEnabled && <fieldset className="campaign-real-photos"><legend>Fotos reais por cor</legend>
               <div className="campaign-artwork-guidance"><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span><div><strong>Galeria opcional da camisa pronta</strong><p>Envie até <b>seis fotos por cor</b> em PNG, JPG ou WEBP, com no máximo <b>2 MB cada</b>. Você também pode incluir <b>um MP4 de até 15 segundos e 10 MB</b>; cada cor continua exigindo pelo menos uma foto.</p></div></div>
@@ -2004,26 +2282,54 @@ function Campaigns({ data }: { data: PanelData }) {
                 })}
               </div>
             </fieldset>}
+                </section>}
 
-            <div className="campaign-create-actions">
-              <button className="outline-action" type="button" onClick={closeForm}>Cancelar</button>
-              <button className="primary-action" type="submit" disabled={submitting || videoUploadInProgress || (!mockupEnabled && !realPhotosEnabled)} title={videoUploadInProgress ? "Aguarde ou cancele o envio do vídeo." : !mockupEnabled && !realPhotosEnabled ? "Ative o mockup ou as fotos reais para salvar a campanha." : undefined}>
-                {submitting
-                  ? (editing ? "Salvando..." : "Enviando arte e criando...")
-                  : (editing ? "Salvar alterações" : "Criar campanha e gerar acesso")}
-                <span className="material-symbols-rounded" aria-hidden="true">{editing ? "check" : "arrow_forward"}</span>
-              </button>
+                {formStep === "review" && <section className="campaign-step campaign-step--review" aria-labelledby="campaign-review-title">
+                  <header><span className="kicker">Etapa 4 de 4</span><h4 id="campaign-review-title">Revise antes de publicar</h4><p>Confira os principais dados. Você pode voltar a qualquer etapa para ajustar.</p></header>
+                  <div className="campaign-review-grid">
+                    <article><span className="material-symbols-rounded" aria-hidden="true">campaign</span><div><small>Campanha</small><strong>{campaignName || "Nome ainda não informado"}</strong><p>{representative || "Representante não informado"} · {deadline ? formatDeadline(new Date(`${deadline}T23:59:59`).toISOString()) : "Prazo não informado"}</p></div><button type="button" onClick={() => goToCampaignStep("information")}>Editar</button></article>
+                    <article><span className="material-symbols-rounded" aria-hidden="true">checkroom</span><div><small>Produtos</small><strong>{selectedCampaignModels.map((model) => model.name === "Comum" ? "Padrão" : model.name).join(" e ") || "Nenhum corte"}</strong><p>{summaryColorCount} {summaryColorCount === 1 ? "cor" : "cores"} · {summarySizeCount} {summarySizeCount === 1 ? "tamanho" : "tamanhos"}</p></div><button type="button" onClick={() => goToCampaignStep("products")}>Editar</button></article>
+                    <article><span className="material-symbols-rounded" aria-hidden="true">image</span><div><small>Apresentação</small><strong>{mockupEnabled && realPhotosEnabled ? "Mockup e fotos reais" : mockupEnabled ? "Mockup" : realPhotosEnabled ? "Fotos reais" : "Não configurada"}</strong><p>{realPhotosEnabled ? "Fotos e vídeo MP4 disponíveis por cor" : "Arte preparada para o mockup"}</p></div><button type="button" onClick={() => goToCampaignStep("images")}>Editar</button></article>
+                  </div>
+                  <div className="campaign-review-ready"><span className="material-symbols-rounded" aria-hidden="true">verified</span><div><strong>{editing ? "Tudo pronto para salvar" : "Tudo pronto para publicar"}</strong><p>{editing ? "As alterações serão aplicadas mantendo o mesmo link e código." : "O link privado e o código de acesso serão gerados após a publicação."}</p></div></div>
+                </section>}
+              </main>
+
+              <aside className="campaign-summary-card" aria-label="Resumo da campanha">
+                <header><span className="material-symbols-rounded" aria-hidden="true">summarize</span><strong>Resumo da campanha</strong></header>
+                <div className="campaign-summary-name"><small>Nome</small><strong>{campaignName || "Nova campanha"}</strong><span>{campaignCodeInput || (campaignName ? suggestCode(campaignName) : "Código automático")}</span></div>
+                <dl>
+                  <div><dt><span className="material-symbols-rounded" aria-hidden="true">checkroom</span>Cortes</dt><dd>{selectedCampaignModels.length || "—"}</dd></div>
+                  <div><dt><span className="material-symbols-rounded" aria-hidden="true">palette</span>Cores</dt><dd>{summaryColorCount || "—"}</dd></div>
+                  <div><dt><span className="material-symbols-rounded" aria-hidden="true">straighten</span>Tamanhos</dt><dd>{summarySizeCount || "—"}</dd></div>
+                  <div><dt><span className="material-symbols-rounded" aria-hidden="true">image</span>Imagens</dt><dd>{mockupEnabled && realPhotosEnabled ? "Ambos" : mockupEnabled ? "Mockup" : realPhotosEnabled ? "Fotos" : "—"}</dd></div>
+                </dl>
+                <div className="campaign-summary-status"><span className={`material-symbols-rounded ${informationComplete && productsComplete && imagesComplete ? "is-ready" : ""}`} aria-hidden="true">{informationComplete && productsComplete && imagesComplete ? "check_circle" : "pending"}</span><span><strong>{informationComplete && productsComplete && imagesComplete ? "Configuração completa" : "Campanha em preparação"}</strong><small>{formStep === "review" ? "Pronta para a confirmação final" : `Etapa ${campaignFormSteps.findIndex((step) => step.id === formStep) + 1} de 4`}</small></span></div>
+                <button type="button" onClick={saveCampaignDraft}><span className="material-symbols-rounded" aria-hidden="true">save</span>Salvar rascunho</button>
+                {draftFeedback && <p role="status">{draftFeedback}</p>}
+              </aside>
             </div>
+
+            <footer className="campaign-create-actions campaign-wizard-actions">
+              <button className="campaign-action-cancel" type="button" onClick={closeForm}>Cancelar</button>
+              <div>
+                {formStep !== "information" && <button className="outline-action" type="button" onClick={goToPreviousCampaignStep}><span className="material-symbols-rounded" aria-hidden="true">arrow_back</span>Voltar</button>}
+                {formStep !== "review" ? <button className="primary-action" type="button" onClick={goToNextCampaignStep}>Continuar<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button> : <button className="primary-action" type="submit" disabled={submitting || videoUploadInProgress || (!mockupEnabled && !realPhotosEnabled)} title={videoUploadInProgress ? "Aguarde ou cancele o envio do vídeo." : !mockupEnabled && !realPhotosEnabled ? "Ative o mockup ou as fotos reais para salvar a campanha." : undefined}>
+                  {submitting ? (editing ? "Salvando..." : "Publicando...") : (editing ? "Salvar alterações" : "Publicar campanha")}
+                  <span className="material-symbols-rounded" aria-hidden="true">{editing ? "check" : "rocket_launch"}</span>
+                </button>}
+              </div>
+            </footer>
           </form>
           )}
         </section>
       )}
 
-      {notice && <p className="campaign-notice" role="status"><span className="material-symbols-rounded" aria-hidden="true">check_circle</span>{notice}</p>}
+      {!creating && notice && <p className="campaign-notice" role="status"><span className="material-symbols-rounded" aria-hidden="true">check_circle</span>{notice}</p>}
 
-      {shared && <CampaignSharePanel campaign={shared} onClose={() => setShared(null)} />}
+      {!creating && shared && <CampaignSharePanel campaign={shared} onClose={() => setShared(null)} />}
 
-      <section className="campaign-management" aria-label="Campanhas cadastradas">
+      {!creating && <section className="campaign-management" aria-label="Campanhas cadastradas">
         <div className="campaign-management-toolbar">
           <div className="campaign-filters" role="group" aria-label="Filtrar campanhas">
             <button className={phaseFilter === "all" ? "is-active" : ""} type="button" onClick={() => setPhaseFilter("all")}>Todas<span>{campaigns.length}</span></button>
@@ -2068,7 +2374,7 @@ function Campaigns({ data }: { data: PanelData }) {
             </section>
           )}
         </div>
-      </section>
+      </section>}
     </div>
   );
 }
