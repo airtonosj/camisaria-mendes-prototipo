@@ -69,6 +69,9 @@ o backup em um banco separado, valide a contagem e só então faça a troca cont
 `manifest.json` com tamanho e SHA-256. Os triggers ficam separados para evitar dumps
 incompatíveis entre clientes MySQL e MariaDB. A pasta só recebe o nome definitivo quando todas as
 etapas terminam. Snapshots antigos são removidos apenas após um backup novo bem-sucedido.
+Imagens e vídeos MP4 entram no inventário e na restauração; arquivos temporários `.part`
+e a pasta `.tmp` ficam fora do snapshot. Planeje até `10 MB × quantidade de cores com vídeo`
+por campanha, além das fotos, e acompanhe o espaço livre antes de liberar novas turmas.
 
 Teste de restauração, sempre em banco separado:
 
@@ -77,8 +80,8 @@ mysql -u camisaria_migrator -p -e "CREATE DATABASE camisaria_restore_test CHARAC
 mysql -u camisaria_migrator -p camisaria_restore_test < /var/backups/camisaria-mendes/<snapshot>/database.sql
 ```
 
-Compare campanhas, pedidos, pagamentos e usuários com a origem. Para uploads, copie o
-snapshot para uma pasta temporária e confirme que as URLs de arte retornam HTTP 200 antes
+Compare campanhas, vídeos, pedidos, pagamentos e usuários com a origem. Para uploads, copie o
+snapshot para uma pasta temporária e confirme que as URLs de arte e vídeo retornam HTTP 200 antes
 de substituir qualquer diretório ativo.
 
 O comando automatizado recusa banco existente e exige o sufixo `_restore_test`:

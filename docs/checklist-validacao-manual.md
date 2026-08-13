@@ -124,6 +124,10 @@ no banco de teste; em produção, use somente uma campanha de piloto identificad
 | ADM-09 | Alterar preço e criar novo pedido | Novo pedido usa o preço novo; pedido antigo mantém o preço original | ☐ OK ☐ Ajustar ☐ Bloqueia |
 | ADM-10 | Remover tamanho que já possui pedido | Operação é bloqueada e informa o conflito | ☐ OK ☐ Ajustar ☐ Bloqueia |
 | ADM-11 | Copiar código/link e abrir QR | Os três acessos apontam para a mesma campanha | ☐ OK ☐ Ajustar ☐ Bloqueia |
+| ADM-12 | Enviar MP4 válido por cor | Progresso, capa, duração, tamanho e remoção aparecem no painel | ☐ OK ☐ Ajustar ☐ Bloqueia |
+| ADM-13 | Enviar MP4 falso, maior que 10 MB ou acima de 15 s | Upload é recusado sem deixar `.part` | ☐ OK ☐ Ajustar ☐ Bloqueia |
+| ADM-14 | Abrir galeria no Chrome, Android e Safari/iPhone | Vídeo fica após a primeira foto, sem autoplay, com seek e tela cheia | ☐ OK ☐ Ajustar ☐ Bloqueia |
+| ADM-15 | Trocar cor, modelo ou miniatura durante o vídeo | Reprodução anterior é pausada | ☐ OK ☐ Ajustar ☐ Bloqueia |
 
 ## 9. Pedidos, fases e cancelamento
 

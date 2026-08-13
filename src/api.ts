@@ -41,6 +41,7 @@ type ApiCampaignVariant = {
 };
 
 export type CampaignRealPhotoConfig = { colorName: string; urls: string[] };
+export type CampaignRealVideoConfig = { colorName: string; url: string; posterUrl?: string | null; durationSeconds?: number | null; bytes: number };
 export type CampaignPresentationConfig = { mockupEnabled: boolean; realPhotosEnabled: boolean };
 
 type ApiCampaignSize = {
@@ -71,6 +72,7 @@ export type ApiCampaign = {
     };
   };
   realPhotos?: CampaignRealPhotoConfig[];
+  realVideos?: CampaignRealVideoConfig[];
   variants: ApiCampaignVariant[];
   sizes: ApiCampaignSize[];
 };
@@ -181,6 +183,7 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
   const variantIds: NonNullable<PrivateCampaign["variantIds"]> = {};
   const variantArtworks: NonNullable<PrivateCampaign["variantArtworks"]> = {};
   const realPhotos: NonNullable<PrivateCampaign["realPhotos"]> = {};
+  const realVideos: NonNullable<PrivateCampaign["realVideos"]> = {};
   const models: ShirtModelName[] = [];
 
   for (const model of shirtModels) {
@@ -211,6 +214,14 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
   for (const gallery of campaign.realPhotos ?? []) {
     realPhotos[gallery.colorName] = gallery.urls.map((url) => assetUrl(url) ?? url);
   }
+  for (const video of campaign.realVideos ?? []) {
+    realVideos[video.colorName] = {
+      url: assetUrl(video.url) ?? video.url,
+      posterUrl: assetUrl(video.posterUrl ?? null) ?? undefined,
+      durationSeconds: video.durationSeconds ?? undefined,
+      bytes: video.bytes,
+    };
+  }
 
   const deadline = new Date(campaign.deadlineAt);
   return {
@@ -237,6 +248,7 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
     variantIds,
     variantArtworks,
     realPhotos,
+    realVideos,
     presentation: campaign.presentationConfig ?? { mockupEnabled: true, realPhotosEnabled: false },
   };
 }
@@ -476,6 +488,7 @@ export type CreateCampaignPayload = {
   artworkConfig?: CampaignArtworkConfig;
   presentationConfig: CampaignPresentationConfig;
   realPhotos?: CampaignRealPhotoConfig[];
+  realVideos?: CampaignRealVideoConfig[];
   models: CampaignModelPayload[];
 };
 
@@ -495,6 +508,7 @@ export type UpdateCampaignPayload = {
   artworkConfig?: CampaignArtworkConfig;
   presentationConfig?: CampaignPresentationConfig;
   realPhotos?: CampaignRealPhotoConfig[];
+  realVideos?: CampaignRealVideoConfig[];
   models?: CampaignModelPayload[];
 };
 
@@ -518,6 +532,40 @@ export async function uploadCampaignArt(file: File) {
     30000,
   );
   return payload.url;
+}
+
+/** XMLHttpRequest mantém o progresso real do corpo binário e permite cancelar o envio. */
+export function uploadCampaignVideo(
+  file: File,
+  options: { onProgress?: (sent: number, total: number) => void; signal?: AbortSignal } = {},
+) {
+  const token = staffToken();
+  if (!token) return Promise.reject(new ApiRequestError(401, "NO_SESSION", "Faça login para acessar o painel."));
+  return new Promise<{ url: string; bytes: number }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    xhr.open("POST", `${apiBase()}/admin/video-uploads`);
+    xhr.timeout = 60000;
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("Content-Type", "video/mp4");
+    xhr.upload.onprogress = (event) => options.onProgress?.(event.loaded, event.lengthComputable ? event.total : file.size);
+    xhr.onload = () => {
+      options.signal?.removeEventListener("abort", abort);
+      let payload: { url?: string; bytes?: number; error?: { code?: string; message?: string } } = {};
+      try { payload = JSON.parse(xhr.responseText || "{}"); } catch { /* resposta inválida */ }
+      if (xhr.status >= 200 && xhr.status < 300 && payload.url && typeof payload.bytes === "number") {
+        resolve({ url: payload.url, bytes: payload.bytes });
+      } else {
+        reject(new ApiRequestError(xhr.status, payload.error?.code ?? "VIDEO_UPLOAD_FAILED", payload.error?.message ?? "Não foi possível enviar o vídeo."));
+      }
+    };
+    xhr.onerror = () => reject(new ApiRequestError(0, "API_UNAVAILABLE", "Não foi possível conectar ao servidor."));
+    xhr.ontimeout = () => reject(new ApiRequestError(0, "VIDEO_UPLOAD_TIMEOUT", "O envio do vídeo excedeu o tempo limite."));
+    xhr.onabort = () => reject(new ApiRequestError(0, "VIDEO_UPLOAD_CANCELLED", "Envio cancelado."));
+    if (options.signal?.aborted) return abort();
+    options.signal?.addEventListener("abort", abort, { once: true });
+    xhr.send(file);
+  });
 }
 
 export async function createCampaignInApi(input: CreateCampaignPayload) {

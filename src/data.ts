@@ -66,6 +66,8 @@ export type PrivateCampaign = {
   variantArtworks?: Record<number, VariantArtwork>;
   /** Galeria opcional de fotos reais, compartilhada entre os cortes que usam a cor. */
   realPhotos?: Partial<Record<ShirtColorName, string[]>>;
+  /** Vídeo opcional da galeria, no máximo um por cor. */
+  realVideos?: Partial<Record<ShirtColorName, { url: string; posterUrl?: string; durationSeconds?: number; bytes: number }>>;
   presentation?: { mockupEnabled: boolean; realPhotosEnabled: boolean };
 };
 

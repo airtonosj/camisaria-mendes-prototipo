@@ -71,7 +71,8 @@ Invoke-RestMethod http://127.0.0.1:3333/api/health
 | `POST` | `/api/payments/infinitepay/webhook` | Persistir notificação idempotente do provedor |
 | `POST` | `/api/payments/infinitepay/reconcile` | Agendar `payment_check` a partir do retorno do navegador |
 | `POST` | `/api/admin/uploads` | Enviar a arte da campanha e receber a URL |
-| `GET` | `/uploads/:arquivo` | Servir a arte enviada |
+| `POST` | `/api/admin/video-uploads` | Enviar MP4 administrativo por streaming |
+| `GET/HEAD` | `/uploads/:arquivo` | Servir imagem ou MP4; vídeo aceita `Range` |
 | `GET/POST` | `/api/admin/campaigns` | Listar ou criar campanhas persistentes |
 | `PATCH` | `/api/admin/campaigns/:codigo/phase` | Avançar ou retornar a campanha |
 | `GET` | `/api/admin/campaigns/:codigo/orders` | Listar os pedidos de uma campanha |
@@ -166,6 +167,12 @@ A resposta traz `{ "url": "/uploads/<uuid>.png" }`. Aceita `PNG`, `JPG` e `WEBP`
 `2 MB`, confere a assinatura do arquivo antes de gravar e serve de volta com
 `X-Content-Type-Options: nosniff`. Em desenvolvimento o padrão é `uploads/`; em produção,
 `UPLOADS_DIR` precisa apontar para armazenamento persistente fora da árvore do projeto.
+
+Vídeos usam `POST /api/admin/video-uploads`, corpo binário `video/mp4`, limite de `10 MB`
+e arquivo temporário `.tmp/<uuid>.part`. O servidor confere `Content-Length` quando existe,
+grava cada bloco diretamente no disco, valida a assinatura `ftyp` e só então renomeia para
+`<uuid>.mp4`. A duração máxima de `15 segundos` e a reprodução são validadas no navegador;
+o player público usa `HEAD`, `Range`, `206 Partial Content` e `416` para faixas inválidas.
 
 ## Exemplos de corpo
 

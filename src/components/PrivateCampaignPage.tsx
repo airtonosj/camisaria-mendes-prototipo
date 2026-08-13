@@ -7,6 +7,13 @@ import { Brand } from "./Brand";
 import { ShirtMockupPreview } from "./ShirtMockupPreview";
 
 type CampaignStep = "model" | "details" | "payment" | "received";
+type GalleryMedia = { type: "image"; url: string } | { type: "video"; url: string; posterUrl?: string; durationSeconds?: number };
+
+function videoDurationLabel(seconds?: number) {
+  if (!seconds || !Number.isFinite(seconds)) return "Vídeo";
+  const rounded = Math.max(0, Math.round(seconds));
+  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
+}
 
 type CartItem = {
   variantId: number;
@@ -299,6 +306,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [simulated, setSimulated] = useState(false);
   const idempotency = useRef({ signature: "", key: "" });
+  const galleryVideo = useRef<HTMLVideoElement | null>(null);
   const availableModels = useMemo(() => campaignModels(campaign), [campaign]);
 
   /**
@@ -352,6 +360,15 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   const selectedVariantId = campaign.variantIds?.[activeModel]?.[selectedColor.name] ?? 0;
   const selectedArtwork = artworkForVariant(campaign, selectedVariantId);
   const selectedRealPhotos = campaign.realPhotos?.[selectedColor.name] ?? [];
+  const selectedRealVideo = campaign.realVideos?.[selectedColor.name];
+  const selectedGalleryMedia: GalleryMedia[] = selectedRealPhotos.map((url) => ({ type: "image", url }));
+  if (selectedRealVideo) selectedGalleryMedia.splice(Math.min(1, selectedGalleryMedia.length), 0, {
+    type: "video",
+    url: selectedRealVideo.url,
+    posterUrl: selectedRealVideo.posterUrl,
+    durationSeconds: selectedRealVideo.durationSeconds,
+  });
+  const selectedMedia = selectedGalleryMedia[realPhotoIndex] ?? selectedGalleryMedia[0];
   const canShowBack = Boolean(selectedArtwork.back);
   const unitPriceCents = Math.round(campaign.prices[activeModel] * 100);
   const cartTotal = cart.reduce((total, item) => total + item.unitPriceCents * item.quantity, 0);
@@ -364,8 +381,10 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   useEffect(() => {
     setRealPhotoIndex(0);
     if (!mockupEnabled) setPreviewMode("real");
-    else if (!realPhotosEnabled || !selectedRealPhotos.length) setPreviewMode("mockup");
-  }, [selectedColor.name, selectedRealPhotos.length, mockupEnabled, realPhotosEnabled]);
+    else if (!realPhotosEnabled || !selectedGalleryMedia.length) setPreviewMode("mockup");
+  }, [selectedColor.name, selectedGalleryMedia.length, mockupEnabled, realPhotosEnabled]);
+
+  useEffect(() => () => { galleryVideo.current?.pause(); }, [selectedColor.name, activeModel, realPhotoIndex, previewMode]);
 
   function selectModel(nextModel: ShirtModelName) {
     setModel(nextModel);
@@ -501,11 +520,13 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
           </section>
           <form className="campaign-configurator" onSubmit={submitConfiguration}>
             <section className="campaign-art-stage">
-              {mockupEnabled && realPhotosEnabled && selectedRealPhotos.length > 0 && <div className="campaign-visual-switch" role="group" aria-label="Tipo de visualizacao da camisa"><button className={previewMode === "mockup" ? "is-active" : ""} type="button" aria-pressed={previewMode === "mockup"} onClick={() => setPreviewMode("mockup")}><span className="material-symbols-rounded" aria-hidden="true">checkroom</span>Mockup</button><button className={previewMode === "real" ? "is-active" : ""} type="button" aria-pressed={previewMode === "real"} onClick={() => setPreviewMode("real")}><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span>Fotos reais</button></div>}
+              {mockupEnabled && realPhotosEnabled && selectedGalleryMedia.length > 0 && <div className="campaign-visual-switch" role="group" aria-label="Tipo de visualizacao da camisa"><button className={previewMode === "mockup" ? "is-active" : ""} type="button" aria-pressed={previewMode === "mockup"} onClick={() => setPreviewMode("mockup")}><span className="material-symbols-rounded" aria-hidden="true">checkroom</span>Mockup</button><button className={previewMode === "real" ? "is-active" : ""} type="button" aria-pressed={previewMode === "real"} onClick={() => setPreviewMode("real")}><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span>Fotos e vídeo</button></div>}
               {previewMode === "mockup" && (selectedArtwork.front && selectedArtwork.back || canShowBack && !selectedArtwork.front) && <div className="campaign-side-switch" role="group" aria-label="Visualizar lado da camiseta"><button className={previewSide === "front" ? "is-active" : ""} type="button" disabled={!selectedArtwork.front} aria-pressed={previewSide === "front"} onClick={() => setPreviewSide("front")}>Frente</button><button className={previewSide === "back" ? "is-active" : ""} type="button" disabled={!selectedArtwork.back} aria-pressed={previewSide === "back"} onClick={() => setPreviewSide("back")}>Costas</button></div>}
               <div className="campaign-art-viewer">
-                {previewMode === "real" && selectedRealPhotos.length > 0 ? (
-                  <img className="campaign-real-photo-main" src={selectedRealPhotos[realPhotoIndex] ?? selectedRealPhotos[0]} alt={`Foto real da camisa ${selectedColor.name}, imagem ${realPhotoIndex + 1}`} />
+                {previewMode === "real" && selectedMedia ? selectedMedia.type === "video" ? (
+                  <video ref={galleryVideo} className="campaign-real-photo-main campaign-real-video-main" src={selectedMedia.url} poster={selectedMedia.posterUrl} controls playsInline preload="metadata" aria-label={`Vídeo real da camisa ${selectedColor.name}`} />
+                ) : (
+                  <img className="campaign-real-photo-main" src={selectedMedia.url} alt={`Foto real da camisa ${selectedColor.name}, imagem ${realPhotoIndex + 1}`} />
                 ) : (
                   <ShirtMockupPreview
                   model={activeModel}
@@ -517,8 +538,8 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
                   />
                 )}
               </div>
-              {previewMode === "real" && selectedRealPhotos.length > 1 && <div className="campaign-real-photo-thumbnails" role="group" aria-label={`Fotos reais da cor ${selectedColor.name}`}>{selectedRealPhotos.map((photo, index) => <button className={realPhotoIndex === index ? "is-active" : ""} type="button" aria-pressed={realPhotoIndex === index} onClick={() => setRealPhotoIndex(index)} key={photo}><img src={photo} alt="" /><span>{index + 1}</span></button>)}</div>}
-              <p className="campaign-art-note">{previewMode === "real" ? `Foto real da camisa ${selectedColor.name}.` : art.mode === "legacy_mockup" ? "Imagem preservada da campanha original." : `${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name} · ${selectedColor.name} · ${previewSide === "front" ? "Frente" : "Costas"}`}</p>
+              {previewMode === "real" && selectedGalleryMedia.length > 1 && <div className="campaign-real-photo-thumbnails" role="group" aria-label={`Fotos e vídeo da cor ${selectedColor.name}`}>{selectedGalleryMedia.map((media, index) => <button className={`${realPhotoIndex === index ? "is-active" : ""}${media.type === "video" ? " is-video" : ""}`} type="button" aria-pressed={realPhotoIndex === index} onClick={() => setRealPhotoIndex(index)} key={`${media.type}-${media.url}`}>{media.type === "video" ? <>{media.posterUrl ? <img src={media.posterUrl} alt="" /> : <i aria-hidden="true" />}<span className="campaign-real-video-play material-symbols-rounded" aria-hidden="true">play_arrow</span><b>{videoDurationLabel(media.durationSeconds)}</b></> : <><img src={media.url} alt="" /><span>{index + 1}</span></>}</button>)}</div>}
+              <p className="campaign-art-note">{previewMode === "real" ? selectedMedia?.type === "video" ? `Vídeo da camisa ${selectedColor.name}. Toque em reproduzir para assistir.` : `Foto real da camisa ${selectedColor.name}.` : art.mode === "legacy_mockup" ? "Imagem preservada da campanha original." : `${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name} · ${selectedColor.name} · ${previewSide === "front" ? "Frente" : "Costas"}`}</p>
               {cart.length > 0 && (
                 <section className="campaign-cart-preview" aria-labelledby="cart-preview-title">
                   <header>

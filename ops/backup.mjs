@@ -134,7 +134,12 @@ try {
   await runDump(databaseFile);
   const triggers = await dumpTriggers(triggersFile);
   if (await fs.stat(config.uploadsDirectory).catch(() => null)) {
-    await fs.cp(config.uploadsDirectory, uploadBackup, { recursive: true, force: false, errorOnExist: true });
+    await fs.cp(config.uploadsDirectory, uploadBackup, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+      filter: (source) => path.basename(source) !== ".tmp" && !source.endsWith(".part"),
+    });
   } else {
     await fs.mkdir(uploadBackup, { recursive: true });
   }

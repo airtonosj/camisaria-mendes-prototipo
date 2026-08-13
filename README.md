@@ -36,6 +36,12 @@ A camisaria envia **uma imagem só**, que vale para todos os cortes e tamanhos. 
 
 A API recebe o arquivo em `POST /api/admin/uploads`, confere a assinatura da imagem, grava em `uploads/` e guarda apenas a URL na campanha.
 
+As fotos reais de cada cor podem receber um vídeo complementar em `MP4`, com no máximo
+`15 segundos` e `10 MB`. O painel gera a capa no navegador e envia o vídeo por streaming;
+na loja ele aparece depois da primeira foto, sem reprodução automática e com suporte a
+avanço por requisições `Range`. Recomenda-se limitar cada campanha a um vídeo por cor e
+dimensionar o armazenamento pelo total de cores (`10 cores` podem consumir até `100 MB`).
+
 ### Pagamento
 
 O checkout do aluno oferece **Pix e cartão de crédito pela InfinitePay**. O pedido nasce pendente e só entra na produção depois da confirmação automática do provedor; não existe mais chave Pix fixa, envio de comprovante ou botão de confirmação manual no painel.

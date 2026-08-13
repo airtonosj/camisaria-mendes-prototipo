@@ -1,5 +1,5 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
@@ -45,6 +45,7 @@ const uploadContentTypes = new Map([
   ["png", "image/png"],
   ["jpg", "image/jpeg"],
   ["webp", "image/webp"],
+  ["mp4", "video/mp4"],
 ]);
 const frontendContentTypes = new Map([
   [".css", "text/css; charset=utf-8"],
@@ -61,6 +62,8 @@ const frontendContentTypes = new Map([
   [".woff2", "font/woff2"],
 ]);
 const maxUploadBytes = 2 * 1024 * 1024;
+const maxVideoUploadBytes = 10 * 1024 * 1024;
+const staleVideoPartAgeMs = 24 * 60 * 60 * 1000;
 
 class ApiError extends Error {
   constructor(status, code, message, details) {
@@ -644,6 +647,15 @@ async function getCampaign(code) {
       ORDER BY co.name, ccp.sort_order, ccp.id`,
     [campaign.id],
   );
+  const [realVideoRows] = await pool.execute(
+    `SELECT ccv.color_id, co.name AS color_name, ccv.video_url, ccv.poster_url,
+            ccv.duration_seconds, ccv.bytes
+       FROM campaign_color_videos ccv
+       JOIN colors co ON co.id = ccv.color_id
+      WHERE ccv.campaign_id = ?
+      ORDER BY co.name, ccv.id`,
+    [campaign.id],
+  );
   const realPhotosByColorId = new Map();
   for (const row of realPhotoRows) {
     const photos = realPhotosByColorId.get(Number(row.color_id)) ?? [];
@@ -692,6 +704,13 @@ async function getCampaign(code) {
       colorName: row.color_name,
       urls: realPhotosByColorId.get(Number(row.color_id)) ?? [],
     }])).values()],
+    realVideos: realVideoRows.map((row) => ({
+      colorName: row.color_name,
+      url: row.video_url,
+      posterUrl: row.poster_url,
+      durationSeconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
+      bytes: Number(row.bytes),
+    })),
     sizes: sizes.map((size) => ({
       model: { code: size.model_code, name: size.model_name },
       code: size.code,
@@ -1032,6 +1051,86 @@ async function applyRealPhotos(connection, campaignId, value) {
   return [...new Set(oldUrls.filter(Boolean))];
 }
 
+function parseRealVideoConfig(value) {
+  if (!Array.isArray(value) || value.length > 32) {
+    throw new ApiError(422, "VALIDATION_ERROR", "Os videos precisam ser organizados por cor.");
+  }
+  const configs = new Map();
+  for (const [index, item] of value.entries()) {
+    if (!item || typeof item !== "object") {
+      throw new ApiError(422, "VALIDATION_ERROR", `O video ${index + 1} e invalido.`);
+    }
+    const colorName = requireText(item.colorName, `realVideos[${index}].colorName`, 80);
+    const key = colorName.toLocaleLowerCase("pt-BR");
+    if (configs.has(key)) throw new ApiError(422, "VALIDATION_ERROR", `A cor ${colorName} possui mais de um video.`);
+    const url = requireText(item.url, `realVideos[${index}].url`, 2048);
+    if (!/^\/uploads\/[0-9a-f-]{36}\.mp4$/i.test(url)) {
+      throw new ApiError(422, "INVALID_UPLOAD", `O video de ${colorName} nao pertence aos uploads da campanha.`);
+    }
+    const posterUrl = optionalText(item.posterUrl, 2048);
+    if (posterUrl && !/^\/uploads\/[0-9a-f-]{36}\.(png|jpg|webp)$/i.test(posterUrl)) {
+      throw new ApiError(422, "INVALID_UPLOAD", `A capa do video de ${colorName} nao pertence aos uploads da campanha.`);
+    }
+    const durationSeconds = item.durationSeconds === null || item.durationSeconds === undefined
+      ? null
+      : Number(item.durationSeconds);
+    if (durationSeconds !== null && (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || durationSeconds > 15.05)) {
+      throw new ApiError(422, "INVALID_VIDEO_DURATION", `O video de ${colorName} deve ter no maximo 15 segundos.`);
+    }
+    const bytes = Number(item.bytes);
+    if (!Number.isInteger(bytes) || bytes <= 0 || bytes > maxVideoUploadBytes) {
+      throw new ApiError(422, "INVALID_VIDEO_SIZE", `O video de ${colorName} deve ter no maximo 10 MB.`);
+    }
+    configs.set(key, { colorName, url, posterUrl, durationSeconds, bytes });
+  }
+  return configs;
+}
+
+/** Substitui videos apenas das cores ativas; midias de cores desativadas ficam preservadas. */
+async function applyRealVideos(connection, campaignId, value) {
+  const configs = parseRealVideoConfig(value);
+  const [activeColors] = await connection.execute(
+    `SELECT DISTINCT co.id, co.name
+       FROM campaign_variants cv
+       JOIN colors co ON co.id = cv.color_id
+      WHERE cv.campaign_id = ? AND cv.active = TRUE`,
+    [campaignId],
+  );
+  const activeByKey = new Map(activeColors.map((color) => [color.name.toLocaleLowerCase("pt-BR"), color]));
+  for (const config of configs.values()) {
+    if (!activeByKey.has(config.colorName.toLocaleLowerCase("pt-BR"))) {
+      throw new ApiError(422, "INVALID_COLOR", `A cor ${config.colorName} nao esta ativa nesta campanha.`);
+    }
+  }
+
+  const oldUrls = [];
+  for (const color of activeColors) {
+    const [oldRows] = await connection.execute(
+      "SELECT video_url, poster_url FROM campaign_color_videos WHERE campaign_id = ? AND color_id = ?",
+      [campaignId, color.id],
+    );
+    oldUrls.push(...oldRows.flatMap((row) => [row.video_url, row.poster_url]).filter(Boolean));
+    const config = configs.get(color.name.toLocaleLowerCase("pt-BR"));
+    if (!config) {
+      await connection.execute(
+        "DELETE FROM campaign_color_videos WHERE campaign_id = ? AND color_id = ?",
+        [campaignId, color.id],
+      );
+      continue;
+    }
+    await connection.execute(
+      `INSERT INTO campaign_color_videos
+        (campaign_id, color_id, video_url, poster_url, duration_seconds, bytes)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         video_url = VALUES(video_url), poster_url = VALUES(poster_url),
+         duration_seconds = VALUES(duration_seconds), bytes = VALUES(bytes)`,
+      [campaignId, color.id, config.url, config.posterUrl, config.durationSeconds, config.bytes],
+    );
+  }
+  return [...new Set(oldUrls)];
+}
+
 async function validateRealPhotoCoverage(connection, campaignId) {
   const [missing] = await connection.execute(
     `SELECT co.name
@@ -1136,6 +1235,7 @@ async function createCampaign(request) {
     }
     if (artworkConfig) await applyArtworkConfig(connection, campaignResult.insertId, artworkConfig);
     if (body.realPhotos !== undefined) await applyRealPhotos(connection, campaignResult.insertId, body.realPhotos);
+    if (body.realVideos !== undefined) await applyRealVideos(connection, campaignResult.insertId, body.realVideos);
     if (presentation.mockupEnabled) await validateMockupCoverage(connection, campaignResult.insertId);
     if (presentation.realPhotosEnabled) await validateRealPhotoCoverage(connection, campaignResult.insertId);
   });
@@ -1206,6 +1306,9 @@ async function updateCampaign(request, code) {
     if (body.realPhotos !== undefined) {
       orphanCandidates.push(...await applyRealPhotos(connection, campaign.id, body.realPhotos));
     }
+    if (body.realVideos !== undefined) {
+      orphanCandidates.push(...await applyRealVideos(connection, campaign.id, body.realVideos));
+    }
     if (presentation.mockupEnabled) await validateMockupCoverage(connection, campaign.id);
     if (presentation.realPhotosEnabled) await validateRealPhotoCoverage(connection, campaign.id);
 
@@ -1215,7 +1318,7 @@ async function updateCampaign(request, code) {
   // Fora da transação: apagar arquivo é irreversível e não pode acontecer antes do commit.
   if (body.artFrontUrl !== undefined) await removeOrphanUpload(changed.artFrontUrl);
   if (body.artBackUrl !== undefined) await removeOrphanUpload(changed.artBackUrl);
-  if (body.artworkConfig !== undefined || body.realPhotos !== undefined) {
+  if (body.artworkConfig !== undefined || body.realPhotos !== undefined || body.realVideos !== undefined) {
     for (const url of changed.orphanCandidates) await removeOrphanUpload(url);
   }
   return getCampaign(code);
@@ -1258,6 +1361,10 @@ async function deleteCampaign(request, code) {
       "SELECT photo_url FROM campaign_color_photos WHERE campaign_id = ?",
       [campaign.id],
     );
+    const [videoRows] = await connection.execute(
+      "SELECT video_url, poster_url FROM campaign_color_videos WHERE campaign_id = ?",
+      [campaign.id],
+    );
     await connection.execute("DELETE FROM campaigns WHERE id = ?", [campaign.id]);
     return {
       code,
@@ -1265,6 +1372,7 @@ async function deleteCampaign(request, code) {
       artBackUrl: campaign.art_back_url,
       variantArtworkUrls: artworkRows.flatMap((row) => [row.front_url, row.back_url]).filter(Boolean),
       realPhotoUrls: photoRows.map((row) => row.photo_url),
+      realVideoUrls: videoRows.flatMap((row) => [row.video_url, row.poster_url]).filter(Boolean),
     };
   });
 
@@ -1273,6 +1381,7 @@ async function deleteCampaign(request, code) {
   await removeOrphanUpload(deleted.artBackUrl);
   for (const url of deleted.variantArtworkUrls) await removeOrphanUpload(url);
   for (const url of deleted.realPhotoUrls) await removeOrphanUpload(url);
+  for (const url of deleted.realVideoUrls) await removeOrphanUpload(url);
   return { code: deleted.code, deleted: true };
 }
 
@@ -1379,15 +1488,17 @@ async function applyCampaignModels(connection, campaignId, models) {
  * campanha — duas campanhas podem apontar para o mesmo arquivo se a arte for reenviada.
  */
 async function removeOrphanUpload(url) {
-  if (!url || !/^\/uploads\/[0-9a-f-]{36}\.(png|jpg|webp)$/.test(url)) return;
+  if (!url || !/^\/uploads\/[0-9a-f-]{36}\.(png|jpg|webp|mp4)$/.test(url)) return;
   const [rows] = await pool.execute(
     `SELECT 1 FROM campaigns WHERE art_front_url = ? OR art_back_url = ?
      UNION ALL
      SELECT 1 FROM campaign_variant_artworks WHERE front_url = ? OR back_url = ?
      UNION ALL
      SELECT 1 FROM campaign_color_photos WHERE photo_url = ?
+     UNION ALL
+     SELECT 1 FROM campaign_color_videos WHERE video_url = ? OR poster_url = ?
      LIMIT 1`,
-    [url, url, url, url, url],
+    [url, url, url, url, url, url, url],
   );
   if (rows.length > 0) return;
   try {
@@ -1850,23 +1961,138 @@ async function uploadArtwork(request) {
   return { url: `/uploads/${filename}`, bytes: file.length };
 }
 
-async function serveUpload(response, filename) {
-  if (!/^[0-9a-f-]{36}\.(png|jpg|webp)$/.test(filename)) {
+function looksLikeMp4(buffer) {
+  return buffer.length >= 12 && buffer.subarray(4, 8).toString("ascii") === "ftyp";
+}
+
+async function cleanupStaleVideoParts() {
+  const temporaryDirectory = path.join(uploadsDirectory, ".tmp");
+  const entries = await fs.readdir(temporaryDirectory, { withFileTypes: true }).catch(() => []);
+  const cutoff = Date.now() - staleVideoPartAgeMs;
+  for (const entry of entries) {
+    if (!entry.isFile() || !/^[0-9a-f-]{36}\.part$/i.test(entry.name)) continue;
+    const candidate = path.join(temporaryDirectory, entry.name);
+    const stats = await fs.stat(candidate).catch(() => null);
+    if (stats && stats.mtimeMs < cutoff) await fs.unlink(candidate).catch(() => {});
+  }
+}
+
+async function uploadVideo(request) {
+  await requireStaff(request);
+  const contentType = String(request.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+  if (contentType !== "video/mp4") {
+    throw new ApiError(415, "UNSUPPORTED_MEDIA_TYPE", "Envie o vídeo em MP4.");
+  }
+  const declaredLength = Number(request.headers["content-length"] ?? 0);
+  if (declaredLength > maxVideoUploadBytes) {
+    throw new ApiError(413, "VIDEO_TOO_LARGE", "O vídeo excede o limite de 10 MB.");
+  }
+
+  const id = randomUUID();
+  const temporaryDirectory = path.join(uploadsDirectory, ".tmp");
+  const temporaryFile = path.join(temporaryDirectory, `${id}.part`);
+  const finalFile = path.join(uploadsDirectory, `${id}.mp4`);
+  await fs.mkdir(temporaryDirectory, { recursive: true });
+  const handle = await fs.open(temporaryFile, "wx");
+  let bytes = 0;
+  let signature = Buffer.alloc(0);
+  let completed = false;
+  try {
+    for await (const chunk of request) {
+      if (request.aborted) throw new ApiError(400, "UPLOAD_INTERRUPTED", "O envio do vídeo foi interrompido.");
+      bytes += chunk.length;
+      if (bytes > maxVideoUploadBytes) throw new ApiError(413, "VIDEO_TOO_LARGE", "O vídeo excede o limite de 10 MB.");
+      if (signature.length < 12) signature = Buffer.concat([signature, chunk.subarray(0, 12 - signature.length)]);
+      let offset = 0;
+      while (offset < chunk.length) {
+        const result = await handle.write(chunk, offset, chunk.length - offset);
+        offset += result.bytesWritten;
+      }
+    }
+    if (bytes === 0 || !looksLikeMp4(signature)) {
+      throw new ApiError(422, "INVALID_VIDEO", "O arquivo enviado não possui uma assinatura MP4 válida.");
+    }
+    await handle.sync();
+    await handle.close();
+    await fs.rename(temporaryFile, finalFile);
+    completed = true;
+    return { url: `/uploads/${id}.mp4`, bytes };
+  } catch (error) {
+    if (request.aborted || error?.code === "ECONNRESET") {
+      throw new ApiError(400, "UPLOAD_INTERRUPTED", "O envio do vídeo foi interrompido.");
+    }
+    throw error;
+  } finally {
+    if (!completed) {
+      await handle.close().catch(() => {});
+      await fs.unlink(temporaryFile).catch(() => {});
+    }
+  }
+}
+
+function parseByteRange(header, size) {
+  if (!header) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(String(header).trim());
+  if (!match || (!match[1] && !match[2])) return false;
+  let start;
+  let end;
+  if (!match[1]) {
+    const suffix = Number(match[2]);
+    if (!Number.isSafeInteger(suffix) || suffix <= 0) return false;
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Number(match[2]) : size - 1;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= size) return false;
+    end = Math.min(end, size - 1);
+  }
+  return { start, end };
+}
+
+async function serveUpload(request, response, filename) {
+  if (!/^[0-9a-f-]{36}\.(png|jpg|webp|mp4)$/.test(filename)) {
     throw new ApiError(404, "FILE_NOT_FOUND", "Arquivo não encontrado.");
   }
-  let file;
+  const filePath = path.join(uploadsDirectory, filename);
+  let stats;
   try {
-    file = await fs.readFile(path.join(uploadsDirectory, filename));
+    stats = await fs.stat(filePath);
+    if (!stats.isFile()) throw new Error("not a file");
   } catch {
     throw new ApiError(404, "FILE_NOT_FOUND", "Arquivo não encontrado.");
   }
-  response.writeHead(200, {
-    "Content-Type": uploadContentTypes.get(filename.split(".").pop()),
-    "Content-Length": file.length,
+  const extension = filename.split(".").pop();
+  const range = extension === "mp4" ? parseByteRange(request.headers.range, stats.size) : null;
+  if (range === false) {
+    response.writeHead(416, {
+      "Content-Range": `bytes */${stats.size}`,
+      "Accept-Ranges": "bytes",
+      "Cache-Control": "no-store",
+    });
+    response.end();
+    return;
+  }
+  const start = range?.start ?? 0;
+  const end = range?.end ?? stats.size - 1;
+  response.writeHead(range ? 206 : 200, {
+    "Content-Type": uploadContentTypes.get(extension),
+    "Content-Length": Math.max(0, end - start + 1),
+    ...(extension === "mp4" ? { "Accept-Ranges": "bytes" } : {}),
+    ...(range ? { "Content-Range": `bytes ${start}-${end}/${stats.size}` } : {}),
     "Cache-Control": "public, max-age=31536000, immutable",
     "X-Content-Type-Options": "nosniff",
   });
-  response.end(file);
+  if (request.method === "HEAD" || stats.size === 0) {
+    response.end();
+    return;
+  }
+  await new Promise((resolve, reject) => {
+    const stream = createReadStream(filePath, { start, end });
+    stream.on("error", reject);
+    response.on("close", resolve);
+    stream.pipe(response);
+  });
 }
 
 async function serveFrontend(request, response, requestPath) {
@@ -1976,8 +2202,8 @@ async function route(request, response) {
     return;
   }
   const uploadMatch = path.match(/^\/uploads\/([^/]+)$/);
-  if (request.method === "GET" && uploadMatch) {
-    await serveUpload(response, uploadMatch[1]);
+  if ((request.method === "GET" || request.method === "HEAD") && uploadMatch) {
+    await serveUpload(request, response, uploadMatch[1]);
     return;
   }
   if (request.method === "GET" && path === "/api/settings") {
@@ -2024,6 +2250,10 @@ async function route(request, response) {
   }
   if (request.method === "POST" && path === "/api/admin/uploads") {
     sendJson(response, 201, await uploadArtwork(request));
+    return;
+  }
+  if (request.method === "POST" && path === "/api/admin/video-uploads") {
+    sendJson(response, 201, await uploadVideo(request));
     return;
   }
   const publicCampaignMatch = path.match(/^\/api\/campaigns\/([^/]+)$/);
@@ -2230,6 +2460,7 @@ if (startupErrors.length > 0) {
 } else {
   server.listen(config.port, config.host, async () => {
     console.log(`API da Camisaria Mendes em http://${config.host}:${config.port} (${config.environment})`);
+    await cleanupStaleVideoParts();
     await reportStartupChecks();
     stopOrderEmailWorker = startOrderEmailNotificationWorker();
     stopInfinitePayWorker = startInfinitePayReconciliationWorker();

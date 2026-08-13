@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
+import fs from "node:fs/promises";
 import http from "node:http";
 import mysql from "mysql2/promise";
 import { resetTestDatabase } from "./reset-test-database.mjs";
@@ -208,6 +209,25 @@ async function request(path, { method = "GET", token, headers = {}, body, expect
   return payload;
 }
 
+async function binaryRequest(path, { method = "POST", token, headers = {}, body, expected = 201 } = {}) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
+    body,
+    signal: AbortSignal.timeout(10000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  assert.equal(response.status, expected, `${method} ${path}: esperado ${expected}, recebido ${response.status} ${JSON.stringify(payload)}`);
+  return payload;
+}
+
+const validMp4 = Buffer.concat([
+  Buffer.from([0, 0, 0, 24]),
+  Buffer.from("ftypisom", "ascii"),
+  Buffer.from([0, 0, 0, 0]),
+  Buffer.from("isommp42", "ascii"),
+]);
+
 async function waitForApi(child) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     if (child.exitCode !== null) throw new Error("A API encerrou antes do smoke test.");
@@ -272,7 +292,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "014_campaign_size_grades");
+  assert.equal(health.schema.current, "015_campaign_color_videos");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -290,6 +310,62 @@ try {
   });
   step("login e sessão da camisaria");
 
+  await binaryRequest("/api/admin/video-uploads", {
+    headers: { "Content-Type": "video/mp4" },
+    body: validMp4,
+    expected: 401,
+  });
+  await binaryRequest("/api/admin/video-uploads", {
+    token,
+    headers: { "Content-Type": "video/mp4" },
+    body: Buffer.from("arquivo renomeado sem assinatura"),
+    expected: 422,
+  });
+  await binaryRequest("/api/admin/video-uploads", {
+    token,
+    headers: { "Content-Type": "video/mp4" },
+    body: Buffer.alloc(10 * 1024 * 1024 + 1),
+    expected: 413,
+  });
+  const uploadedVideo = await binaryRequest("/api/admin/video-uploads", {
+    token,
+    headers: { "Content-Type": "video/mp4" },
+    body: validMp4,
+  });
+  const uploadedVideoForInactiveColor = await binaryRequest("/api/admin/video-uploads", {
+    token,
+    headers: { "Content-Type": "video/mp4" },
+    body: validMp4,
+  });
+  assert.match(uploadedVideo.url, /^\/uploads\/[0-9a-f-]{36}\.mp4$/);
+  assert.equal(uploadedVideo.bytes, validMp4.length);
+
+  const headVideo = await fetch(`${baseUrl}${uploadedVideo.url}`, { method: "HEAD" });
+  assert.equal(headVideo.status, 200);
+  assert.equal(headVideo.headers.get("accept-ranges"), "bytes");
+  assert.equal(Number(headVideo.headers.get("content-length")), validMp4.length);
+  const rangedVideo = await fetch(`${baseUrl}${uploadedVideo.url}`, { headers: { Range: "bytes=4-7" } });
+  assert.equal(rangedVideo.status, 206);
+  assert.equal(rangedVideo.headers.get("content-range"), `bytes 4-7/${validMp4.length}`);
+  assert.equal(Buffer.from(await rangedVideo.arrayBuffer()).toString("ascii"), "ftyp");
+  const invalidRange = await fetch(`${baseUrl}${uploadedVideo.url}`, { headers: { Range: "bytes=999-1000" } });
+  assert.equal(invalidRange.status, 416);
+  assert.equal(invalidRange.headers.get("content-range"), `bytes */${validMp4.length}`);
+
+  await new Promise((resolve) => {
+    const interrupted = http.request(`${baseUrl}/api/admin/video-uploads`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "video/mp4", "Content-Length": 1024 },
+    });
+    interrupted.on("error", resolve);
+    interrupted.write(validMp4.subarray(0, 12));
+    setTimeout(() => { interrupted.destroy(); resolve(); }, 10);
+  });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const temporaryVideoFiles = await fs.readdir(`${environment.UPLOADS_DIR}/.tmp`).catch(() => []);
+  assert.equal(temporaryVideoFiles.some((name) => name.endsWith(".part")), false);
+  step("upload MP4 valida autenticação, assinatura, limite, cancelamento e streaming Range/HEAD");
+
   const customCampaignPayload = {
     code: "MENDES-CORES-26",
     title: "Campanha com cor personalizada",
@@ -303,6 +379,10 @@ try {
     realPhotos: [
       { colorName: "Lilás lavanda", urls: ["/uploads/11111111-1111-4111-8111-111111111111.jpg", "/uploads/22222222-2222-4222-8222-222222222222.webp"] },
       { colorName: "Preto", urls: ["/uploads/33333333-3333-4333-8333-333333333333.png"] },
+    ],
+    realVideos: [
+      { colorName: "Lilás lavanda", url: uploadedVideo.url, posterUrl: null, durationSeconds: 12, bytes: uploadedVideo.bytes },
+      { colorName: "Preto", url: uploadedVideoForInactiveColor.url, posterUrl: null, durationSeconds: 8, bytes: uploadedVideoForInactiveColor.bytes },
     ],
     models: [
       { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Lilás lavanda", hex: "#8B5CF6" }], sizes: ["P", "M", "EXGG"] },
@@ -318,8 +398,35 @@ try {
   assert.equal(customVariant.color.hex, "#8B5CF6");
   assert.deepEqual(customVariant.realPhotoUrls, customCampaignPayload.realPhotos[0].urls);
   assert.deepEqual(customCampaign.realPhotos.find((gallery) => gallery.colorName === "Preto").urls, customCampaignPayload.realPhotos[1].urls);
+  assert.equal(customCampaign.realVideos.find((video) => video.colorName === "Lilás lavanda").url, uploadedVideo.url);
   assert.ok(customCampaign.sizes.some((size) => size.model.code === "common" && size.code === "EXGG"));
   step("campanha aceita e publica cor personalizada com nome e código HEX");
+
+  const replacementVideo = await binaryRequest("/api/admin/video-uploads", {
+    token,
+    headers: { "Content-Type": "video/mp4" },
+    body: validMp4,
+  });
+  await request(`/api/admin/campaigns/${customCampaign.code}`, {
+    method: "PATCH",
+    token,
+    body: { realVideos: [
+      { colorName: "Lilás lavanda", url: replacementVideo.url, posterUrl: null, durationSeconds: 10, bytes: replacementVideo.bytes },
+      customCampaignPayload.realVideos[1],
+    ] },
+  });
+  const campaignWithReplacementVideo = (await request(`/api/campaigns/${customCampaign.code}`)).campaign;
+  assert.equal(campaignWithReplacementVideo.realVideos.find((video) => video.colorName === "Lilás lavanda").url, replacementVideo.url);
+  await request(uploadedVideo.url, { expected: 404 });
+  await request(`/api/admin/campaigns/${customCampaign.code}`, {
+    method: "PATCH",
+    token,
+    body: { realVideos: [customCampaignPayload.realVideos[1]] },
+  });
+  const campaignWithoutLilacVideo = (await request(`/api/campaigns/${customCampaign.code}`)).campaign;
+  assert.equal(campaignWithoutLilacVideo.realVideos.some((video) => video.colorName === "Lilás lavanda"), false);
+  await request(replacementVideo.url, { expected: 404 });
+  step("vídeo por cor pode ser criado, substituído e removido com limpeza do arquivo órfão");
 
   await request("/api/admin/campaigns", {
     method: "POST",
@@ -361,6 +468,7 @@ try {
     presentationConfig: { mockupEnabled: false, realPhotosEnabled: true },
     models: [{ modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Branco", hex: "#F3F3EF" }], sizes: ["M"] }],
     realPhotos: [{ colorName: "Branco", urls: ["/uploads/55555555-5555-4555-8555-555555555555.jpg"] }],
+    realVideos: [],
   };
   await request("/api/admin/campaigns", { method: "POST", expected: 201, token, body: galleryOnlyPayload });
   const galleryOnlyCampaign = (await request(`/api/campaigns/${galleryOnlyPayload.code}`)).campaign;
@@ -421,6 +529,7 @@ try {
     artRenderMode: undefined,
     presentationConfig: { mockupEnabled: true, realPhotosEnabled: false },
     realPhotos: [],
+    realVideos: [],
     models: [
       { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Branco", hex: "#F3F3EF" }], sizes: ["P"] },
       { modelCode: "oversized", unitPriceCents: 6990, colors: [{ name: "Preto", hex: "#111315" }], sizes: ["M"] },
@@ -460,11 +569,17 @@ try {
   assert.equal(closedCampaign.variants.find((candidate) => candidate.model.code === "common").artwork.front.url, "/uploads/smoke-white-front-v2.jpg");
   step("arte continua editável após fechar pedidos, enquanto as variantes permanecem travadas");
 
+  const disposableVideo = await binaryRequest("/api/admin/video-uploads", {
+    token,
+    headers: { "Content-Type": "video/mp4" },
+    body: validMp4,
+  });
   const disposableCampaignPayload = {
     ...customCampaignPayload,
     code: "MENDES-EXCLUIR-26",
     title: "Campanha descartável sem pedidos",
     artFrontUrl: "/uploads/smoke-disposable.png",
+    realVideos: [{ colorName: "Lilás lavanda", url: disposableVideo.url, posterUrl: null, durationSeconds: 5, bytes: disposableVideo.bytes }],
   };
   await request("/api/admin/campaigns", { method: "POST", expected: 201, token, body: disposableCampaignPayload });
   const campaignsBeforeDelete = await request("/api/admin/campaigns", { token });
@@ -473,6 +588,7 @@ try {
   const deletedCampaign = await request(`/api/admin/campaigns/${disposableCampaignPayload.code}`, { method: "DELETE", token });
   assert.deepEqual(deletedCampaign.campaign, { code: disposableCampaignPayload.code, deleted: true });
   await request(`/api/campaigns/${disposableCampaignPayload.code}`, { expected: 404 });
+  await request(disposableVideo.url, { expected: 404 });
   step("campanha sem pedidos pode ser excluída somente por uma sessão administrativa");
 
   const removedModelVariant = customCampaign.variants.find((candidate) => candidate.model.code === "oversized");
@@ -499,6 +615,7 @@ try {
   const campaignWithoutOversized = (await request(`/api/campaigns/${customCampaign.code}`)).campaign;
   assert.equal(campaignWithoutOversized.variants.some((candidate) => candidate.model.code === "oversized"), false);
   assert.deepEqual(campaignWithoutOversized.realPhotos.find((gallery) => gallery.colorName === "Preto").urls, customCampaignPayload.realPhotos[1].urls);
+  assert.equal(campaignWithoutOversized.realVideos.find((video) => video.colorName === "Preto").url, uploadedVideoForInactiveColor.url);
   const preservedHistoricalOrder = await request(`/api/orders/${historicalOrder.order.number}?whatsapp=5598999992026`);
   assert.equal(preservedHistoricalOrder.order.items[0].modelName, "Oversized");
   await request("/api/orders", {

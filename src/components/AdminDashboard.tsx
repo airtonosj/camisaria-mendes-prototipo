@@ -1,4 +1,4 @@
-import { ChangeEvent, CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   assetUrl,
   cancelOrderInApi,
@@ -18,6 +18,7 @@ import {
   staffToken,
   updateStaffAccount,
   uploadCampaignArt,
+  uploadCampaignVideo,
 } from "../api";
 import type {
   ApiDeliveryRow,
@@ -25,6 +26,7 @@ import type {
   CampaignPhaseCode,
   CampaignArtworkConfig,
   CampaignRealPhotoConfig,
+  CampaignRealVideoConfig,
   DeliveryStatusCode,
   PaymentStatusCode,
   StaffUser,
@@ -763,6 +765,17 @@ function suggestCode(title: string) {
 
 type ArtDraft = { file: File | null; preview: string };
 type RealPhotoDraft = { file: File | null; preview: string; url: string | null };
+type RealVideoDraft = {
+  preview: string;
+  url: string | null;
+  posterPreview: string;
+  posterUrl: string | null;
+  durationSeconds: number;
+  bytes: number;
+  progress: number;
+  status: "processing" | "uploading" | "ready" | "error";
+  error?: string;
+};
 type EditableArtMode = "overlay" | "variant_mockup" | "legacy_mockup";
 type ArtSideDraft = {
   file: File | null;
@@ -793,10 +806,47 @@ function storedArtworkUrl(value: string | null) {
   if (!value) return null;
   try {
     const parsed = new URL(value, window.location.origin);
-    return /^\/uploads\/[0-9a-f-]{36}\.(png|jpg|webp)$/i.test(parsed.pathname) ? parsed.pathname : value;
+    return /^\/uploads\/[0-9a-f-]{36}\.(png|jpg|webp|mp4)$/i.test(parsed.pathname) ? parsed.pathname : value;
   } catch {
     return value;
   }
+}
+
+async function inspectCampaignVideo(file: File, preview: string) {
+  const video = document.createElement("video");
+  video.preload = "auto";
+  video.muted = true;
+  video.playsInline = true;
+  video.src = preview;
+  await new Promise<void>((resolve, reject) => {
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => reject(new Error("O navegador não conseguiu reproduzir este MP4."));
+  });
+  if (!Number.isFinite(video.duration) || video.duration <= 0 || video.duration > 15.05) {
+    throw new Error("O vídeo deve ter no máximo 15 segundos.");
+  }
+
+  const durationSeconds = video.duration;
+  let posterFile: File | null = null;
+  try {
+    const target = Math.min(0.25, video.duration / 2);
+    await new Promise<void>((resolve) => {
+      const timeout = window.setTimeout(resolve, 1800);
+      video.onseeked = () => { window.clearTimeout(timeout); resolve(); };
+      video.currentTime = target;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.82));
+    if (blob) posterFile = new File([blob], `${file.name.replace(/\.mp4$/i, "")}-capa.webp`, { type: "image/webp" });
+  } catch {
+    // A capa é opcional; o painel e a loja mantêm um fallback visual com ícone de play.
+  }
+  video.removeAttribute("src");
+  video.load();
+  return { durationSeconds, posterFile };
 }
 
 function Campaigns({ data }: { data: PanelData }) {
@@ -832,6 +882,8 @@ function Campaigns({ data }: { data: PanelData }) {
   const [baseTransforms, setBaseTransforms] = useState<{ front: ArtworkTransform; back: ArtworkTransform }>({ front: { ...defaultTransform }, back: { ...defaultTransform } });
   const [variantArts, setVariantArts] = useState<Record<string, Partial<Record<"overlay" | "variant_mockup", VariantArtDraft>>>>({});
   const [realPhotosByColor, setRealPhotosByColor] = useState<Record<string, RealPhotoDraft[]>>({});
+  const [realVideosByColor, setRealVideosByColor] = useState<Record<string, RealVideoDraft>>({});
+  const videoUploadControllers = useRef<Record<string, AbortController>>({});
   const [artVariant, setArtVariant] = useState<{ model: ShirtModelName; color: string }>({ model: "Comum", color: defaultCampaignColors.Comum[0].name });
   const [artPreviewSide, setArtPreviewSide] = useState<"front" | "back">("front");
   const [artError, setArtError] = useState("");
@@ -902,6 +954,7 @@ function Campaigns({ data }: { data: PanelData }) {
   const activeRealPhotoColors = campaignColorOptions.filter((option) => shirtModels.some((model) =>
     selectedModels[model.name] && modelColors[model.name].some((name) => colorKey(name) === colorKey(option.name)),
   ));
+  const videoUploadInProgress = Object.values(realVideosByColor).some((video) => video.status === "processing" || video.status === "uploading");
 
   function resetForm() {
     setCampaignName("");
@@ -923,6 +976,15 @@ function Campaigns({ data }: { data: PanelData }) {
       Object.values(current).flat().forEach((photo) => { if (photo.preview) URL.revokeObjectURL(photo.preview); });
       return {};
     });
+    Object.values(videoUploadControllers.current).forEach((controller) => controller.abort());
+    videoUploadControllers.current = {};
+    setRealVideosByColor((current) => {
+      Object.values(current).forEach((video) => {
+        if (video.preview.startsWith("blob:")) URL.revokeObjectURL(video.preview);
+        if (video.posterPreview.startsWith("blob:")) URL.revokeObjectURL(video.posterPreview);
+      });
+      return {};
+    });
     setArtVariant({ model: "Comum", color: defaultCampaignColors.Comum[0].name });
     setArtPreviewSide("front");
     setExistingArt({ front: "", back: "" });
@@ -939,6 +1001,8 @@ function Campaigns({ data }: { data: PanelData }) {
   }
 
   function closeForm() {
+    Object.values(videoUploadControllers.current).forEach((controller) => controller.abort());
+    videoUploadControllers.current = {};
     setCreating(false);
     setEditing(null);
     setLoadingDetail(false);
@@ -993,6 +1057,19 @@ function Campaigns({ data }: { data: PanelData }) {
       setRealPhotosByColor(Object.fromEntries((detail.realPhotos ?? []).map((gallery) => [
         colorKey(gallery.colorName),
         gallery.urls.map((url) => ({ file: null, preview: "", url: assetUrl(url) })),
+      ])));
+      setRealVideosByColor(Object.fromEntries((detail.realVideos ?? []).map((video) => [
+        colorKey(video.colorName),
+        {
+          preview: assetUrl(video.url) ?? "",
+          url: assetUrl(video.url),
+          posterPreview: assetUrl(video.posterUrl ?? null) ?? "",
+          posterUrl: assetUrl(video.posterUrl ?? null),
+          durationSeconds: video.durationSeconds ?? 0,
+          bytes: video.bytes,
+          progress: 100,
+          status: "ready" as const,
+        },
       ])));
       const colorsOf = (model: ShirtModelName) => detail.variants
         .filter((variant) => variant.model.name === model)
@@ -1247,6 +1324,92 @@ function Campaigns({ data }: { data: PanelData }) {
     setArtError("");
   }
 
+  async function chooseRealVideo(event: ChangeEvent<HTMLInputElement>, colorName: string) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.type !== "video/mp4" || !/\.mp4$/i.test(file.name)) {
+      setArtError("O vídeo deve ser um arquivo MP4 compatível com o navegador.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setArtError("O vídeo deve ter no máximo 10 MB.");
+      return;
+    }
+
+    const key = colorKey(colorName);
+    videoUploadControllers.current[key]?.abort();
+    const previous = realVideosByColor[key];
+    if (previous?.preview.startsWith("blob:")) URL.revokeObjectURL(previous.preview);
+    if (previous?.posterPreview.startsWith("blob:")) URL.revokeObjectURL(previous.posterPreview);
+    const preview = URL.createObjectURL(file);
+    const controller = new AbortController();
+    videoUploadControllers.current[key] = controller;
+    setRealVideosByColor((current) => ({
+      ...current,
+      [key]: { preview, url: null, posterPreview: "", posterUrl: null, durationSeconds: 0, bytes: file.size, progress: 0, status: "processing" },
+    }));
+    setArtError("");
+
+    try {
+      const inspected = await inspectCampaignVideo(file, preview);
+      if (controller.signal.aborted || videoUploadControllers.current[key] !== controller) return;
+      const posterPreview = inspected.posterFile ? URL.createObjectURL(inspected.posterFile) : "";
+      setRealVideosByColor((current) => ({
+        ...current,
+        [key]: { ...current[key], posterPreview, durationSeconds: inspected.durationSeconds, status: "uploading" },
+      }));
+      const uploaded = await uploadCampaignVideo(file, {
+        signal: controller.signal,
+        onProgress: (sent, total) => setRealVideosByColor((current) => current[key]
+          ? { ...current, [key]: { ...current[key], progress: total ? Math.min(100, Math.round(sent / total * 100)) : 0 } }
+          : current),
+      });
+      let posterUrl: string | null = null;
+      if (inspected.posterFile) {
+        try { posterUrl = await uploadCampaignArt(inspected.posterFile); } catch { /* fallback escuro sem capa */ }
+      }
+      if (controller.signal.aborted || videoUploadControllers.current[key] !== controller) return;
+      delete videoUploadControllers.current[key];
+      if (posterPreview) URL.revokeObjectURL(posterPreview);
+      setRealVideosByColor((current) => ({
+        ...current,
+        [key]: {
+          preview: assetUrl(uploaded.url) ?? uploaded.url,
+          url: uploaded.url,
+          posterPreview: assetUrl(posterUrl) ?? "",
+          posterUrl,
+          durationSeconds: inspected.durationSeconds,
+          bytes: uploaded.bytes,
+          progress: 100,
+          status: "ready",
+        },
+      }));
+    } catch (error) {
+      if (videoUploadControllers.current[key] !== controller) return;
+      delete videoUploadControllers.current[key];
+      setRealVideosByColor((current) => current[key] ? {
+        ...current,
+        [key]: { ...current[key], status: "error", error: error instanceof Error ? error.message : "Não foi possível preparar o vídeo." },
+      } : current);
+    }
+  }
+
+  function removeRealVideo(colorName: string) {
+    const key = colorKey(colorName);
+    videoUploadControllers.current[key]?.abort();
+    delete videoUploadControllers.current[key];
+    setRealVideosByColor((current) => {
+      const video = current[key];
+      if (video?.preview.startsWith("blob:")) URL.revokeObjectURL(video.preview);
+      if (video?.posterPreview.startsWith("blob:")) URL.revokeObjectURL(video.posterPreview);
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    setArtError("");
+  }
+
   function removeBackArt() {
     setBack((current) => {
       if (current.preview) URL.revokeObjectURL(current.preview);
@@ -1439,6 +1602,18 @@ function Campaigns({ data }: { data: PanelData }) {
     })));
   }
 
+  function buildRealVideos(): CampaignRealVideoConfig[] {
+    return activeRealPhotoColors.flatMap((color) => {
+      const video = realVideosByColor[colorKey(color.name)];
+      if (!video) return [];
+      if (video.status !== "ready") throw new Error(`Aguarde a conclusão do vídeo da cor ${color.name}.`);
+      const url = storedArtworkUrl(video.url);
+      const posterUrl = storedArtworkUrl(video.posterUrl);
+      if (!url) throw new Error(`O vídeo da cor ${color.name} não está disponível. Remova-o e envie novamente.`);
+      return [{ colorName: color.name, url, posterUrl, durationSeconds: video.durationSeconds, bytes: video.bytes }];
+    });
+  }
+
   function campaignModels() {
     return shirtModels.filter((model) => selectedModels[model.name]).map((model) => ({
       modelCode: model.code,
@@ -1501,6 +1676,7 @@ function Campaigns({ data }: { data: PanelData }) {
     try {
       const artworkConfig = mockupEnabled && artMode !== "legacy_mockup" ? await buildArtworkConfig() : undefined;
       const realPhotos = realPhotosEnabled ? await buildRealPhotos() : undefined;
+      const realVideos = realPhotosEnabled ? buildRealVideos() : undefined;
       const presentationConfig = { mockupEnabled, realPhotosEnabled };
       if (editing) {
         const payload: UpdateCampaignPayload = {
@@ -1513,6 +1689,7 @@ function Campaigns({ data }: { data: PanelData }) {
         };
         if (artworkConfig) payload.artworkConfig = artworkConfig;
         if (realPhotos) payload.realPhotos = realPhotos;
+        if (realVideos) payload.realVideos = realVideos;
         if (!variantsLocked) payload.models = campaignModels();
 
         await updateCampaignInApi(editing.code, payload);
@@ -1533,6 +1710,7 @@ function Campaigns({ data }: { data: PanelData }) {
         presentationConfig,
         artworkConfig,
         realPhotos,
+        realVideos,
         models: campaignModels(),
       });
       closeForm();
@@ -1757,14 +1935,27 @@ function Campaigns({ data }: { data: PanelData }) {
             </fieldset>
 
             {realPhotosEnabled && <fieldset className="campaign-real-photos"><legend>Fotos reais por cor</legend>
-              <div className="campaign-artwork-guidance"><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span><div><strong>Galeria opcional da camisa pronta</strong><p>Envie até <b>seis fotos por cor</b> em PNG, JPG ou WEBP, com no máximo <b>2 MB cada</b>. A mesma galeria atende todos os cortes que usam a cor e aparece ao lado do mockup para o cliente.</p></div></div>
+              <div className="campaign-artwork-guidance"><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span><div><strong>Galeria opcional da camisa pronta</strong><p>Envie até <b>seis fotos por cor</b> em PNG, JPG ou WEBP, com no máximo <b>2 MB cada</b>. Você também pode incluir <b>um MP4 de até 15 segundos e 10 MB</b>; cada cor continua exigindo pelo menos uma foto.</p></div></div>
               <div className="campaign-real-photo-grid">
                 {activeRealPhotoColors.map((color) => {
                   const photos = realPhotosByColor[colorKey(color.name)] ?? [];
+                  const video = realVideosByColor[colorKey(color.name)];
                   return <article className="campaign-real-photo-card" key={color.name}>
                     <header><span><i style={{ backgroundColor: color.hex }} /><strong>{color.name}</strong></span><small>{photos.length}/6</small></header>
                     {photos.length > 0 ? <div className="campaign-real-photo-list">{photos.map((photo, index) => <figure key={`${photo.preview || photo.url}-${index}`}><img src={photo.preview || photo.url || ""} alt={`Foto real ${index + 1} da camisa ${color.name}`} /><button type="button" onClick={() => removeRealPhoto(color.name, index)} aria-label={`Remover foto ${index + 1} da cor ${color.name}`}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></figure>)}</div> : <p>Envie pelo menos uma foto para habilitar a galeria desta cor.</p>}
                     {photos.length < 6 && <label><span className="material-symbols-rounded" aria-hidden="true">add_photo_alternate</span>Adicionar fotos<input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => chooseRealPhotos(event, color.name)} aria-label={`Adicionar fotos reais da cor ${color.name}`} /></label>}
+                    {video ? <div className="campaign-real-video-draft">
+                      <div className="campaign-real-video-preview">
+                        <video src={video.preview} poster={video.posterPreview || undefined} controls={video.status === "ready"} playsInline preload="metadata" />
+                        {video.status !== "ready" && <span className="material-symbols-rounded" aria-hidden="true">movie</span>}
+                      </div>
+                      <div className="campaign-real-video-status">
+                        <strong>{video.status === "processing" ? "Processando vídeo..." : video.status === "uploading" ? `Enviando ${video.progress}%` : video.status === "ready" ? `${video.durationSeconds.toFixed(1)} s · ${(video.bytes / 1024 / 1024).toFixed(1)} MB` : "Falha no vídeo"}</strong>
+                        {(video.status === "processing" || video.status === "uploading") && <progress max="100" value={video.progress} aria-label={`Progresso do vídeo da cor ${color.name}`} />}
+                        {video.error && <small role="alert">{video.error}</small>}
+                      </div>
+                      <button type="button" className="campaign-real-video-remove" onClick={() => removeRealVideo(color.name)}>{video.status === "processing" || video.status === "uploading" ? "Cancelar envio" : "Remover vídeo"}</button>
+                    </div> : <label className="campaign-real-video-add"><span className="material-symbols-rounded" aria-hidden="true">video_call</span>Adicionar vídeo MP4<input type="file" accept="video/mp4,.mp4" onChange={(event) => chooseRealVideo(event, color.name)} aria-label={`Adicionar vídeo da cor ${color.name}`} /></label>}
                   </article>;
                 })}
               </div>
@@ -1773,7 +1964,7 @@ function Campaigns({ data }: { data: PanelData }) {
             {formError && <p className="campaign-form-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{formError}</p>}
             <div className="campaign-create-actions">
               <button className="outline-action" type="button" onClick={closeForm}>Cancelar</button>
-              <button className="primary-action" type="submit" disabled={submitting || (!mockupEnabled && !realPhotosEnabled)} title={!mockupEnabled && !realPhotosEnabled ? "Ative o mockup ou as fotos reais para salvar a campanha." : undefined}>
+              <button className="primary-action" type="submit" disabled={submitting || videoUploadInProgress || (!mockupEnabled && !realPhotosEnabled)} title={videoUploadInProgress ? "Aguarde ou cancele o envio do vídeo." : !mockupEnabled && !realPhotosEnabled ? "Ative o mockup ou as fotos reais para salvar a campanha." : undefined}>
                 {submitting
                   ? (editing ? "Salvando..." : "Enviando arte e criando...")
                   : (editing ? "Salvar alterações" : "Criar campanha e gerar acesso")}

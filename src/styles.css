@@ -278,12 +278,16 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-art-viewer > .shirt-mockup-legacy { width: min(100%, 580px); height: 470px; object-fit: contain; }
 .campaign-art-viewer > .shirt-mockup-composite { width: min(100%, 580px); }
 .campaign-real-photo-main { width: 100%; height: 500px; display: block; object-fit: contain; }
+.campaign-real-video-main { background: #080a0b; }
 .campaign-real-photo-thumbnails { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 10px; }
 .campaign-real-photo-thumbnails button { position: relative; width: 64px; height: 64px; overflow: hidden; border: 2px solid transparent; cursor: pointer; padding: 0; background: #1a1e20; }
 .campaign-real-photo-thumbnails button.is-active { border-color: #27aef0; }
 .campaign-real-photo-thumbnails img { width: 100%; height: 100%; display: block; object-fit: cover; opacity: .74; }
+.campaign-real-photo-thumbnails button.is-video > i { width: 100%; height: 100%; display: block; background: linear-gradient(135deg, #20272a, #090b0c); }
 .campaign-real-photo-thumbnails button.is-active img { opacity: 1; }
 .campaign-real-photo-thumbnails span { position: absolute; right: 3px; bottom: 3px; min-width: 17px; height: 17px; display: grid; place-content: center; border-radius: 50%; color: #fff; background: rgba(0, 0, 0, .72); font-size: .56rem; }
+.campaign-real-photo-thumbnails span.campaign-real-video-play { inset: 50% auto auto 50%; width: 27px; height: 27px; transform: translate(-50%, -50%); border-radius: 50%; background: rgba(0, 0, 0, .78); font-size: 19px; }
+.campaign-real-photo-thumbnails button.is-video > b { position: absolute; right: 3px; bottom: 3px; border-radius: 4px; padding: 2px 4px; color: #fff; background: rgba(0, 0, 0, .78); font-size: .48rem; line-height: 1; }
 .shirt-mockup-legacy { display: block; object-fit: contain; }
 .shirt-mockup-composite { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; isolation: isolate; }
 .shirt-mockup-color, .shirt-mockup-texture, .shirt-mockup-highlight { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -1334,6 +1338,16 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-real-photo-card > label:hover, .campaign-real-photo-card > label:focus-within { border-color: #087fca; }
 .campaign-real-photo-card > label .material-symbols-rounded { font-size: 17px; }
 .campaign-real-photo-card > label input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.campaign-real-photo-card > label.campaign-real-video-add { margin-top: 8px; border-color: #82a9bd; color: #176d99; background: #eef7fb; }
+.campaign-real-video-draft { display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: 9px 11px; align-items: center; margin-top: 10px; border-top: 1px solid #dce3e0; padding-top: 10px; }
+.campaign-real-video-preview { position: relative; width: 108px; height: 74px; overflow: hidden; background: #131719; }
+.campaign-real-video-preview video { width: 100%; height: 100%; display: block; object-fit: contain; }
+.campaign-real-video-preview > span { position: absolute; inset: 0; display: grid; place-content: center; color: rgba(255, 255, 255, .8); font-size: 27px; pointer-events: none; }
+.campaign-real-video-status { min-width: 0; display: grid; gap: 5px; color: #495257; }
+.campaign-real-video-status strong { font-size: .54rem; }
+.campaign-real-video-status small { color: #a83232; font-size: .5rem; line-height: 1.35; }
+.campaign-real-video-status progress { width: 100%; height: 7px; accent-color: #087fca; }
+.campaign-real-video-remove { grid-column: 1 / -1; justify-self: start; border: 0; cursor: pointer; padding: 0; color: #a32f2f; background: transparent; font-size: .51rem; font-weight: 700; }
 .campaign-artwork-guidance { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; margin-bottom: 16px; border: 1px solid #c9e4f2; padding: 14px; background: #f3fafe; }
 .campaign-artwork-guidance > .material-symbols-rounded { width: 32px; height: 32px; display: grid; place-content: center; color: #087fca; background: #dff2fc; font-size: 18px; }
 .campaign-artwork-guidance strong { display: block; color: #273034; font-size: .63rem; }
