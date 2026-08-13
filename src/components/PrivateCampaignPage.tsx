@@ -369,6 +369,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   });
   if (realPhotosEnabled) selectedGalleryMedia.push(...selectedRealPhotos.map((url) => ({ type: "image" as const, url })));
   const selectedMedia = selectedGalleryMedia[galleryIndex] ?? selectedGalleryMedia[0];
+  const selectedVideoUrl = selectedMedia?.type === "video" ? selectedMedia.url : null;
   const canShowBack = Boolean(selectedArtwork.back);
   const unitPriceCents = Math.round(campaign.prices[activeModel] * 100);
   const cartTotal = cart.reduce((total, item) => total + item.unitPriceCents * item.quantity, 0);
@@ -384,8 +385,18 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   }, [activeModel, selectedColor.name, selectedGalleryMedia.length, mockupEnabled, realPhotosEnabled]);
 
   useEffect(() => {
-    if (selectedMedia?.type !== "video") galleryVideo.current?.pause();
-  }, [selectedMedia?.type]);
+    const video = galleryVideo.current;
+    if (!video) return;
+    if (selectedMedia?.type === "video") {
+      video.currentTime = 0;
+      void video.play().catch(() => {
+        // Alguns modos de economia de bateria ainda podem bloquear o autoplay.
+      });
+      return;
+    }
+    video.pause();
+    video.currentTime = 0;
+  }, [selectedMedia?.type, selectedVideoUrl]);
 
   useEffect(() => () => { galleryVideo.current?.pause(); }, [selectedColor.name, activeModel]);
 
@@ -562,7 +573,6 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
           </section>
           <form className="campaign-configurator" onSubmit={submitConfiguration}>
             <section className="campaign-art-stage">
-              {mockupEnabled && (selectedArtwork.front && selectedArtwork.back || canShowBack && !selectedArtwork.front) && <div className={`campaign-side-switch${selectedMedia?.type === "mockup" ? "" : " is-hidden"}`} role="group" aria-label="Visualizar lado da camiseta" aria-hidden={selectedMedia?.type !== "mockup"}><button className={previewSide === "front" ? "is-active" : ""} type="button" disabled={!selectedArtwork.front || selectedMedia?.type !== "mockup"} aria-pressed={previewSide === "front"} onClick={() => setPreviewSide("front")}>Frente</button><button className={previewSide === "back" ? "is-active" : ""} type="button" disabled={!selectedArtwork.back || selectedMedia?.type !== "mockup"} aria-pressed={previewSide === "back"} onClick={() => setPreviewSide("back")}>Costas</button></div>}
               <div className="campaign-media-carousel">
                 <div
                   className="campaign-art-viewer"
@@ -595,7 +605,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
                             label={`${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name}, ${selectedColor.name}, ${previewSide === "front" ? "frente" : "costas"}`}
                           />
                         ) : media.type === "video" ? (
-                          <video ref={galleryVideo} className="campaign-real-photo-main campaign-real-video-main" src={media.url} poster={media.posterUrl} controls playsInline preload="metadata" aria-label={`Vídeo real da camisa ${selectedColor.name}`} />
+                          <video ref={galleryVideo} className="campaign-real-photo-main campaign-real-video-main" src={media.url} poster={media.posterUrl} controls muted playsInline preload="metadata" aria-label={`Vídeo real da camisa ${selectedColor.name}`} />
                         ) : (
                           <img className="campaign-real-photo-main" src={media.url} alt={`${itemLabel} da camisa ${selectedColor.name}`} />
                         )}
@@ -603,10 +613,11 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
                     );
                   })}
                 </div>
-                {selectedGalleryMedia.length > 1 && <><button className="campaign-gallery-arrow is-previous" type="button" aria-label="Ver conteúdo anterior" disabled={galleryIndex === 0} onClick={() => goToGalleryItem(galleryIndex - 1)}><span className="material-symbols-rounded" aria-hidden="true">chevron_left</span></button><button className="campaign-gallery-arrow is-next" type="button" aria-label="Ver próximo conteúdo" disabled={galleryIndex === selectedGalleryMedia.length - 1} onClick={() => goToGalleryItem(galleryIndex + 1)}><span className="material-symbols-rounded" aria-hidden="true">chevron_right</span></button><span className="campaign-gallery-count" aria-live="polite">{galleryIndex + 1} / {selectedGalleryMedia.length}</span></>}
+                {mockupEnabled && (selectedArtwork.front && selectedArtwork.back || canShowBack && !selectedArtwork.front) && <div className={`campaign-side-switch${selectedMedia?.type === "mockup" ? "" : " is-hidden"}`} role="group" aria-label="Visualizar lado da camiseta" aria-hidden={selectedMedia?.type !== "mockup"}><button className={previewSide === "front" ? "is-active" : ""} type="button" disabled={!selectedArtwork.front || selectedMedia?.type !== "mockup"} aria-pressed={previewSide === "front"} onClick={() => setPreviewSide("front")}>Frente</button><button className={previewSide === "back" ? "is-active" : ""} type="button" disabled={!selectedArtwork.back || selectedMedia?.type !== "mockup"} aria-pressed={previewSide === "back"} onClick={() => setPreviewSide("back")}>Costas</button></div>}
+                {selectedGalleryMedia.length > 1 && <><button className="campaign-gallery-arrow is-previous" type="button" aria-label="Ver conteúdo anterior" disabled={galleryIndex === 0} onClick={() => goToGalleryItem(galleryIndex - 1)}><span className="material-symbols-rounded" aria-hidden="true">chevron_left</span></button><button className="campaign-gallery-arrow is-next" type="button" aria-label="Ver próximo conteúdo" disabled={galleryIndex === selectedGalleryMedia.length - 1} onClick={() => goToGalleryItem(galleryIndex + 1)}><span className="material-symbols-rounded" aria-hidden="true">chevron_right</span></button><span className={`campaign-gallery-count${selectedMedia?.type === "mockup" && canShowBack ? " has-side-switch" : ""}`} aria-live="polite">{galleryIndex + 1} / {selectedGalleryMedia.length}</span></>}
               </div>
               {selectedGalleryMedia.length > 1 && <div className="campaign-gallery-dots" role="group" aria-label="Escolher conteúdo da galeria">{selectedGalleryMedia.map((media, index) => <button className={galleryIndex === index ? "is-active" : ""} type="button" aria-label={`Ir para ${media.type === "mockup" ? "o mockup" : media.type === "video" ? "o vídeo" : `a foto ${selectedGalleryMedia.slice(0, index + 1).filter((item) => item.type === "image").length}`}`} aria-pressed={galleryIndex === index} onClick={() => goToGalleryItem(index)} key={`dot-${media.type === "mockup" ? "mockup" : media.url}`} />)}</div>}
-              <p className="campaign-art-note">{selectedMedia?.type === "video" ? `Vídeo da camisa ${selectedColor.name}. Toque em reproduzir para assistir.` : selectedMedia?.type === "image" ? `Foto real da camisa ${selectedColor.name}.` : art.mode === "legacy_mockup" ? "Imagem preservada da campanha original." : `${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name} · ${selectedColor.name} · ${previewSide === "front" ? "Frente" : "Costas"}`}</p>
+              <p className="campaign-art-note">{selectedMedia?.type === "video" ? `Vídeo da camisa ${selectedColor.name}. Reprodução automática sem som.` : selectedMedia?.type === "image" ? `Foto real da camisa ${selectedColor.name}.` : art.mode === "legacy_mockup" ? "Imagem preservada da campanha original." : `${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name} · ${selectedColor.name} · ${previewSide === "front" ? "Frente" : "Costas"}`}</p>
               {cart.length > 0 && (
                 <section className="campaign-cart-preview" aria-labelledby="cart-preview-title">
                   <header>
