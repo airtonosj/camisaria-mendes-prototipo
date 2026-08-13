@@ -1680,7 +1680,14 @@ function Campaigns({ data }: { data: PanelData }) {
     if (realPhotosEnabled) {
       const colorWithoutPhoto = activeRealPhotoColors.find((color) => !(realPhotosByColor[colorKey(color.name)]?.length));
       if (colorWithoutPhoto) {
-        setArtError(`Envie pelo menos uma foto real para a cor ${colorWithoutPhoto.name}.`);
+        const modelsUsingColor = shirtModels
+          .filter((model) => selectedModels[model.name]
+            && modelColors[model.name].some((name) => colorKey(name) === colorKey(colorWithoutPhoto.name)))
+          .map((model) => model.name === "Comum" ? "Padrão" : model.name);
+        const modelLabel = modelsUsingColor.length === 1
+          ? `no modelo ${modelsUsingColor[0]}`
+          : `nos modelos ${modelsUsingColor.slice(0, -1).join(", ")} e ${modelsUsingColor.at(-1)}`;
+        setArtError(`Envie pelo menos uma foto real para a cor ${colorWithoutPhoto.name} ${modelLabel}.`);
         return;
       }
     }

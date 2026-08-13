@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { buildRoute } from "../App";
 import { createInfinitePayCheckout, createOrderInApi } from "../api";
 import type { PrivateCampaign, ShirtColorOption, ShirtModelName, SizeCode, VariantArtwork } from "../data";
@@ -7,13 +7,10 @@ import { Brand } from "./Brand";
 import { ShirtMockupPreview } from "./ShirtMockupPreview";
 
 type CampaignStep = "model" | "details" | "payment" | "received";
-type GalleryMedia = { type: "image"; url: string } | { type: "video"; url: string; posterUrl?: string; durationSeconds?: number };
-
-function videoDurationLabel(seconds?: number) {
-  if (!seconds || !Number.isFinite(seconds)) return "Vídeo";
-  const rounded = Math.max(0, Math.round(seconds));
-  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
-}
+type GalleryMedia =
+  | { type: "mockup" }
+  | { type: "video"; url: string; posterUrl?: string; durationSeconds?: number }
+  | { type: "image"; url: string };
 
 type CartItem = {
   variantId: number;
@@ -289,8 +286,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   const [step, setStep] = useState<CampaignStep>(resumePayment ? "payment" : "model");
   const [model, setModel] = useState<ShirtModelName>(initialModel);
   const [previewSide, setPreviewSide] = useState<"front" | "back">("front");
-  const [previewMode, setPreviewMode] = useState<"mockup" | "real">(mockupEnabled ? "mockup" : "real");
-  const [realPhotoIndex, setRealPhotoIndex] = useState(0);
+  const [galleryIndex, setGalleryIndex] = useState(0);
   const [color, setColor] = useState(() => campaignColors(campaign, initialModel)[0]?.name ?? "");
   const [size, setSize] = useState<SizeCode>(() => campaignSizes(campaign, initialModel)[0] ?? "M");
   const [quantity, setQuantity] = useState(1);
@@ -306,6 +302,8 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [simulated, setSimulated] = useState(false);
   const idempotency = useRef({ signature: "", key: "" });
+  const galleryTrack = useRef<HTMLDivElement | null>(null);
+  const galleryDrag = useRef({ pointerId: -1, startX: 0, startScrollLeft: 0, dragging: false });
   const galleryVideo = useRef<HTMLVideoElement | null>(null);
   const availableModels = useMemo(() => campaignModels(campaign), [campaign]);
 
@@ -361,14 +359,16 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   const selectedArtwork = artworkForVariant(campaign, selectedVariantId);
   const selectedRealPhotos = campaign.realPhotos?.[selectedColor.name] ?? [];
   const selectedRealVideo = campaign.realVideos?.[selectedColor.name];
-  const selectedGalleryMedia: GalleryMedia[] = selectedRealPhotos.map((url) => ({ type: "image", url }));
-  if (selectedRealVideo) selectedGalleryMedia.splice(Math.min(1, selectedGalleryMedia.length), 0, {
+  const selectedGalleryMedia: GalleryMedia[] = [];
+  if (mockupEnabled) selectedGalleryMedia.push({ type: "mockup" });
+  if (realPhotosEnabled && selectedRealVideo) selectedGalleryMedia.push({
     type: "video",
     url: selectedRealVideo.url,
     posterUrl: selectedRealVideo.posterUrl,
     durationSeconds: selectedRealVideo.durationSeconds,
   });
-  const selectedMedia = selectedGalleryMedia[realPhotoIndex] ?? selectedGalleryMedia[0];
+  if (realPhotosEnabled) selectedGalleryMedia.push(...selectedRealPhotos.map((url) => ({ type: "image" as const, url })));
+  const selectedMedia = selectedGalleryMedia[galleryIndex] ?? selectedGalleryMedia[0];
   const canShowBack = Boolean(selectedArtwork.back);
   const unitPriceCents = Math.round(campaign.prices[activeModel] * 100);
   const cartTotal = cart.reduce((total, item) => total + item.unitPriceCents * item.quantity, 0);
@@ -379,12 +379,54 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   }, [selectedVariantId, selectedArtwork.front?.url, selectedArtwork.back?.url, previewSide]);
 
   useEffect(() => {
-    setRealPhotoIndex(0);
-    if (!mockupEnabled) setPreviewMode("real");
-    else if (!realPhotosEnabled || !selectedGalleryMedia.length) setPreviewMode("mockup");
-  }, [selectedColor.name, selectedGalleryMedia.length, mockupEnabled, realPhotosEnabled]);
+    setGalleryIndex(0);
+    galleryTrack.current?.scrollTo({ left: 0, behavior: "auto" });
+  }, [activeModel, selectedColor.name, selectedGalleryMedia.length, mockupEnabled, realPhotosEnabled]);
 
-  useEffect(() => () => { galleryVideo.current?.pause(); }, [selectedColor.name, activeModel, realPhotoIndex, previewMode]);
+  useEffect(() => {
+    if (selectedMedia?.type !== "video") galleryVideo.current?.pause();
+  }, [selectedMedia?.type]);
+
+  useEffect(() => () => { galleryVideo.current?.pause(); }, [selectedColor.name, activeModel]);
+
+  function goToGalleryItem(index: number) {
+    const nextIndex = Math.max(0, Math.min(index, selectedGalleryMedia.length - 1));
+    setGalleryIndex(nextIndex);
+    const track = galleryTrack.current;
+    if (track) track.scrollTo({ left: track.clientWidth * nextIndex, behavior: "smooth" });
+  }
+
+  function syncGalleryIndex() {
+    const track = galleryTrack.current;
+    if (!track?.clientWidth) return;
+    setGalleryIndex(Math.max(0, Math.min(Math.round(track.scrollLeft / track.clientWidth), selectedGalleryMedia.length - 1)));
+  }
+
+  function startGalleryDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    galleryDrag.current = { pointerId: event.pointerId, startX: event.clientX, startScrollLeft: event.currentTarget.scrollLeft, dragging: false };
+  }
+
+  function moveGalleryDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = galleryDrag.current;
+    if (drag.pointerId !== event.pointerId || !(event.buttons & 1)) return;
+    const distance = event.clientX - drag.startX;
+    if (!drag.dragging && Math.abs(distance) < 6) return;
+    drag.dragging = true;
+    event.preventDefault();
+    event.currentTarget.classList.add("is-dragging");
+    event.currentTarget.scrollLeft = drag.startScrollLeft - distance;
+  }
+
+  function finishGalleryDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = galleryDrag.current;
+    if (drag.pointerId !== event.pointerId) return;
+    event.currentTarget.classList.remove("is-dragging");
+    if (drag.dragging && event.currentTarget.clientWidth) {
+      goToGalleryItem(Math.round(event.currentTarget.scrollLeft / event.currentTarget.clientWidth));
+    }
+    galleryDrag.current = { pointerId: -1, startX: 0, startScrollLeft: 0, dragging: false };
+  }
 
   function selectModel(nextModel: ShirtModelName) {
     setModel(nextModel);
@@ -520,26 +562,51 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
           </section>
           <form className="campaign-configurator" onSubmit={submitConfiguration}>
             <section className="campaign-art-stage">
-              {mockupEnabled && realPhotosEnabled && selectedGalleryMedia.length > 0 && <div className="campaign-visual-switch" role="group" aria-label="Tipo de visualizacao da camisa"><button className={previewMode === "mockup" ? "is-active" : ""} type="button" aria-pressed={previewMode === "mockup"} onClick={() => setPreviewMode("mockup")}><span className="material-symbols-rounded" aria-hidden="true">checkroom</span>Mockup</button><button className={previewMode === "real" ? "is-active" : ""} type="button" aria-pressed={previewMode === "real"} onClick={() => setPreviewMode("real")}><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span>Fotos e vídeo</button></div>}
-              {previewMode === "mockup" && (selectedArtwork.front && selectedArtwork.back || canShowBack && !selectedArtwork.front) && <div className="campaign-side-switch" role="group" aria-label="Visualizar lado da camiseta"><button className={previewSide === "front" ? "is-active" : ""} type="button" disabled={!selectedArtwork.front} aria-pressed={previewSide === "front"} onClick={() => setPreviewSide("front")}>Frente</button><button className={previewSide === "back" ? "is-active" : ""} type="button" disabled={!selectedArtwork.back} aria-pressed={previewSide === "back"} onClick={() => setPreviewSide("back")}>Costas</button></div>}
-              <div className="campaign-art-viewer">
-                {previewMode === "real" && selectedMedia ? selectedMedia.type === "video" ? (
-                  <video ref={galleryVideo} className="campaign-real-photo-main campaign-real-video-main" src={selectedMedia.url} poster={selectedMedia.posterUrl} controls playsInline preload="metadata" aria-label={`Vídeo real da camisa ${selectedColor.name}`} />
-                ) : (
-                  <img className="campaign-real-photo-main" src={selectedMedia.url} alt={`Foto real da camisa ${selectedColor.name}, imagem ${realPhotoIndex + 1}`} />
-                ) : (
-                  <ShirtMockupPreview
-                  model={activeModel}
-                  color={selectedColor}
-                  art={art}
-                  artwork={selectedArtwork}
-                  side={previewSide}
-                  label={`${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name}, ${selectedColor.name}, ${previewSide === "front" ? "frente" : "costas"}`}
-                  />
-                )}
+              {mockupEnabled && (selectedArtwork.front && selectedArtwork.back || canShowBack && !selectedArtwork.front) && <div className={`campaign-side-switch${selectedMedia?.type === "mockup" ? "" : " is-hidden"}`} role="group" aria-label="Visualizar lado da camiseta" aria-hidden={selectedMedia?.type !== "mockup"}><button className={previewSide === "front" ? "is-active" : ""} type="button" disabled={!selectedArtwork.front || selectedMedia?.type !== "mockup"} aria-pressed={previewSide === "front"} onClick={() => setPreviewSide("front")}>Frente</button><button className={previewSide === "back" ? "is-active" : ""} type="button" disabled={!selectedArtwork.back || selectedMedia?.type !== "mockup"} aria-pressed={previewSide === "back"} onClick={() => setPreviewSide("back")}>Costas</button></div>}
+              <div className="campaign-media-carousel">
+                <div
+                  className="campaign-art-viewer"
+                  ref={galleryTrack}
+                  role="region"
+                  aria-label={`Galeria da camisa ${selectedColor.name}`}
+                  tabIndex={0}
+                  onScroll={syncGalleryIndex}
+                  onPointerDown={startGalleryDrag}
+                  onPointerMove={moveGalleryDrag}
+                  onPointerUp={finishGalleryDrag}
+                  onPointerCancel={finishGalleryDrag}
+                  onPointerLeave={(event) => { if (galleryDrag.current.dragging) finishGalleryDrag(event); }}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowLeft") { event.preventDefault(); goToGalleryItem(galleryIndex - 1); }
+                    if (event.key === "ArrowRight") { event.preventDefault(); goToGalleryItem(galleryIndex + 1); }
+                  }}
+                >
+                  {selectedGalleryMedia.map((media, index) => {
+                    const itemLabel = media.type === "mockup" ? "Mockup" : media.type === "video" ? "Vídeo" : `Foto ${selectedGalleryMedia.slice(0, index + 1).filter((item) => item.type === "image").length}`;
+                    return (
+                      <div className="campaign-media-slide" role="group" aria-label={`${index + 1} de ${selectedGalleryMedia.length}: ${itemLabel}`} key={media.type === "mockup" ? "mockup" : `${media.type}-${media.url}`}>
+                        {media.type === "mockup" ? (
+                          <ShirtMockupPreview
+                            model={activeModel}
+                            color={selectedColor}
+                            art={art}
+                            artwork={selectedArtwork}
+                            side={previewSide}
+                            label={`${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name}, ${selectedColor.name}, ${previewSide === "front" ? "frente" : "costas"}`}
+                          />
+                        ) : media.type === "video" ? (
+                          <video ref={galleryVideo} className="campaign-real-photo-main campaign-real-video-main" src={media.url} poster={media.posterUrl} controls playsInline preload="metadata" aria-label={`Vídeo real da camisa ${selectedColor.name}`} />
+                        ) : (
+                          <img className="campaign-real-photo-main" src={media.url} alt={`${itemLabel} da camisa ${selectedColor.name}`} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {selectedGalleryMedia.length > 1 && <><button className="campaign-gallery-arrow is-previous" type="button" aria-label="Ver conteúdo anterior" disabled={galleryIndex === 0} onClick={() => goToGalleryItem(galleryIndex - 1)}><span className="material-symbols-rounded" aria-hidden="true">chevron_left</span></button><button className="campaign-gallery-arrow is-next" type="button" aria-label="Ver próximo conteúdo" disabled={galleryIndex === selectedGalleryMedia.length - 1} onClick={() => goToGalleryItem(galleryIndex + 1)}><span className="material-symbols-rounded" aria-hidden="true">chevron_right</span></button><span className="campaign-gallery-count" aria-live="polite">{galleryIndex + 1} / {selectedGalleryMedia.length}</span></>}
               </div>
-              {previewMode === "real" && selectedGalleryMedia.length > 1 && <div className="campaign-real-photo-thumbnails" role="group" aria-label={`Fotos e vídeo da cor ${selectedColor.name}`}>{selectedGalleryMedia.map((media, index) => <button className={`${realPhotoIndex === index ? "is-active" : ""}${media.type === "video" ? " is-video" : ""}`} type="button" aria-pressed={realPhotoIndex === index} onClick={() => setRealPhotoIndex(index)} key={`${media.type}-${media.url}`}>{media.type === "video" ? <>{media.posterUrl ? <img src={media.posterUrl} alt="" /> : <i aria-hidden="true" />}<span className="campaign-real-video-play material-symbols-rounded" aria-hidden="true">play_arrow</span><b>{videoDurationLabel(media.durationSeconds)}</b></> : <><img src={media.url} alt="" /><span>{index + 1}</span></>}</button>)}</div>}
-              <p className="campaign-art-note">{previewMode === "real" ? selectedMedia?.type === "video" ? `Vídeo da camisa ${selectedColor.name}. Toque em reproduzir para assistir.` : `Foto real da camisa ${selectedColor.name}.` : art.mode === "legacy_mockup" ? "Imagem preservada da campanha original." : `${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name} · ${selectedColor.name} · ${previewSide === "front" ? "Frente" : "Costas"}`}</p>
+              {selectedGalleryMedia.length > 1 && <div className="campaign-gallery-dots" role="group" aria-label="Escolher conteúdo da galeria">{selectedGalleryMedia.map((media, index) => <button className={galleryIndex === index ? "is-active" : ""} type="button" aria-label={`Ir para ${media.type === "mockup" ? "o mockup" : media.type === "video" ? "o vídeo" : `a foto ${selectedGalleryMedia.slice(0, index + 1).filter((item) => item.type === "image").length}`}`} aria-pressed={galleryIndex === index} onClick={() => goToGalleryItem(index)} key={`dot-${media.type === "mockup" ? "mockup" : media.url}`} />)}</div>}
+              <p className="campaign-art-note">{selectedMedia?.type === "video" ? `Vídeo da camisa ${selectedColor.name}. Toque em reproduzir para assistir.` : selectedMedia?.type === "image" ? `Foto real da camisa ${selectedColor.name}.` : art.mode === "legacy_mockup" ? "Imagem preservada da campanha original." : `${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name} · ${selectedColor.name} · ${previewSide === "front" ? "Frente" : "Costas"}`}</p>
               {cart.length > 0 && (
                 <section className="campaign-cart-preview" aria-labelledby="cart-preview-title">
                   <header>
