@@ -28,7 +28,8 @@ export type ShirtModelName = "Comum" | "Oversized";
 export type ShirtColorName = string;
 export type ShirtColorOption = { name: ShirtColorName; hex: string };
 export type SizeGroup = "standard" | "baby_look";
-export type SizeCode = "PP" | "P" | "M" | "G" | "GG" | "XG" | "PPB" | "PB" | "MB" | "GB" | "GGB" | "XGB";
+/** Inclui códigos antigos para que pedidos históricos continuem legíveis. */
+export type SizeCode = "PP" | "P" | "M" | "G" | "GG" | "EXGG" | "XG" | "PPB" | "PB" | "MB" | "GB" | "GGB" | "XGB";
 
 /**
  * `overlay` é a arte transparente que o site aplica sobre o mockup colorido.
@@ -82,13 +83,11 @@ export const sizeCatalog: Array<{ code: SizeCode; group: SizeGroup }> = [
   { code: "M", group: "standard" },
   { code: "G", group: "standard" },
   { code: "GG", group: "standard" },
+  { code: "EXGG", group: "standard" },
   { code: "XG", group: "standard" },
-  { code: "PPB", group: "baby_look" },
   { code: "PB", group: "baby_look" },
   { code: "MB", group: "baby_look" },
   { code: "GB", group: "baby_look" },
-  { code: "GGB", group: "baby_look" },
-  { code: "XGB", group: "baby_look" },
 ];
 
 export const sizeGroupLabels: Record<SizeGroup, string> = {
@@ -98,6 +97,17 @@ export const sizeGroupLabels: Record<SizeGroup, string> = {
 
 export function sizesInGroup(group: SizeGroup) {
   return sizeCatalog.filter((size) => size.group === group).map((size) => size.code);
+}
+
+/** Grade comercial permitida em campanhas novas e no checkout. */
+export const campaignSizesByModel: Record<ShirtModelName, SizeCode[]> = {
+  Comum: ["P", "M", "G", "GG", "EXGG", "PB", "MB", "GB"],
+  Oversized: ["PP", "P", "M", "G", "GG", "XG"],
+};
+
+export function campaignSizesInGroup(model: ShirtModelName, group: SizeGroup) {
+  const groupSizes = new Set(sizesInGroup(group));
+  return campaignSizesByModel[model].filter((size) => groupSizes.has(size));
 }
 
 /** Ordena qualquer lista de tamanhos pela ordem do catálogo, não pela ordem de clique. */
@@ -116,12 +126,11 @@ export const defaultCampaignColors: Record<ShirtModelName, ShirtColorOption[]> =
 };
 
 /**
- * Pré-seleção usada ao criar campanha: o corte Comum recebe tradicional e baby look,
- * o Oversized fica só com os tradicionais. A camisaria só desmarca o que não vai vender.
+ * Pré-seleção usada ao criar campanha. Cada corte recebe somente sua grade comercial.
  */
 export const defaultCampaignSizes: Record<ShirtModelName, SizeCode[]> = {
-  Comum: [...sizesInGroup("standard"), ...sizesInGroup("baby_look")],
-  Oversized: sizesInGroup("standard"),
+  Comum: [...campaignSizesByModel.Comum],
+  Oversized: [...campaignSizesByModel.Oversized],
 };
 
 export const DEMO_CAMPAIGNS_STORAGE_KEY = "camisaria-mendes-demo-campaigns";
@@ -170,8 +179,8 @@ export const privateCampaigns: Record<string, PrivateCampaign> = {
     models: ["Comum", "Oversized"],
     prices: { Comum: 59.9, Oversized: 69.9 },
     sizes: {
-      Comum: ["PP", "P", "M", "G", "GG", "PPB", "PB", "MB", "GB", "GGB"],
-      Oversized: ["P", "M", "G", "GG", "XG"],
+      Comum: [...defaultCampaignSizes.Comum],
+      Oversized: [...defaultCampaignSizes.Oversized],
     },
     deadline: "Pedidos até 31 de agosto de 2026",
     pickup: "Retirada com o representante da turma",

@@ -1302,17 +1302,17 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-visual-options > p { margin: 0 0 12px; color: #747c80; font-size: .57rem; line-height: 1.5; }
 .campaign-visual-options > div { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .campaign-visual-options--secondary { margin-top: 3px; }
-.campaign-visual-options label { position: relative; min-width: 0; min-height: 74px; display: grid; grid-template-columns: minmax(0, 1fr) 46px; align-items: center; gap: 14px; border: 1px solid #d2d9d6; cursor: pointer; padding: 13px 14px; background: #f7f8f7; }
-.campaign-visual-options label:has(input:checked) { border-color: #6bc1ee; background: #f1faff; box-shadow: inset 0 0 0 1px #6bc1ee; }
+.campaign-visual-options label { position: relative; width: min(100%, 350px); min-width: 0; min-height: 48px; display: grid; grid-template-columns: minmax(0, 1fr) 36px; align-items: center; gap: 10px; border: 1px solid #d8ddda; border-radius: 6px; cursor: pointer; padding: 8px 10px; background: #fafbfa; }
+.campaign-visual-options label:has(input:checked) { border-color: #8ccceb; background: #f5fbfe; }
 .campaign-visual-options label > span { min-width: 0; }
 .campaign-visual-options strong, .campaign-visual-options small { display: block; }
-.campaign-visual-options strong { color: #293135; font-size: .63rem; }
-.campaign-visual-options small { margin-top: 4px; color: #7a8489; font-size: .51rem; line-height: 1.4; }
+.campaign-visual-options strong { color: #293135; font-size: .59rem; }
+.campaign-visual-options small { margin-top: 2px; color: #7a8489; font-size: .48rem; line-height: 1.3; }
 .campaign-visual-options input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.campaign-visual-options label > i { position: relative; width: 44px; height: 24px; border-radius: 14px; background: #aeb6b2; transition: background .18s ease; }
-.campaign-visual-options label > i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .22); transition: transform .18s ease; }
+.campaign-visual-options label > i { position: relative; width: 34px; height: 18px; border-radius: 10px; background: #aeb6b2; transition: background .18s ease; }
+.campaign-visual-options label > i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .22); transition: transform .18s ease; }
 .campaign-visual-options input:checked + i { background: #087fca; }
-.campaign-visual-options input:checked + i::after { transform: translateX(20px); }
+.campaign-visual-options input:checked + i::after { transform: translateX(16px); }
 .campaign-visual-options label:focus-within { outline: 2px solid #75caf4; outline-offset: 2px; }
 .campaign-artwork { grid-column: 1 / -1; min-width: 0; margin: 3px 0 0; border: 0; border-top: 1px solid #e3e6e4; padding: 21px 0 0; }
 .campaign-artwork legend { padding: 0 12px 0 0; color: #4e5559; font-size: .61rem; font-weight: 700; }
@@ -1399,6 +1399,7 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-artwork-status { color: #32785d; }
 .campaign-artwork-error .material-symbols-rounded, .campaign-artwork-status .material-symbols-rounded { flex: 0 0 auto; font-size: 16px; }
 .campaign-create-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 3px; }
+.campaign-create-actions .primary-action:disabled { cursor: not-allowed; opacity: .45; }
 .campaign-share-panel { padding: 0; overflow: hidden; }
 .campaign-share-panel > header { padding: 23px 25px; color: #fff; background: #0a0d0f; }
 .campaign-share-panel > header h3 { color: #fff; }

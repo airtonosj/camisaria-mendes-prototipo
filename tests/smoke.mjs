@@ -272,7 +272,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "013_campaign_visual_options");
+  assert.equal(health.schema.current, "014_campaign_size_grades");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -305,7 +305,7 @@ try {
       { colorName: "Preto", urls: ["/uploads/33333333-3333-4333-8333-333333333333.png"] },
     ],
     models: [
-      { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Lilás lavanda", hex: "#8B5CF6" }], sizes: ["P", "M"] },
+      { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Lilás lavanda", hex: "#8B5CF6" }], sizes: ["P", "M", "EXGG"] },
       { modelCode: "oversized", unitPriceCents: 6990, colors: [{ name: "Preto", hex: "#111315" }], sizes: ["M", "G"] },
     ],
   };
@@ -318,7 +318,30 @@ try {
   assert.equal(customVariant.color.hex, "#8B5CF6");
   assert.deepEqual(customVariant.realPhotoUrls, customCampaignPayload.realPhotos[0].urls);
   assert.deepEqual(customCampaign.realPhotos.find((gallery) => gallery.colorName === "Preto").urls, customCampaignPayload.realPhotos[1].urls);
+  assert.ok(customCampaign.sizes.some((size) => size.model.code === "common" && size.code === "EXGG"));
   step("campanha aceita e publica cor personalizada com nome e código HEX");
+
+  await request("/api/admin/campaigns", {
+    method: "POST",
+    expected: 422,
+    token,
+    body: {
+      ...customCampaignPayload,
+      code: "MENDES-GRADE-COMUM-INVALIDA",
+      models: [{ ...customCampaignPayload.models[0], sizes: ["PP"] }],
+    },
+  });
+  await request("/api/admin/campaigns", {
+    method: "POST",
+    expected: 422,
+    token,
+    body: {
+      ...customCampaignPayload,
+      code: "MENDES-GRADE-OVER-INVALIDA",
+      models: [{ ...customCampaignPayload.models[1], sizes: ["PB"] }],
+    },
+  });
+  step("API limita Tradicional, Baby look e Oversized às respectivas grades comerciais");
 
   await request(`/api/admin/campaigns/${customCampaign.code}`, {
     method: "PATCH",

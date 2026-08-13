@@ -28,6 +28,10 @@ import {
 } from "./infinitepay-payments.mjs";
 
 const campaignPhases = ["receiving_orders", "orders_closed", "production", "ready_for_delivery", "completed"];
+const campaignSizeCodesByModel = new Map([
+  ["common", new Set(["P", "M", "G", "GG", "EXGG", "PB", "MB", "GB"])],
+  ["oversized", new Set(["PP", "P", "M", "G", "GG", "XG"])],
+]);
 const projectDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const frontendDirectory = path.join(projectDirectory, "dist");
 const uploadsDirectory = config.uploadsDirectory;
@@ -768,6 +772,11 @@ function parseCampaignModels(value) {
     }
     const sizes = model.sizes.map((size) => requireText(size, "models.sizes", 8).toUpperCase());
     if (new Set(sizes).size !== sizes.length) throw new ApiError(422, "VALIDATION_ERROR", `Há tamanhos repetidos em ${modelCode}.`);
+    const allowedSizes = campaignSizeCodesByModel.get(modelCode);
+    const unavailableSize = allowedSizes && sizes.find((size) => !allowedSizes.has(size));
+    if (unavailableSize) {
+      throw new ApiError(422, "INVALID_SIZE", `O tamanho ${unavailableSize} não está disponível para o corte ${modelCode}.`);
+    }
     return { modelCode, unitPriceCents, colors, sizes };
   });
   if (new Set(models.map((model) => model.modelCode)).size !== models.length) {

@@ -25,7 +25,7 @@ const standardMeasurements: MeasurementRow[] = [
   { size: "M", length: "72", width: "49,5", shoulder: "42,5" },
   { size: "G", length: "77", width: "54", shoulder: "45" },
   { size: "GG", length: "78", width: "59", shoulder: "48" },
-  { size: "XG", length: "80,5", width: "67", shoulder: "55" },
+  { size: "EXGG", length: "80,5", width: "67", shoulder: "55" },
 ];
 
 const babyLookMeasurements: MeasurementRow[] = [
@@ -74,7 +74,8 @@ function campaignModels(campaign: PrivateCampaign) {
 }
 
 function campaignSizes(campaign: PrivateCampaign, model: ShirtModelName) {
-  const configured = campaign.sizes?.[model];
+  const allowed = new Set(defaultCampaignSizes[model]);
+  const configured = campaign.sizes?.[model]?.filter((size) => allowed.has(size));
   if (campaign.models || campaign.variantIds) return configured ?? [];
   return configured?.length ? configured : defaultCampaignSizes[model];
 }
@@ -195,7 +196,7 @@ function SizeGuide({ model, open, onClose }: { model: ShirtModelName; open: bool
     >
       <header><span className="material-symbols-rounded" aria-hidden="true">straighten</span><div><h3 id="campaign-size-guide-title">Guia de medidas</h3><p>Compare com uma camiseta sua estendida sobre uma superfície plana.</p></div><button type="button" aria-label="Fechar guia de medidas" onClick={onClose}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
       <div className="campaign-size-guide-tabs" role="tablist" aria-label="Modelagem da camiseta">
-        <button id="size-guide-common-tab" type="button" role="tab" aria-selected={!showOversized} aria-controls="size-guide-measurements" className={!showOversized ? "is-active" : ""} onClick={() => setGuideModel("Comum")}>Padrão e Baby look</button>
+        <button id="size-guide-common-tab" type="button" role="tab" aria-selected={!showOversized} aria-controls="size-guide-measurements" className={!showOversized ? "is-active" : ""} onClick={() => setGuideModel("Comum")}>Tradicional e Baby look</button>
         <button id="size-guide-oversized-tab" type="button" role="tab" aria-selected={showOversized} aria-controls="size-guide-measurements" className={showOversized ? "is-active" : ""} onClick={() => setGuideModel("Oversized")}>Oversized</button>
       </div>
       <div className={`campaign-measurement-grid${showOversized ? " is-single" : ""}`} id="size-guide-measurements" role="tabpanel" aria-labelledby={showOversized ? "size-guide-oversized-tab" : "size-guide-common-tab"}>
@@ -203,12 +204,12 @@ function SizeGuide({ model, open, onClose }: { model: ShirtModelName; open: bool
           <MeasurementTable title="Oversized" columns={oversizedColumns} rows={oversizedMeasurements} />
         ) : (
           <>
-            <MeasurementTable title="Padrão" columns={standardColumns} rows={standardMeasurements} />
+            <MeasurementTable title="Tradicional" columns={standardColumns} rows={standardMeasurements} />
             <MeasurementTable title="Baby look" columns={babyLookColumns} rows={babyLookMeasurements} />
           </>
         )}
       </div>
-      {!showOversized && <p className="campaign-measurement-tolerance">As medidas da Padrão e Baby look podem variar até 2,5 cm.</p>}
+      {!showOversized && <p className="campaign-measurement-tolerance">As medidas da Tradicional e Baby look podem variar até 2,5 cm.</p>}
     </dialog>
   );
 }
@@ -543,7 +544,10 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
             </section>
             <section className="campaign-choice-stage campaign-size-stage" id="size-guide">
               <div className="campaign-stage-heading"><h2>3. Escolha o tamanho</h2><button type="button" aria-expanded={showSizeGuide} aria-controls="campaign-size-guide-table" onClick={() => setShowSizeGuide((value) => !value)}>{showSizeGuide ? "Fechar tabela" : "Qual o meu tamanho?"}</button></div>
-              {sizeGroups.map(({ group, sizes }) => <div className="campaign-size-group" key={group}><p className="campaign-size-group-label">{sizeGroupLabels[group]}</p><div className="campaign-size-options" role="radiogroup" aria-label={`Tamanho ${sizeGroupLabels[group]}`}>{sizes.map((item) => <label className={size === item ? "is-selected" : ""} key={item}><input type="radio" name="size" checked={size === item} onChange={() => { setSize(item); setCartMessage(""); }} /><span>{item}</span></label>)}</div></div>)}
+              {sizeGroups.map(({ group, sizes }) => {
+                const groupLabel = activeModel === "Oversized" ? "Oversized" : sizeGroupLabels[group];
+                return <div className="campaign-size-group" key={group}><p className="campaign-size-group-label">{groupLabel}</p><div className="campaign-size-options" role="radiogroup" aria-label={`Tamanho ${groupLabel}`}>{sizes.map((item) => <label className={size === item ? "is-selected" : ""} key={item}><input type="radio" name="size" checked={size === item} onChange={() => { setSize(item); setCartMessage(""); }} /><span>{item}</span></label>)}</div></div>;
+              })}
               <SizeGuide model={activeModel} open={showSizeGuide} onClose={() => setShowSizeGuide(false)} />
             </section>
             <section className="campaign-choice-stage campaign-quantity-stage"><h2>4. Quantidade</h2><div className="campaign-quantity-picker"><button type="button" aria-label="Diminuir quantidade" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>−</button><output aria-live="polite">{quantity}</output><button type="button" aria-label="Aumentar quantidade" onClick={() => setQuantity((value) => Math.min(20, value + 1))}>+</button></div></section>

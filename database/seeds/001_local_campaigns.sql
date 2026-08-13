@@ -38,14 +38,14 @@ JOIN colors co ON
 WHERE c.code = 'MENDES-ADS-26'
 ON DUPLICATE KEY UPDATE unit_price_cents = VALUES(unit_price_cents), active = TRUE;
 
--- Tamanhos liberados: o corte Comum recebe tradicional e baby look; o Oversized
--- fica só com os tamanhos tradicionais.
+-- Tamanhos liberados conforme a grade comercial de cada corte.
 INSERT INTO campaign_model_sizes (campaign_id, shirt_model_id, size_id)
 SELECT c.id, sm.id, sz.id
 FROM campaigns c
 JOIN shirt_models sm ON sm.active = TRUE AND sm.code IN ('common', 'oversized')
 JOIN sizes sz ON sz.active = TRUE AND (
-  sm.code = 'common' OR (sm.code = 'oversized' AND sz.size_group = 'standard')
+  (sm.code = 'common' AND sz.code IN ('P', 'M', 'G', 'GG', 'EXGG', 'PB', 'MB', 'GB')) OR
+  (sm.code = 'oversized' AND sz.code IN ('PP', 'P', 'M', 'G', 'GG', 'XG'))
 )
 WHERE c.code IN ('MENDES-ENG-26', 'MENDES-ADS-26')
 ON DUPLICATE KEY UPDATE size_id = VALUES(size_id);

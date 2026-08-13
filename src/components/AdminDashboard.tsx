@@ -34,11 +34,11 @@ import { buildRoute, STAFF_SESSION_KEY } from "../App";
 import {
   defaultCampaignColors,
   defaultCampaignSizes,
+  campaignSizesInGroup,
   shirtColors,
   shirtModels,
   showcaseCampaigns,
   sizeGroupLabels,
-  sizesInGroup,
   sortSizes,
 } from "../data";
 import type { ShirtColorName, ShirtColorOption, ShirtModelName, SizeCode, SizeGroup } from "../data";
@@ -1150,7 +1150,7 @@ function Campaigns({ data }: { data: PanelData }) {
   }
 
   function toggleSizeGroup(model: ShirtModelName, group: SizeGroup) {
-    const groupSizes = sizesInGroup(group);
+    const groupSizes = campaignSizesInGroup(model, group);
     setModelSizes((current) => {
       const selected = current[model];
       const allSelected = groupSizes.every((size) => selected.includes(size));
@@ -1633,20 +1633,22 @@ function Campaigns({ data }: { data: PanelData }) {
             </fieldset>
 
             <fieldset className="campaign-size-setup" disabled={variantsLocked}><legend>Tamanhos disponíveis por corte</legend>
-              <p>{editing ? "Um tamanho que já tenha pedido não pode sair: o painel avisa qual pedido trava." : "Já vem pré-marcado. Desmarque só o que a turma não vai pedir."} Os tamanhos com <b>B</b> são de modelagem baby look.</p>
+              <p>{editing ? "Um tamanho que já tenha pedido não pode sair: o painel avisa qual pedido trava." : "Já vem pré-marcado. Desmarque só o que a turma não vai pedir."} Baby look (PB, MB e GB) fica disponível somente no corte Padrão.</p>
               <div className="campaign-size-tabs" role="group" aria-label="Corte para configurar os tamanhos">
                 {shirtModels.filter((item) => selectedModels[item.name]).map((item) => <button className={sizeModel === item.name ? "is-active" : ""} type="button" aria-pressed={sizeModel === item.name} onClick={() => { setSizeModel(item.name); setSizeError(""); }} key={item.name}>{item.name === "Comum" ? "Padrão" : item.name}<span>{modelSizes[item.name].length}</span></button>)}
               </div>
               {(["standard", "baby_look"] as SizeGroup[]).map((group) => {
-                const groupSizes = sizesInGroup(group);
+                const groupSizes = campaignSizesInGroup(sizeModel, group);
+                if (groupSizes.length === 0) return null;
+                const groupLabel = sizeModel === "Oversized" ? "Oversized" : sizeGroupLabels[group];
                 const allSelected = groupSizes.every((size) => modelSizes[sizeModel].includes(size));
                 return (
                   <div className="campaign-size-setup-group" key={group}>
                     <div className="campaign-size-setup-heading">
-                      <span>{sizeGroupLabels[group]}</span>
+                      <span>{groupLabel}</span>
                       <button type="button" onClick={() => toggleSizeGroup(sizeModel, group)}>{allSelected ? "desmarcar todos" : "marcar todos"}</button>
                     </div>
-                    <div className="campaign-size-palette" aria-label={`Tamanhos ${sizeGroupLabels[group]} para ${sizeModel}`}>
+                    <div className="campaign-size-palette" aria-label={`Tamanhos ${groupLabel} para ${sizeModel}`}>
                       {groupSizes.map((size) => {
                         const checked = modelSizes[sizeModel].includes(size);
                         return <label className={checked ? "is-selected" : ""} key={size}><input type="checkbox" checked={checked} onChange={() => toggleCampaignSize(sizeModel, size)} /><span>{size}</span></label>;
@@ -1660,9 +1662,9 @@ function Campaigns({ data }: { data: PanelData }) {
             </fieldset>
 
             <fieldset className="campaign-visual-options"><legend>Exibição das imagens</legend>
-              <p>Ative pelo menos uma opção. Você pode usar somente o mockup, somente as fotos reais ou os dois juntos.</p>
+              <p>Escolha pelo menos uma opção antes de criar ou salvar a campanha.</p>
               <div>
-                <label><span><strong>Usar mockup</strong><small>Exibe a montagem do site ou o mockup individual.</small></span><input type="checkbox" role="switch" checked={mockupEnabled} onChange={(event) => { const checked = event.target.checked; if (!checked && !realPhotosEnabled) { setFormError("Ative primeiro as fotos reais antes de desligar o mockup."); return; } setMockupEnabled(checked); setFormError(""); }} /><i aria-hidden="true" /></label>
+                <label><span><strong>Usar mockup</strong><small>Montagem do site ou mockup individual.</small></span><input type="checkbox" role="switch" checked={mockupEnabled} onChange={(event) => { setMockupEnabled(event.target.checked); setFormError(""); }} /><i aria-hidden="true" /></label>
               </div>
             </fieldset>
 
@@ -1747,7 +1749,7 @@ function Campaigns({ data }: { data: PanelData }) {
 
             <fieldset className="campaign-visual-options campaign-visual-options--secondary"><legend className="sr-only">Exibição das fotos reais</legend>
               <div>
-                <label><span><strong>Usar fotos reais</strong><small>Exibe a galeria enviada para cada cor.</small></span><input type="checkbox" role="switch" checked={realPhotosEnabled} onChange={(event) => { const checked = event.target.checked; if (!checked && !mockupEnabled) { setFormError("Ative primeiro o mockup antes de desligar as fotos reais."); return; } setRealPhotosEnabled(checked); setFormError(""); }} /><i aria-hidden="true" /></label>
+                <label><span><strong>Usar fotos reais</strong><small>Galeria enviada para cada cor.</small></span><input type="checkbox" role="switch" checked={realPhotosEnabled} onChange={(event) => { setRealPhotosEnabled(event.target.checked); setFormError(""); }} /><i aria-hidden="true" /></label>
               </div>
             </fieldset>
 
@@ -1768,7 +1770,7 @@ function Campaigns({ data }: { data: PanelData }) {
             {formError && <p className="campaign-form-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{formError}</p>}
             <div className="campaign-create-actions">
               <button className="outline-action" type="button" onClick={closeForm}>Cancelar</button>
-              <button className="primary-action" type="submit" disabled={submitting}>
+              <button className="primary-action" type="submit" disabled={submitting || (!mockupEnabled && !realPhotosEnabled)} title={!mockupEnabled && !realPhotosEnabled ? "Ative o mockup ou as fotos reais para salvar a campanha." : undefined}>
                 {submitting
                   ? (editing ? "Salvando..." : "Enviando arte e criando...")
                   : (editing ? "Salvar alterações" : "Criar campanha e gerar acesso")}
@@ -2230,8 +2232,8 @@ function Products() {
       </div>
       <section className="simple-state">
         <span className="material-symbols-rounded" aria-hidden="true">checkroom</span>
-        <h3>2 cortes e 12 tamanhos</h3>
-        <p>Comum e Oversized estão disponíveis para novas campanhas. Baby look é um grupo de tamanhos ({sizesInGroup("baby_look").join(", ")}), não um corte.</p>
+        <h3>2 cortes e 10 tamanhos comerciais</h3>
+        <p>Tradicional: {campaignSizesInGroup("Comum", "standard").join(", ")}. Baby look: {campaignSizesInGroup("Comum", "baby_look").join(", ")}. Oversized: {campaignSizesInGroup("Oversized", "standard").join(", ")}.</p>
       </section>
     </div>
   );
