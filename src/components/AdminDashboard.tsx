@@ -1663,7 +1663,6 @@ function Campaigns({ data }: { data: PanelData }) {
               <p>Ative pelo menos uma opção. Você pode usar somente o mockup, somente as fotos reais ou os dois juntos.</p>
               <div>
                 <label><span><strong>Usar mockup</strong><small>Exibe a montagem do site ou o mockup individual.</small></span><input type="checkbox" role="switch" checked={mockupEnabled} onChange={(event) => { const checked = event.target.checked; if (!checked && !realPhotosEnabled) { setFormError("Ative primeiro as fotos reais antes de desligar o mockup."); return; } setMockupEnabled(checked); setFormError(""); }} /><i aria-hidden="true" /></label>
-                <label><span><strong>Usar fotos reais</strong><small>Exibe a galeria enviada para cada cor.</small></span><input type="checkbox" role="switch" checked={realPhotosEnabled} onChange={(event) => { const checked = event.target.checked; if (!checked && !mockupEnabled) { setFormError("Ative primeiro o mockup antes de desligar as fotos reais."); return; } setRealPhotosEnabled(checked); setFormError(""); }} /><i aria-hidden="true" /></label>
               </div>
             </fieldset>
 
@@ -1745,6 +1744,12 @@ function Campaigns({ data }: { data: PanelData }) {
               )}
               {artError && <p className="campaign-artwork-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{artError}</p>}
             </fieldset>}
+
+            <fieldset className="campaign-visual-options campaign-visual-options--secondary"><legend className="sr-only">Exibição das fotos reais</legend>
+              <div>
+                <label><span><strong>Usar fotos reais</strong><small>Exibe a galeria enviada para cada cor.</small></span><input type="checkbox" role="switch" checked={realPhotosEnabled} onChange={(event) => { const checked = event.target.checked; if (!checked && !mockupEnabled) { setFormError("Ative primeiro o mockup antes de desligar as fotos reais."); return; } setRealPhotosEnabled(checked); setFormError(""); }} /><i aria-hidden="true" /></label>
+              </div>
+            </fieldset>
 
             {realPhotosEnabled && <fieldset className="campaign-real-photos"><legend>Fotos reais por cor</legend>
               <div className="campaign-artwork-guidance"><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span><div><strong>Galeria opcional da camisa pronta</strong><p>Envie até <b>seis fotos por cor</b> em PNG, JPG ou WEBP, com no máximo <b>2 MB cada</b>. A mesma galeria atende todos os cortes que usam a cor e aparece ao lado do mockup para o cliente.</p></div></div>

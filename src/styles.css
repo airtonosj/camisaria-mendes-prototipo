@@ -1300,7 +1300,8 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-visual-options { grid-column: 1 / -1; min-width: 0; margin: 3px 0 0; border: 0; border-top: 1px solid #e3e6e4; padding: 21px 0 0; }
 .campaign-visual-options legend { padding: 0 12px 0 0; color: #4e5559; font-size: .61rem; font-weight: 700; }
 .campaign-visual-options > p { margin: 0 0 12px; color: #747c80; font-size: .57rem; line-height: 1.5; }
-.campaign-visual-options > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.campaign-visual-options > div { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.campaign-visual-options--secondary { margin-top: 3px; }
 .campaign-visual-options label { position: relative; min-width: 0; min-height: 74px; display: grid; grid-template-columns: minmax(0, 1fr) 46px; align-items: center; gap: 14px; border: 1px solid #d2d9d6; cursor: pointer; padding: 13px 14px; background: #f7f8f7; }
 .campaign-visual-options label:has(input:checked) { border-color: #6bc1ee; background: #f1faff; box-shadow: inset 0 0 0 1px #6bc1ee; }
 .campaign-visual-options label > span { min-width: 0; }
