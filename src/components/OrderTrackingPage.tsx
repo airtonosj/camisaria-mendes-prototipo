@@ -2,7 +2,9 @@ import { FormEvent, useEffect, useState } from "react";
 import { ApiRequestError, assetUrl, createInfinitePayCheckout, requestInfinitePayReconciliation, trackOrderInApi } from "../api";
 import { buildRoute } from "../App";
 import { shirtModels } from "../data";
+import type { CampaignArtMode, VariantArtwork } from "../data";
 import { Brand } from "./Brand";
+import { ShirtMockupPreview } from "./ShirtMockupPreview";
 
 type DemoOrderStatus = "pending" | "confirmed" | "production" | "failed" | "ready" | "delivered" | "cancelled";
 
@@ -30,10 +32,12 @@ type DemoOrder = {
     quantity: number;
     unitPriceCents: number;
     lineTotalCents: number;
+    artwork?: VariantArtwork;
   }>;
   totalCents?: number;
   artFront?: string | null;
   artBack?: string | null;
+  artMode?: CampaignArtMode;
 };
 
 const demoPhone = "98999990000";
@@ -201,10 +205,15 @@ export function OrderTrackingPage() {
           quantity: item.quantity,
           unitPriceCents: item.unitPriceCents,
           lineTotalCents: item.lineTotalCents,
+          artwork: {
+            front: item.artwork.front ? { ...item.artwork.front, url: assetUrl(item.artwork.front.url) ?? item.artwork.front.url } : null,
+            back: item.artwork.back ? { ...item.artwork.back, url: assetUrl(item.artwork.back.url) ?? item.artwork.back.url } : null,
+          },
         })),
         totalCents: persisted.totalCents,
         artFront: assetUrl(persisted.campaign.artFrontUrl),
         artBack: assetUrl(persisted.campaign.artBackUrl),
+        artMode: persisted.campaign.artRenderMode,
       });
       setError("");
       setOrderCopied(false);
@@ -283,6 +292,7 @@ export function OrderTrackingPage() {
   const displayedRepresentative = order?.representative ?? "o representante da turma";
   const displayedCampaignTitle = order?.campaignTitle ?? "Campanha da turma";
   const trackedArt = { front: order?.artFront ?? shirtModels[0].image, back: order?.artBack ?? null };
+  const trackedCampaignArt = { ...trackedArt, mode: order?.artMode ?? "legacy_mockup" } as const;
   const displayedModel = order?.modelName ?? "—";
   const displayedSize = order?.size ?? "—";
   const displayedQuantity = order?.quantity ?? 1;
@@ -399,9 +409,13 @@ export function OrderTrackingPage() {
                 </header>
 
                 <div className="received-product-row">
-                  <div className={`campaign-art-thumbs ${trackedArt.back ? "" : "is-single"}`} aria-label={trackedArt.back ? "Arte da campanha, frente e costas" : "Arte da campanha"}>
-                    <img src={trackedArt.front} alt={`${displayedCampaignTitle} — frente`} />
-                    {trackedArt.back && <img src={trackedArt.back} alt={`${displayedCampaignTitle} — costas`} />}
+                  <div className={`campaign-art-thumbs ${displayedItems.length === 1 ? "is-single" : ""}`} aria-label="Camisas do pedido">
+                    {displayedItems.map((item, index) => {
+                      const model = shirtModels.find((candidate) => candidate.name === item.modelName) ?? shirtModels[0];
+                      const artwork = item.artwork;
+                      const side = artwork?.front ? "front" : artwork?.back ? "back" : "front";
+                      return <ShirtMockupPreview key={`${item.modelName}-${item.colorName}-${item.size}-${index}`} model={model.name} color={{ name: item.colorName, hex: item.colorHex }} art={trackedCampaignArt} artwork={artwork} side={side} label={`${displayedCampaignTitle} — ${item.modelName}, ${item.colorName}`} compact />;
+                    })}
                   </div>
                   <div className="received-product-copy">
                     <div className="tracking-item-list">

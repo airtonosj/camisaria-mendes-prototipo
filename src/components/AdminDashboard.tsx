@@ -1,4 +1,4 @@
-import { ChangeEvent, CSSProperties, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   assetUrl,
   cancelOrderInApi,
@@ -23,6 +23,7 @@ import type {
   ApiDeliveryRow,
   ApiProductionRow,
   CampaignPhaseCode,
+  CampaignArtworkConfig,
   DeliveryStatusCode,
   PaymentStatusCode,
   StaffUser,
@@ -40,6 +41,7 @@ import {
   sortSizes,
 } from "../data";
 import type { ShirtColorName, ShirtColorOption, ShirtModelName, SizeCode, SizeGroup } from "../data";
+import type { ArtworkTransform, VariantArtwork } from "../data";
 import { Brand } from "./Brand";
 import {
   buildProductionSheets,
@@ -759,6 +761,41 @@ function suggestCode(title: string) {
 }
 
 type ArtDraft = { file: File | null; preview: string };
+type EditableArtMode = "overlay" | "variant_mockup" | "legacy_mockup";
+type ArtSideDraft = {
+  file: File | null;
+  preview: string;
+  url: string | null;
+  source: "inherit" | "custom" | "none";
+  transformOverride: boolean;
+  transform: ArtworkTransform;
+};
+type VariantArtDraft = { front: ArtSideDraft; back: ArtSideDraft };
+
+const defaultTransform: ArtworkTransform = { x: 0, y: 0, scale: 1, rotation: 0 };
+
+function variantArtKey(model: ShirtModelName, color: string) {
+  return `${model}::${color}`;
+}
+
+function emptyArtSide(source: ArtSideDraft["source"] = "inherit"): ArtSideDraft {
+  return { file: null, preview: "", url: null, source, transformOverride: false, transform: { ...defaultTransform } };
+}
+
+function emptyVariantArt(mode: EditableArtMode): VariantArtDraft {
+  const source = mode === "variant_mockup" ? "none" : "inherit";
+  return { front: emptyArtSide(source), back: emptyArtSide(source) };
+}
+
+function storedArtworkUrl(value: string | null) {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value, window.location.origin);
+    return /^\/uploads\/[0-9a-f-]{36}\.(png|jpg|webp)$/i.test(parsed.pathname) ? parsed.pathname : value;
+  } catch {
+    return value;
+  }
+}
 
 function Campaigns({ data }: { data: PanelData }) {
   const { campaigns, mode, reload } = data;
@@ -771,7 +808,7 @@ function Campaigns({ data }: { data: PanelData }) {
   const [deleteError, setDeleteError] = useState("");
 
   /** Fora de `null`, o formulário está editando a campanha deste código. */
-  const [editing, setEditing] = useState<{ code: string; phase: CampaignPhaseCode; hadBackArt: boolean; artRenderMode: "overlay" | "legacy_mockup" } | null>(null);
+  const [editing, setEditing] = useState<{ code: string; phase: CampaignPhaseCode; hadBackArt: boolean; artRenderMode: EditableArtMode } | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [existingArt, setExistingArt] = useState<{ front: string; back: string }>({ front: "", back: "" });
   const [campaignName, setCampaignName] = useState("");
@@ -786,6 +823,11 @@ function Campaigns({ data }: { data: PanelData }) {
   const [selectedModels, setSelectedModels] = useState<Record<ShirtModelName, boolean>>({ Comum: true, Oversized: true });
   const [front, setFront] = useState<ArtDraft>({ file: null, preview: "" });
   const [back, setBack] = useState<ArtDraft>({ file: null, preview: "" });
+  const [artMode, setArtMode] = useState<EditableArtMode>("overlay");
+  const [artScope, setArtScope] = useState<"base" | "variant">("base");
+  const [baseTransforms, setBaseTransforms] = useState<{ front: ArtworkTransform; back: ArtworkTransform }>({ front: { ...defaultTransform }, back: { ...defaultTransform } });
+  const [variantArts, setVariantArts] = useState<Record<string, Partial<Record<"overlay" | "variant_mockup", VariantArtDraft>>>>({});
+  const [artVariant, setArtVariant] = useState<{ model: ShirtModelName; color: string }>({ model: "Comum", color: defaultCampaignColors.Comum[0].name });
   const [artPreviewSide, setArtPreviewSide] = useState<"front" | "back">("front");
   const [artError, setArtError] = useState("");
   const [colorModel, setColorModel] = useState<ShirtModelName>("Comum");
@@ -808,18 +850,50 @@ function Campaigns({ data }: { data: PanelData }) {
    * campos continuam visíveis, desabilitados, com o motivo à vista.
    */
   const variantsLocked = editing !== null && editing.phase !== "receiving_orders";
-  const previewModel = selectedModels[colorModel]
-    ? colorModel
+  const previewModel = selectedModels[artVariant.model]
+    ? artVariant.model
     : shirtModels.find((item) => selectedModels[item.name])?.name ?? "Comum";
-  const previewColorName = modelColors[previewModel][0];
+  const previewColorName = modelColors[previewModel].includes(artVariant.color) ? artVariant.color : modelColors[previewModel][0];
   const previewColor = campaignColorOptions.find((option) => colorKey(option.name) === colorKey(previewColorName ?? ""))
     ?? defaultCampaignColors[previewModel][0];
-  const previewArtMode = !editing || editing.artRenderMode === "overlay" || Boolean(front.file) ? "overlay" : "legacy_mockup";
+  const previewKey = variantArtKey(previewModel, previewColor.name);
+  const currentVariantArt = variantArts[previewKey]?.[artMode === "legacy_mockup" ? "overlay" : artMode] ?? emptyVariantArt(artMode);
+  const resolveDraftSide = (side: "front" | "back") => {
+    const draft = currentVariantArt[side];
+    if (artMode === "variant_mockup") {
+      const url = draft.preview || draft.url;
+      return draft.source === "custom" && url ? { url, transform: { ...defaultTransform } } : null;
+    }
+    const baseUrl = side === "front" ? front.preview || existingArt.front : back.preview || existingArt.back;
+    if (draft.source === "none") return null;
+    const url = draft.source === "custom" ? draft.preview || draft.url : baseUrl;
+    if (!url) return null;
+    return { url, transform: draft.transformOverride ? draft.transform : baseTransforms[side] };
+  };
+  const basePreviewArtwork: VariantArtwork = {
+    front: front.preview || existingArt.front ? { url: front.preview || existingArt.front, transform: baseTransforms.front } : null,
+    back: back.preview || existingArt.back ? { url: back.preview || existingArt.back, transform: baseTransforms.back } : null,
+  };
+  const previewArtwork: VariantArtwork = artMode === "overlay" && artScope === "base"
+    ? basePreviewArtwork
+    : { front: resolveDraftSide("front"), back: resolveDraftSide("back") };
   const previewArt = {
     front: front.preview || existingArt.front,
     back: back.preview || existingArt.back || null,
-    mode: previewArtMode,
+    mode: artMode,
+    frontTransform: baseTransforms.front,
+    backTransform: baseTransforms.back,
   } as const;
+  const activeTransform = artMode === "overlay"
+    ? artScope === "base"
+      ? baseTransforms[artPreviewSide]
+      : currentVariantArt[artPreviewSide].transformOverride
+        ? currentVariantArt[artPreviewSide].transform
+        : baseTransforms[artPreviewSide]
+    : defaultTransform;
+  const activeVariantCombinations = shirtModels.flatMap((model) => selectedModels[model.name]
+    ? modelColors[model.name].map((colorName) => ({ model: model.name, colorName, key: variantArtKey(model.name, colorName) }))
+    : []);
 
   function resetForm() {
     setCampaignName("");
@@ -831,6 +905,11 @@ function Campaigns({ data }: { data: PanelData }) {
     setDeadline("");
     setFront({ file: null, preview: "" });
     setBack({ file: null, preview: "" });
+    setArtMode("overlay");
+    setArtScope("base");
+    setBaseTransforms({ front: { ...defaultTransform }, back: { ...defaultTransform } });
+    setVariantArts({});
+    setArtVariant({ model: "Comum", color: defaultCampaignColors.Comum[0].name });
     setArtPreviewSide("front");
     setExistingArt({ front: "", back: "" });
     setArtError("");
@@ -876,6 +955,8 @@ function Campaigns({ data }: { data: PanelData }) {
     try {
       const detail = await fetchCampaignDetail(campaign.code);
       setEditing({ code: detail.code, phase: campaign.phase, hadBackArt: Boolean(detail.artBackUrl), artRenderMode: detail.artRenderMode });
+      setArtMode(detail.artRenderMode);
+      setArtScope(detail.artRenderMode === "variant_mockup" ? "variant" : "base");
       setCampaignName(detail.title);
       setCampaignCodeInput(detail.code);
       setSubtitle(detail.subtitle ?? "");
@@ -884,6 +965,10 @@ function Campaigns({ data }: { data: PanelData }) {
       setRepresentativePhone(detail.representativeWhatsapp ?? "");
       setDeadline(dateInput(detail.deadlineAt));
       setExistingArt({ front: assetUrl(detail.artFrontUrl) ?? "", back: assetUrl(detail.artBackUrl) ?? "" });
+      setBaseTransforms({
+        front: detail.artworkConfig?.base.front?.transform ?? { ...defaultTransform },
+        back: detail.artworkConfig?.base.back?.transform ?? { ...defaultTransform },
+      });
       const priceOf = (model: ShirtModelName) => detail.variants.find((variant) => variant.model.name === model)?.unitPriceCents;
       setCommonPrice(priceInput(priceOf("Comum")) || "59,90");
       setOversizedPrice(priceInput(priceOf("Oversized")) || "69,90");
@@ -893,6 +978,27 @@ function Campaigns({ data }: { data: PanelData }) {
         .filter((variant) => variant.model.name === model)
         .map((variant) => variant.color.name);
       setModelColors({ Comum: colorsOf("Comum"), Oversized: colorsOf("Oversized") });
+      const loadedVariantArts: Record<string, Partial<Record<"overlay" | "variant_mockup", VariantArtDraft>>> = {};
+      detail.variants.forEach((variant) => {
+        const model = variant.model.name as ShirtModelName;
+        const key = variantArtKey(model, variant.color.name);
+        const byMode: Partial<Record<"overlay" | "variant_mockup", VariantArtDraft>> = {};
+        (["overlay", "variant_mockup"] as const).forEach((modeName) => {
+          const saved = variant.artworkConfigs?.[modeName];
+          if (!saved) return;
+          const loadSide = (side: "front" | "back"): ArtSideDraft => ({
+            file: null,
+            preview: "",
+            url: assetUrl(saved[side].url ?? null),
+            source: saved[side].source,
+            transformOverride: Boolean(saved[side].transformOverride),
+            transform: saved[side].transform ?? { ...defaultTransform },
+          });
+          byMode[modeName] = { front: loadSide("front"), back: loadSide("back") };
+        });
+        loadedVariantArts[key] = byMode;
+      });
+      setVariantArts(loadedVariantArts);
       const sizesOf = (model: ShirtModelName) => sortSizes(
         detail.sizes.filter((size) => size.model.name === model).map((size) => size.code as SizeCode),
       );
@@ -903,6 +1009,7 @@ function Campaigns({ data }: { data: PanelData }) {
       const firstAvailableModel = shirtModels.find((model) => nextSelectedModels[model.name])?.name ?? "Comum";
       setColorModel(firstAvailableModel);
       setSizeModel(firstAvailableModel);
+      setArtVariant({ model: firstAvailableModel, color: colorsOf(firstAvailableModel)[0] ?? "" });
     } catch (detailError) {
       setFormError(errorMessage(detailError, "Não foi possível carregar a campanha para edição."));
     } finally {
@@ -1095,6 +1202,177 @@ function Campaigns({ data }: { data: PanelData }) {
     setArtError("");
   }
 
+  function updateVariantSide(side: "front" | "back", updater: (current: ArtSideDraft) => ArtSideDraft) {
+    if (artMode === "legacy_mockup") return;
+    const modeName = artMode;
+    setVariantArts((current) => {
+      const byMode = current[previewKey] ?? {};
+      const draft = byMode[modeName] ?? emptyVariantArt(modeName);
+      return { ...current, [previewKey]: { ...byMode, [modeName]: { ...draft, [side]: updater(draft[side]) } } };
+    });
+  }
+
+  function chooseVariantArt(event: ChangeEvent<HTMLInputElement>, side: "front" | "back") {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || artMode === "legacy_mockup") return;
+    const allowed = artMode === "overlay" ? ["image/png", "image/webp"] : ["image/png", "image/jpeg", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      setArtError(artMode === "overlay" ? "Envie PNG ou WEBP transparente." : "Envie o mockup em PNG, JPG ou WEBP.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setArtError("A imagem ultrapassa 2 MB. Comprima o arquivo antes de enviar.");
+      return;
+    }
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+    image.onerror = () => { URL.revokeObjectURL(url); setArtError("O arquivo não contém uma imagem válida."); };
+    image.onload = () => {
+      if (image.width < 500 || image.height < 300) {
+        URL.revokeObjectURL(url);
+        setArtError("A imagem precisa ter pelo menos 500 × 300 pixels.");
+        return;
+      }
+      if (artMode === "overlay") {
+        const canvas = document.createElement("canvas");
+        canvas.width = 96;
+        canvas.height = 96;
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        context?.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const pixels = context?.getImageData(0, 0, canvas.width, canvas.height).data;
+        const transparent = pixels ? Array.from({ length: Math.floor(pixels.length / 4) }, (_, index) => pixels[index * 4 + 3]).some((alpha) => alpha < 250) : false;
+        if (!transparent) {
+          URL.revokeObjectURL(url);
+          setArtError("A arte personalizada precisa ter fundo transparente.");
+          return;
+        }
+      }
+      updateVariantSide(side, (current) => {
+        if (current.preview) URL.revokeObjectURL(current.preview);
+        return { ...current, file, preview: url, source: "custom", transformOverride: artMode === "overlay" };
+      });
+      setArtError("");
+    };
+    image.src = url;
+  }
+
+  function removeVariantSide(side: "front" | "back") {
+    updateVariantSide(side, (current) => {
+      if (current.preview) URL.revokeObjectURL(current.preview);
+      return emptyArtSide(artMode === "overlay" && side === "front" ? "inherit" : "none");
+    });
+    setArtError("");
+  }
+
+  function restoreVariantInheritance() {
+    if (artMode !== "overlay") return;
+    setVariantArts((current) => {
+      const byMode = current[previewKey] ?? {};
+      return { ...current, [previewKey]: { ...byMode, overlay: emptyVariantArt("overlay") } };
+    });
+    setArtError("");
+  }
+
+  function selectArtworkVariant(model: ShirtModelName, color: string) {
+    setArtVariant({ model, color });
+    setArtScope("variant");
+    if (artMode === "variant_mockup") {
+      const saved = variantArts[variantArtKey(model, color)]?.variant_mockup;
+      if (saved?.front.source !== "custom" && saved?.back.source === "custom") setArtPreviewSide("back");
+      else setArtPreviewSide("front");
+    }
+    setArtError("");
+  }
+
+  function setCurrentTransform(next: ArtworkTransform) {
+    if (artMode !== "overlay") return;
+    const normalized = {
+      x: Math.max(-100, Math.min(100, next.x)),
+      y: Math.max(-100, Math.min(100, next.y)),
+      scale: Math.max(0.1, Math.min(3, next.scale)),
+      rotation: Math.max(-180, Math.min(180, next.rotation)),
+    };
+    if (artScope === "base") {
+      setBaseTransforms((current) => ({ ...current, [artPreviewSide]: normalized }));
+    } else {
+      updateVariantSide(artPreviewSide, (current) => ({ ...current, transform: normalized, transformOverride: true }));
+    }
+  }
+
+  function resetCurrentTransform() {
+    if (artMode !== "overlay") return;
+    if (artScope === "base") setCurrentTransform({ ...defaultTransform });
+    else updateVariantSide(artPreviewSide, (current) => ({ ...current, transform: { ...defaultTransform }, transformOverride: false }));
+  }
+
+  function startArtworkDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (artMode !== "overlay" || !previewArtwork[artPreviewSide]) return;
+    event.preventDefault();
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    const start = { x: event.clientX, y: event.clientY };
+    const initial = artScope === "base"
+      ? baseTransforms[artPreviewSide]
+      : currentVariantArt[artPreviewSide].transformOverride
+        ? currentVariantArt[artPreviewSide].transform
+        : baseTransforms[artPreviewSide];
+    const move = (moveEvent: PointerEvent) => {
+      const rect = target.getBoundingClientRect();
+      setCurrentTransform({
+        ...initial,
+        x: initial.x + ((moveEvent.clientX - start.x) / Math.max(rect.width, 1)) * 100,
+        y: initial.y + ((moveEvent.clientY - start.y) / Math.max(rect.height, 1)) * 100,
+      });
+    };
+    const finish = () => {
+      target.removeEventListener("pointermove", move);
+      target.removeEventListener("pointerup", finish);
+      target.removeEventListener("pointercancel", finish);
+    };
+    target.addEventListener("pointermove", move);
+    target.addEventListener("pointerup", finish);
+    target.addEventListener("pointercancel", finish);
+  }
+
+  async function buildArtworkConfig(): Promise<CampaignArtworkConfig> {
+    if (artMode === "legacy_mockup") throw new Error("Campanhas legadas só enviam configuração após escolher um novo modo.");
+    const baseFrontUrl = front.file ? await uploadCampaignArt(front.file) : storedArtworkUrl(existingArt.front);
+    const baseBackUrl = back.file ? await uploadCampaignArt(back.file) : storedArtworkUrl(existingArt.back);
+    if (artMode === "overlay" && !baseFrontUrl) throw new Error("Envie a arte-base de frente.");
+    const combinations = shirtModels.flatMap((model) => selectedModels[model.name]
+      ? modelColors[model.name].map((colorName) => ({ model, colorName }))
+      : []);
+    const variants = await Promise.all(combinations.map(async ({ model, colorName }) => {
+      const key = variantArtKey(model.name, colorName);
+      const draft = variantArts[key]?.[artMode] ?? emptyVariantArt(artMode);
+      const saveSide = async (side: "front" | "back") => {
+        const value = draft[side];
+        const url = value.file ? await uploadCampaignArt(value.file) : storedArtworkUrl(value.url);
+        return {
+          source: value.source,
+          url: value.source === "custom" ? url : null,
+          transformOverride: value.transformOverride,
+          transform: value.transform,
+        };
+      };
+      const frontSide = await saveSide("front");
+      const backSide = await saveSide("back");
+      if (artMode === "variant_mockup" && frontSide.source !== "custom" && backSide.source !== "custom") {
+        throw new Error(`Envie frente ou costas para ${model.name === "Comum" ? "Padrão" : model.name} · ${colorName}.`);
+      }
+      return { modelCode: model.code, colorName, front: frontSide, back: backSide };
+    }));
+    return {
+      mode: artMode,
+      base: artMode === "overlay" ? {
+        front: { url: baseFrontUrl!, transform: baseTransforms.front },
+        back: baseBackUrl ? { url: baseBackUrl, transform: baseTransforms.back } : null,
+      } : { front: null, back: null },
+      variants,
+    };
+  }
+
   function campaignModels() {
     return shirtModels.filter((model) => selectedModels[model.name]).map((model) => ({
       modelCode: model.code,
@@ -1110,12 +1388,12 @@ function Campaigns({ data }: { data: PanelData }) {
   async function submitCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError("");
-    if (!editing && !front.file) {
-      setArtError("Envie a arte da campanha antes de criar o acesso.");
+    if (!editing && artMode === "overlay" && !front.file) {
+      setArtError("Envie a arte-base de frente antes de criar o acesso.");
       return;
     }
-    if (editing?.artRenderMode === "legacy_mockup" && back.file && !front.file) {
-      setArtError("Para ativar a visualização por cor nesta campanha antiga, envie também uma nova arte transparente de frente.");
+    if (editing?.artRenderMode === "legacy_mockup" && artMode === "overlay" && !front.file) {
+      setArtError("Para converter esta campanha antiga, envie uma nova arte-base transparente de frente.");
       return;
     }
     if (!variantsLocked) {
@@ -1144,6 +1422,7 @@ function Campaigns({ data }: { data: PanelData }) {
 
     setSubmitting(true);
     try {
+      const artworkConfig = artMode === "legacy_mockup" ? undefined : await buildArtworkConfig();
       if (editing) {
         const payload: UpdateCampaignPayload = {
           title: campaignName,
@@ -1152,13 +1431,7 @@ function Campaigns({ data }: { data: PanelData }) {
           pickupInstructions: pickup,
           representative: { name: representative, whatsapp: representativePhone },
         };
-        // Arte só viaja quando um arquivo novo foi escolhido; a antiga fica onde está.
-        if (front.file) {
-          payload.artFrontUrl = await uploadCampaignArt(front.file);
-          payload.artRenderMode = "overlay";
-        }
-        if (back.file) payload.artBackUrl = await uploadCampaignArt(back.file);
-        else if ((front.file && editing.artRenderMode === "legacy_mockup") || (editing.hadBackArt && !existingArt.back)) payload.artBackUrl = null;
+        if (artworkConfig) payload.artworkConfig = artworkConfig;
         if (!variantsLocked) payload.models = campaignModels();
 
         await updateCampaignInApi(editing.code, payload);
@@ -1169,8 +1442,6 @@ function Campaigns({ data }: { data: PanelData }) {
         return;
       }
 
-      const artFrontUrl = await uploadCampaignArt(front.file!);
-      const artBackUrl = back.file ? await uploadCampaignArt(back.file) : null;
       const created = await createCampaignInApi({
         code: campaignCodeInput.trim() || undefined,
         title: campaignName,
@@ -1178,9 +1449,7 @@ function Campaigns({ data }: { data: PanelData }) {
         deadlineAt: new Date(`${deadline}T23:59:59`).toISOString(),
         pickupInstructions: pickup,
         representative: { name: representative, whatsapp: representativePhone },
-        artFrontUrl,
-        artBackUrl,
-        artRenderMode: "overlay",
+        artworkConfig: artworkConfig!,
         models: campaignModels(),
       });
       closeForm();
@@ -1191,7 +1460,7 @@ function Campaigns({ data }: { data: PanelData }) {
         phase: "receiving_orders",
         deadlineLabel: formatDeadline(new Date(`${deadline}T23:59:59`).toISOString()),
         representative,
-        artFront: front.preview,
+        artFront: front.preview || previewArtwork.front?.url || previewArtwork.back?.url || shirtModels[0].image,
         orderCount: 0,
         paidTotalCents: 0,
         canDelete: true,
@@ -1310,45 +1579,83 @@ function Campaigns({ data }: { data: PanelData }) {
               <p className="campaign-size-summary"><span className="material-symbols-rounded" aria-hidden="true">straighten</span><strong>{modelSizes[sizeModel].length}</strong> {modelSizes[sizeModel].length === 1 ? "tamanho liberado" : "tamanhos liberados"} para {sizeModel === "Comum" ? "Padrão" : sizeModel}.</p>
             </fieldset>
 
-            <fieldset className="campaign-artwork"><legend>Arte da campanha</legend>
-              <div className="campaign-artwork-guidance"><span className="material-symbols-rounded" aria-hidden="true">info</span><div><strong>Envie somente a estampa</strong><p>O sistema aplica automaticamente a arte sobre o corte e a cor escolhidos. Envie <b>PNG ou WEBP com fundo transparente</b>, até <b>2 MB</b>. A frente é obrigatória; as costas são opcionais.</p></div></div>
-              {previewArt.front && (
-                <section className="campaign-artwork-composer-preview" aria-label="Prévia automática da camisa">
-                  <header><div><strong>Prévia automática</strong><small>{previewModel === "Comum" ? "Padrão" : previewModel} · {previewColor.name}</small></div><div role="group" aria-label="Lado da prévia"><button className={artPreviewSide === "front" ? "is-active" : ""} type="button" onClick={() => setArtPreviewSide("front")}>Frente</button><button className={artPreviewSide === "back" ? "is-active" : ""} type="button" disabled={previewArt.mode === "legacy_mockup" && !previewArt.back} onClick={() => setArtPreviewSide("back")}>Costas</button></div></header>
-                  <div><ShirtMockupPreview model={previewModel} color={previewColor} art={previewArt} side={artPreviewSide} label={`Prévia ${previewModel === "Comum" ? "Padrão" : previewModel}, ${previewColor.name}, ${artPreviewSide === "front" ? "frente" : "costas"}`} /></div>
-                  <p>Uma única arte será reaproveitada nas cores e cortes liberados para a campanha.</p>
-                </section>
-              )}
-              <div className="campaign-artwork-uploads">
-                <label className="campaign-artwork-main">
-                  <span>Frente<b>obrigatória</b></span>
-                  <div>
-                    {front.preview || existingArt.front ? <img src={front.preview || existingArt.front} alt="Prévia da arte de frente da campanha" /> : <span className="campaign-artwork-empty"><span className="material-symbols-rounded" aria-hidden="true">add_photo_alternate</span>Selecionar arquivo</span>}
-                    <span className="material-symbols-rounded" aria-hidden="true">upload</span>
-                  </div>
-                  <input type="file" accept="image/png,image/webp" aria-label="Enviar a arte de frente da campanha" onChange={(event) => chooseArt(event, "front")} />
-                  <small>{front.preview ? "Arte nova selecionada" : existingArt.front ? "Arte atual. Clique para trocar" : "Clique para selecionar"}</small>
-                </label>
-                <label className="campaign-artwork-optional">
-                  <span>Costas<b>opcional</b></span>
-                  <div>
-                    {back.preview || existingArt.back ? <img src={back.preview || existingArt.back} alt="Prévia da arte de costas da campanha" /> : <span className="campaign-artwork-empty"><span className="material-symbols-rounded" aria-hidden="true">add</span>Só se a arte tiver costas</span>}
-                    <span className="material-symbols-rounded" aria-hidden="true">upload</span>
-                  </div>
-                  <input type="file" accept="image/png,image/webp" aria-label="Enviar a arte de costas da campanha" onChange={(event) => chooseArt(event, "back")} />
-                  <small>{back.preview ? "Arte nova selecionada" : existingArt.back ? "Arte atual. Clique para trocar" : "Sem esta imagem, o aluno vê só a frente"}</small>
-                </label>
+            <fieldset className="campaign-artwork"><legend>Arte e mockup da campanha</legend>
+              <div className="campaign-art-mode" role="group" aria-label="Modo de apresentação das camisas">
+                <button className={artMode === "overlay" ? "is-active" : ""} type="button" onClick={() => { setArtMode("overlay"); setArtScope("base"); setArtPreviewSide("front"); setArtError(""); }}><span className="material-symbols-rounded" aria-hidden="true">layers</span><strong>Montar no site</strong><small>Ajuste a estampa sobre a camisa.</small></button>
+                <button className={artMode === "variant_mockup" ? "is-active" : ""} type="button" onClick={() => { setArtMode("variant_mockup"); setArtScope("variant"); setArtPreviewSide("front"); setArtError(""); }}><span className="material-symbols-rounded" aria-hidden="true">photo_library</span><strong>Mockup individual</strong><small>Envie a peça pronta por corte e cor.</small></button>
               </div>
-              {(back.preview || existingArt.back) && <button className="campaign-artwork-remove" type="button" onClick={removeBackArt}><span className="material-symbols-rounded" aria-hidden="true">delete</span>Remover a imagem de costas</button>}
+
+              {artMode === "legacy_mockup" ? (
+                <div className="campaign-artwork-guidance"><span className="material-symbols-rounded" aria-hidden="true">history</span><div><strong>Campanha no formato antigo</strong><p>A imagem completa atual foi preservada. Escolha um dos modos acima somente se quiser converter a campanha.</p></div></div>
+              ) : (
+                <>
+                  <div className="campaign-artwork-guidance"><span className="material-symbols-rounded" aria-hidden="true">info</span><div><strong>{artMode === "overlay" ? "Arte ajustável sobre o mockup" : "Um mockup para cada camisa"}</strong><p>{artMode === "overlay" ? <>Use <b>PNG ou WEBP transparente</b>, até <b>2 MB</b>. A arte-base vale para todas as camisas, mas cada corte/cor pode receber outra arte e outro ajuste.</> : <>Use <b>PNG, JPG ou WEBP</b>, até <b>2 MB</b>. Cada combinação precisa ter pelo menos frente ou costas.</>}</p></div></div>
+
+                  {artMode === "overlay" && (
+                    <div className="campaign-art-scope" role="group" aria-label="Escopo da edição">
+                      <button className={artScope === "base" ? "is-active" : ""} type="button" onClick={() => { setArtScope("base"); setArtPreviewSide("front"); }}>Arte-base</button>
+                      <button className={artScope === "variant" ? "is-active" : ""} type="button" onClick={() => setArtScope("variant")}>Personalizar uma camisa</button>
+                    </div>
+                  )}
+
+                  {(artMode === "variant_mockup" || artScope === "variant") && (
+                    <div className="campaign-art-variants">
+                      {shirtModels.filter((model) => selectedModels[model.name]).map((model) => (
+                        <section key={model.name}><strong>{model.name === "Comum" ? "Padrão" : model.name}</strong><div>{modelColors[model.name].map((colorName) => {
+                          const colorOption = campaignColorOptions.find((item) => colorKey(item.name) === colorKey(colorName));
+                          const saved = variantArts[variantArtKey(model.name, colorName)]?.[artMode];
+                          const complete = artMode === "overlay" || saved?.front.source === "custom" || saved?.back.source === "custom";
+                          const selected = previewModel === model.name && previewColor.name === colorName;
+                          return <button className={`${selected ? "is-active" : ""} ${complete ? "is-complete" : "is-pending"}`} type="button" onClick={() => selectArtworkVariant(model.name, colorName)} key={colorName}><i style={{ backgroundColor: colorOption?.hex }} /><span>{colorName}</span><small>{complete ? "pronta" : "pendente"}</small></button>;
+                        })}</div></section>
+                      ))}
+                    </div>
+                  )}
+
+                  {(previewArtwork.front || previewArtwork.back) && (
+                    <section className="campaign-artwork-composer-preview" aria-label="Prévia da camisa">
+                      <header><div><strong>{artMode === "overlay" ? "Editor da arte" : "Prévia do mockup"}</strong><small>{artScope === "base" ? "Arte-base" : `${previewModel === "Comum" ? "Padrão" : previewModel} · ${previewColor.name}`}</small></div><div role="group" aria-label="Lado da prévia"><button className={artPreviewSide === "front" ? "is-active" : ""} type="button" disabled={!previewArtwork.front} onClick={() => setArtPreviewSide("front")}>Frente</button><button className={artPreviewSide === "back" ? "is-active" : ""} type="button" disabled={!previewArtwork.back} onClick={() => setArtPreviewSide("back")}>Costas</button></div></header>
+                      <div className="campaign-art-canvas"><ShirtMockupPreview model={previewModel} color={previewColor} art={previewArt} artwork={previewArtwork} side={artPreviewSide} interactive={artMode === "overlay"} onPointerDown={startArtworkDrag} label={`Prévia ${previewModel === "Comum" ? "Padrão" : previewModel}, ${previewColor.name}, ${artPreviewSide === "front" ? "frente" : "costas"}`} /></div>
+                      {artMode === "overlay" && previewArtwork[artPreviewSide] && (
+                        <div className="campaign-art-controls">
+                          <label><span>Posição horizontal</span><input type="range" min="-100" max="100" step="1" value={activeTransform.x} onChange={(event) => setCurrentTransform({ ...activeTransform, x: Number(event.target.value) })} /><output>{Math.round(activeTransform.x)}%</output></label>
+                          <label><span>Posição vertical</span><input type="range" min="-100" max="100" step="1" value={activeTransform.y} onChange={(event) => setCurrentTransform({ ...activeTransform, y: Number(event.target.value) })} /><output>{Math.round(activeTransform.y)}%</output></label>
+                          <label><span>Tamanho</span><input type="range" min="10" max="300" step="1" value={activeTransform.scale * 100} onChange={(event) => setCurrentTransform({ ...activeTransform, scale: Number(event.target.value) / 100 })} /><output>{Math.round(activeTransform.scale * 100)}%</output></label>
+                          <label><span>Rotação</span><input type="range" min="-180" max="180" step="1" value={activeTransform.rotation} onChange={(event) => setCurrentTransform({ ...activeTransform, rotation: Number(event.target.value) })} /><output>{Math.round(activeTransform.rotation)}°</output></label>
+                          <button type="button" onClick={resetCurrentTransform}><span className="material-symbols-rounded" aria-hidden="true">restart_alt</span>Restaurar posição</button>
+                        </div>
+                      )}
+                      <p>{artMode === "overlay" ? "Arraste a arte diretamente na camisa ou use os controles." : "Esta imagem será mostrada exatamente como foi enviada."}</p>
+                    </section>
+                  )}
+
+                  <div className="campaign-artwork-uploads">
+                    {(["front", "back"] as const).map((side) => {
+                      const baseScope = artMode === "overlay" && artScope === "base";
+                      const baseDraft = side === "front" ? front : back;
+                      const baseExisting = side === "front" ? existingArt.front : existingArt.back;
+                      const variantDraft = currentVariantArt[side];
+                      const image = baseScope ? baseDraft.preview || baseExisting : variantDraft.preview || variantDraft.url || previewArtwork[side]?.url || "";
+                      const required = baseScope && side === "front";
+                      return (
+                        <div className="campaign-art-upload-slot" key={side}>
+                          <label className={required ? "campaign-artwork-main" : "campaign-artwork-optional"}>
+                            <span>{side === "front" ? "Frente" : "Costas"}<b>{required ? "obrigatória" : "opcional"}</b></span>
+                            <div>{image ? <img src={image} alt={`Prévia de ${side === "front" ? "frente" : "costas"}`} /> : <span className="campaign-artwork-empty"><span className="material-symbols-rounded" aria-hidden="true">add_photo_alternate</span>Selecionar arquivo</span>}<span className="material-symbols-rounded" aria-hidden="true">upload</span></div>
+                            <input type="file" accept={artMode === "variant_mockup" ? "image/png,image/jpeg,image/webp" : "image/png,image/webp"} aria-label={`Enviar ${side === "front" ? "frente" : "costas"}`} onChange={(event) => baseScope ? chooseArt(event, side) : chooseVariantArt(event, side)} />
+                            <small>{baseScope ? (baseDraft.preview ? "Nova arte selecionada" : baseExisting ? "Arte atual. Clique para trocar" : "Clique para selecionar") : variantDraft.source === "custom" ? "Imagem personalizada" : artMode === "overlay" && variantDraft.source === "inherit" ? "Herdando a arte-base" : "Nenhuma imagem"}</small>
+                          </label>
+                          {!baseScope && variantDraft.source === "custom" && <button className="campaign-artwork-remove" type="button" onClick={() => removeVariantSide(side)}><span className="material-symbols-rounded" aria-hidden="true">delete</span>Remover {side === "front" ? "frente" : "costas"}</button>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {artMode === "overlay" && artScope === "base" && (back.preview || existingArt.back) && <button className="campaign-artwork-remove" type="button" onClick={removeBackArt}><span className="material-symbols-rounded" aria-hidden="true">delete</span>Remover a arte-base de costas</button>}
+                  {artMode === "overlay" && artScope === "variant" && <button className="campaign-art-inherit" type="button" onClick={restoreVariantInheritance}><span className="material-symbols-rounded" aria-hidden="true">link</span>Restaurar herança da arte-base</button>}
+                  {artMode === "variant_mockup" && <p className="campaign-artwork-status"><span className="material-symbols-rounded" aria-hidden="true">checklist</span>{activeVariantCombinations.filter((item) => { const saved = variantArts[item.key]?.variant_mockup; return saved?.front.source === "custom" || saved?.back.source === "custom"; }).length} de {activeVariantCombinations.length} combinações preenchidas.</p>}
+                </>
+              )}
               {artError && <p className="campaign-artwork-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{artError}</p>}
-              <p className="campaign-artwork-status">
-                <span className="material-symbols-rounded" aria-hidden="true">{front.preview || existingArt.front ? "verified" : "pending"}</span>
-                {front.preview
-                  ? "Arte transparente pronta para ser aplicada automaticamente às cores e cortes selecionados."
-                  : existingArt.front
-                    ? "A campanha já tem arte. Envie um arquivo só se quiser trocá-la."
-                    : "Envie a arte de frente para liberar a campanha."}
-              </p>
             </fieldset>
 
             {formError && <p className="campaign-form-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{formError}</p>}

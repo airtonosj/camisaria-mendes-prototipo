@@ -479,14 +479,107 @@ function parseDeadline(value) {
 }
 
 function parseArtRenderMode(value) {
-  if (value === "overlay" || value === "legacy_mockup") return value;
+  if (value === "overlay" || value === "variant_mockup" || value === "legacy_mockup") return value;
   throw new ApiError(422, "VALIDATION_ERROR", "O modo de exibição da arte é inválido.");
+}
+
+const defaultArtworkTransform = Object.freeze({ x: 0, y: 0, scale: 1, rotation: 0 });
+
+function parseArtworkNumber(value, field, minimum, maximum, fallback) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < minimum || parsed > maximum) {
+    throw new ApiError(422, "VALIDATION_ERROR", `O ajuste ${field} está fora do intervalo permitido.`);
+  }
+  return parsed;
+}
+
+function parseArtworkTransform(value, field, fallback = defaultArtworkTransform) {
+  const transform = value && typeof value === "object" ? value : {};
+  return {
+    x: parseArtworkNumber(transform.x, `${field}.x`, -100, 100, fallback.x),
+    y: parseArtworkNumber(transform.y, `${field}.y`, -100, 100, fallback.y),
+    scale: parseArtworkNumber(transform.scale, `${field}.scale`, 0.1, 3, fallback.scale),
+    rotation: parseArtworkNumber(transform.rotation, `${field}.rotation`, -180, 180, fallback.rotation),
+  };
+}
+
+function transformFromRow(row, prefix) {
+  return {
+    x: Number(row?.[`${prefix}_x`] ?? 0),
+    y: Number(row?.[`${prefix}_y`] ?? 0),
+    scale: Number(row?.[`${prefix}_scale`] ?? 1),
+    rotation: Number(row?.[`${prefix}_rotation`] ?? 0),
+  };
+}
+
+function parseArtworkSide(value, field, mode, side, baseAvailable) {
+  const input = value && typeof value === "object" ? value : {};
+  const source = String(input.source ?? (mode === "overlay" ? "inherit" : "none"));
+  const allowed = mode === "overlay" ? ["inherit", "custom", "none"] : ["custom", "none"];
+  if (!allowed.includes(source) || (mode === "overlay" && side === "front" && source === "none")) {
+    throw new ApiError(422, "VALIDATION_ERROR", `A origem de ${field} é inválida.`);
+  }
+  if (source === "inherit" && !baseAvailable && side === "front") {
+    throw new ApiError(422, "VALIDATION_ERROR", "A frente precisa herdar uma arte-base existente ou usar uma arte personalizada.");
+  }
+  const url = source === "custom" ? requireText(input.url, `${field}.url`, 2048) : null;
+  return { source, url, transform: parseArtworkTransform(input.transform, `${field}.transform`) };
+}
+
+function campaignBaseArtwork(campaign) {
+  return {
+    front: campaign.art_front_url ? { url: campaign.art_front_url, transform: transformFromRow(campaign, "art_front") } : null,
+    back: campaign.art_back_url ? { url: campaign.art_back_url, transform: transformFromRow(campaign, "art_back") } : null,
+  };
+}
+
+function resolveVariantArtwork(campaign, variant) {
+  const base = campaignBaseArtwork(campaign);
+  if (campaign.art_render_mode === "legacy_mockup") return { front: base.front, back: base.back };
+  const hasConfig = Boolean(variant.artwork_mode);
+  const resolve = (side) => {
+    const source = hasConfig ? variant[`${side}_source`] : campaign.art_render_mode === "overlay" ? "inherit" : "none";
+    if (source === "none") return null;
+    const inherited = source === "inherit";
+    const url = inherited ? base[side]?.url : variant[`${side}_url`];
+    if (!url) return null;
+    return {
+      url,
+      transform: campaign.art_render_mode === "overlay"
+        ? (hasConfig && (!inherited || Boolean(variant[`${side}_transform_override`]))
+          ? transformFromRow(variant, side)
+          : base[side]?.transform ?? defaultArtworkTransform)
+        : defaultArtworkTransform,
+    };
+  };
+  return { front: resolve("front"), back: resolve("back") };
+}
+
+function rawVariantArtworkConfig(row) {
+  if (!row) return null;
+  return {
+    front: {
+      source: row.front_source,
+      url: row.front_url,
+      transformOverride: Boolean(row.front_transform_override),
+      transform: transformFromRow(row, "front"),
+    },
+    back: {
+      source: row.back_source,
+      url: row.back_url,
+      transformOverride: Boolean(row.back_transform_override),
+      transform: transformFromRow(row, "back"),
+    },
+  };
 }
 
 async function getCampaign(code) {
   const [campaignRows] = await pool.execute(
     `SELECT id, code, title, subtitle, phase, deadline_at, pickup_instructions,
-            representative_name, representative_whatsapp, art_front_url, art_back_url, art_render_mode
+            representative_name, representative_whatsapp, art_front_url, art_back_url, art_render_mode,
+            art_front_x, art_front_y, art_front_scale, art_front_rotation,
+            art_back_x, art_back_y, art_back_scale, art_back_rotation
        FROM campaigns WHERE code = ? LIMIT 1`,
     [code],
   );
@@ -494,13 +587,19 @@ async function getCampaign(code) {
   const campaign = campaignRows[0];
   const [variants] = await pool.execute(
     `SELECT cv.id, sm.code AS model_code, sm.name AS model_name, co.name AS color_name,
-            co.hex_color, cv.unit_price_cents
+            co.hex_color, cv.unit_price_cents, cva.artwork_mode,
+            cva.front_source, cva.front_url, cva.front_transform_override,
+            cva.front_x, cva.front_y, cva.front_scale, cva.front_rotation,
+            cva.back_source, cva.back_url, cva.back_transform_override,
+            cva.back_x, cva.back_y, cva.back_scale, cva.back_rotation
        FROM campaign_variants cv
        JOIN shirt_models sm ON sm.id = cv.shirt_model_id
        JOIN colors co ON co.id = cv.color_id
-      WHERE cv.campaign_id = ? AND cv.active = TRUE AND sm.active = TRUE AND co.active = TRUE
-      ORDER BY sm.sort_order, co.name`,
-    [campaign.id],
+       LEFT JOIN campaign_variant_artworks cva
+         ON cva.campaign_variant_id = cv.id AND cva.artwork_mode = ?
+       WHERE cv.campaign_id = ? AND cv.active = TRUE AND sm.active = TRUE AND co.active = TRUE
+       ORDER BY sm.sort_order, co.name`,
+    [campaign.art_render_mode, campaign.id],
   );
   const [sizes] = await pool.execute(
     `SELECT sm.code AS model_code, sm.name AS model_name, sz.code, sz.name, sz.size_group
@@ -511,6 +610,18 @@ async function getCampaign(code) {
       ORDER BY sm.sort_order, sz.sort_order`,
     [campaign.id],
   );
+  const [allArtworkRows] = await pool.execute(
+    `SELECT cva.* FROM campaign_variant_artworks cva
+       JOIN campaign_variants cv ON cv.id = cva.campaign_variant_id
+      WHERE cv.campaign_id = ?`,
+    [campaign.id],
+  );
+  const artworkConfigsByVariant = new Map();
+  for (const row of allArtworkRows) {
+    const current = artworkConfigsByVariant.get(Number(row.campaign_variant_id)) ?? {};
+    current[row.artwork_mode] = rawVariantArtworkConfig(row);
+    artworkConfigsByVariant.set(Number(row.campaign_variant_id), current);
+  }
   return {
     id: campaign.id,
     code: campaign.code,
@@ -525,11 +636,18 @@ async function getCampaign(code) {
     artFrontUrl: campaign.art_front_url,
     artBackUrl: campaign.art_back_url,
     artRenderMode: campaign.art_render_mode,
+    artworkConfig: {
+      mode: campaign.art_render_mode,
+      base: campaignBaseArtwork(campaign),
+    },
     variants: variants.map((variant) => ({
       id: variant.id,
       model: { code: variant.model_code, name: variant.model_name },
       color: { name: variant.color_name, hex: variant.hex_color },
       unitPriceCents: variant.unit_price_cents,
+      artwork: resolveVariantArtwork(campaign, variant),
+      artworkConfig: rawVariantArtworkConfig(variant.artwork_mode ? variant : null),
+      artworkConfigs: artworkConfigsByVariant.get(Number(variant.id)) ?? {},
     })),
     sizes: sizes.map((size) => ({
       model: { code: size.model_code, name: size.model_name },
@@ -544,6 +662,15 @@ async function listCampaigns() {
   const [rows] = await pool.execute(
     `SELECT c.id, c.code, c.title, c.subtitle, c.phase, c.deadline_at, c.pickup_instructions,
             c.representative_name, c.representative_whatsapp, c.art_front_url, c.art_back_url, c.art_render_mode,
+            COALESCE(
+              c.art_front_url,
+              (SELECT COALESCE(NULLIF(cva.front_url, ''), NULLIF(cva.back_url, ''))
+                 FROM campaign_variants cover_variant
+                 JOIN campaign_variant_artworks cva ON cva.campaign_variant_id = cover_variant.id
+                WHERE cover_variant.campaign_id = c.id AND cover_variant.active = TRUE
+                  AND cva.artwork_mode = 'variant_mockup'
+                ORDER BY cover_variant.id LIMIT 1)
+            ) AS cover_art_url,
             COUNT(DISTINCT o.id) AS order_count,
             COALESCE(SUM(CASE WHEN o.payment_status = 'paid' THEN o.total_cents ELSE 0 END), 0) AS paid_total_cents,
             NOT EXISTS (SELECT 1 FROM orders order_history WHERE order_history.campaign_id = c.id) AS can_delete
@@ -561,7 +688,7 @@ async function listCampaigns() {
     deadlineAt: row.deadline_at,
     pickupInstructions: row.pickup_instructions,
     representative: { name: row.representative_name, whatsapp: row.representative_whatsapp },
-    artFrontUrl: row.art_front_url,
+    artFrontUrl: row.cover_art_url,
     artBackUrl: row.art_back_url,
     artRenderMode: row.art_render_mode,
     orderCount: Number(row.order_count),
@@ -664,6 +791,125 @@ async function resolveCatalogIds(connection, models) {
   };
 }
 
+function parseBaseArtworkSide(value, field, required) {
+  if (value === undefined || value === null) {
+    if (required) throw new ApiError(422, "VALIDATION_ERROR", "A arte-base de frente é obrigatória no modo automático.");
+    return null;
+  }
+  if (!value || typeof value !== "object") throw new ApiError(422, "VALIDATION_ERROR", `A configuração ${field} é inválida.`);
+  return {
+    url: requireText(value.url, `${field}.url`, 2048),
+    transform: parseArtworkTransform(value.transform, `${field}.transform`),
+  };
+}
+
+/** Persiste arte sem depender do id da variante no cliente, que ainda não existe na criação. */
+async function applyArtworkConfig(connection, campaignId, value) {
+  if (!value || typeof value !== "object") throw new ApiError(422, "VALIDATION_ERROR", "Configure as artes da campanha.");
+  const mode = parseArtRenderMode(value.mode);
+  if (mode === "legacy_mockup") throw new ApiError(422, "VALIDATION_ERROR", "O modo legado é reservado para campanhas antigas.");
+  const base = mode === "overlay" ? {
+    front: parseBaseArtworkSide(value.base?.front, "artworkConfig.base.front", true),
+    back: parseBaseArtworkSide(value.base?.back, "artworkConfig.base.back", false),
+  } : { front: null, back: null };
+
+  const [campaignRows] = await connection.execute(
+    "SELECT art_front_url, art_back_url FROM campaigns WHERE id = ? LIMIT 1",
+    [campaignId],
+  );
+  const oldUrls = [campaignRows[0]?.art_front_url, campaignRows[0]?.art_back_url];
+  if (mode === "overlay") {
+    await connection.execute(
+      `UPDATE campaigns SET art_render_mode = ?, art_front_url = ?, art_back_url = ?,
+         art_front_x = ?, art_front_y = ?, art_front_scale = ?, art_front_rotation = ?,
+         art_back_x = ?, art_back_y = ?, art_back_scale = ?, art_back_rotation = ?
+       WHERE id = ?`,
+      [
+        mode, base.front.url, base.back?.url ?? null,
+        base.front.transform.x, base.front.transform.y, base.front.transform.scale, base.front.transform.rotation,
+        base.back?.transform.x ?? 0, base.back?.transform.y ?? 0, base.back?.transform.scale ?? 1, base.back?.transform.rotation ?? 0,
+        campaignId,
+      ],
+    );
+  } else {
+    // A arte-base do modo automático fica guardada para uma futura volta de modo.
+    await connection.execute("UPDATE campaigns SET art_render_mode = ? WHERE id = ?", [mode, campaignId]);
+  }
+
+  const [variants] = await connection.execute(
+    `SELECT cv.id, sm.code AS model_code, sm.name AS model_name, co.name AS color_name
+       FROM campaign_variants cv
+       JOIN shirt_models sm ON sm.id = cv.shirt_model_id
+       JOIN colors co ON co.id = cv.color_id
+      WHERE cv.campaign_id = ? AND cv.active = TRUE`,
+    [campaignId],
+  );
+  const supplied = Array.isArray(value.variants) ? value.variants : [];
+  const configs = new Map();
+  for (const [index, item] of supplied.entries()) {
+    if (!item || typeof item !== "object") throw new ApiError(422, "VALIDATION_ERROR", `A arte da combinação ${index + 1} é inválida.`);
+    const modelCode = requireText(item.modelCode, `artworkConfig.variants[${index}].modelCode`, 32);
+    const colorName = requireText(item.colorName, `artworkConfig.variants[${index}].colorName`, 80);
+    const key = `${modelCode}:${colorName.toLocaleLowerCase("pt-BR")}`;
+    if (configs.has(key)) throw new ApiError(422, "VALIDATION_ERROR", "Há configurações de arte repetidas.");
+    configs.set(key, item);
+  }
+
+  for (const variant of variants) {
+    const key = `${variant.model_code}:${variant.color_name.toLocaleLowerCase("pt-BR")}`;
+    const configured = configs.get(key);
+    if (mode === "variant_mockup" && !configured) {
+      throw new ApiError(422, "VARIANT_ARTWORK_REQUIRED", `Envie ao menos uma imagem para ${variant.model_name} · ${variant.color_name}.`);
+    }
+    const front = parseArtworkSide(
+      configured?.front,
+      `artworkConfig.${variant.model_code}.${variant.color_name}.front`,
+      mode,
+      "front",
+      Boolean(base.front),
+    );
+    const back = parseArtworkSide(
+      configured?.back,
+      `artworkConfig.${variant.model_code}.${variant.color_name}.back`,
+      mode,
+      "back",
+      Boolean(base.back),
+    );
+    if (mode === "variant_mockup" && front.source !== "custom" && back.source !== "custom") {
+      throw new ApiError(422, "VARIANT_ARTWORK_REQUIRED", `Envie frente ou costas para ${variant.model_name} · ${variant.color_name}.`);
+    }
+    const frontOverride = Boolean(configured?.front?.transformOverride);
+    const backOverride = Boolean(configured?.back?.transformOverride);
+    const [oldRows] = await connection.execute(
+      "SELECT front_url, back_url FROM campaign_variant_artworks WHERE campaign_variant_id = ? AND artwork_mode = ?",
+      [variant.id, mode],
+    );
+    if (oldRows[0]) oldUrls.push(oldRows[0].front_url, oldRows[0].back_url);
+    await connection.execute(
+      `INSERT INTO campaign_variant_artworks
+        (campaign_variant_id, artwork_mode,
+         front_source, front_url, front_transform_override, front_x, front_y, front_scale, front_rotation,
+         back_source, back_url, back_transform_override, back_x, back_y, back_scale, back_rotation)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         front_source = VALUES(front_source), front_url = VALUES(front_url),
+         front_transform_override = VALUES(front_transform_override), front_x = VALUES(front_x), front_y = VALUES(front_y),
+         front_scale = VALUES(front_scale), front_rotation = VALUES(front_rotation),
+         back_source = VALUES(back_source), back_url = VALUES(back_url),
+         back_transform_override = VALUES(back_transform_override), back_x = VALUES(back_x), back_y = VALUES(back_y),
+         back_scale = VALUES(back_scale), back_rotation = VALUES(back_rotation)`,
+      [
+        variant.id, mode,
+        front.source, front.url, frontOverride, front.transform.x, front.transform.y, front.transform.scale, front.transform.rotation,
+        back.source, back.url, backOverride, back.transform.x, back.transform.y, back.transform.scale, back.transform.rotation,
+      ],
+    );
+    configs.delete(key);
+  }
+  if (configs.size > 0) throw new ApiError(422, "INVALID_VARIANT", "Uma arte foi enviada para uma combinação que não está ativa na campanha.");
+  return [...new Set(oldUrls.filter(Boolean))];
+}
+
 async function createCampaign(request) {
   const staff = await requireStaff(request);
   const body = await readJson(request);
@@ -675,9 +921,10 @@ async function createCampaign(request) {
   const representative = body.representative ?? {};
   const representativeName = requireText(representative.name, "representative.name", 160);
   const representativeWhatsapp = normalizeWhatsapp(representative.whatsapp, "representative.whatsapp");
-  const artFrontUrl = requireText(body.artFrontUrl, "artFrontUrl", 2048);
+  const artworkConfig = body.artworkConfig;
+  const artFrontUrl = artworkConfig ? optionalText(body.artFrontUrl, 2048) : requireText(body.artFrontUrl, "artFrontUrl", 2048);
   const artBackUrl = optionalText(body.artBackUrl, 2048);
-  const artRenderMode = body.artRenderMode === undefined ? "legacy_mockup" : parseArtRenderMode(body.artRenderMode);
+  const artRenderMode = artworkConfig ? parseArtRenderMode(artworkConfig.mode) : body.artRenderMode === undefined ? "legacy_mockup" : parseArtRenderMode(body.artRenderMode);
   const models = parseCampaignModels(body.models);
 
   await withTransaction(async (connection) => {
@@ -709,6 +956,7 @@ async function createCampaign(request) {
         );
       }
     }
+    if (artworkConfig) await applyArtworkConfig(connection, campaignResult.insertId, artworkConfig);
   });
   return getCampaign(code);
 }
@@ -734,6 +982,7 @@ async function updateCampaign(request, code) {
     );
     if (rows.length === 0) throw new ApiError(404, "CAMPAIGN_NOT_FOUND", "Campanha não encontrada.");
     const campaign = rows[0];
+    const orphanCandidates = [];
 
     const assignments = [];
     const parameters = [];
@@ -762,12 +1011,19 @@ async function updateCampaign(request, code) {
       await applyCampaignModels(connection, campaign.id, parseCampaignModels(body.models));
     }
 
-    return { artFrontUrl: campaign.art_front_url, artBackUrl: campaign.art_back_url };
+    if (body.artworkConfig !== undefined) {
+      orphanCandidates.push(...await applyArtworkConfig(connection, campaign.id, body.artworkConfig));
+    }
+
+    return { artFrontUrl: campaign.art_front_url, artBackUrl: campaign.art_back_url, orphanCandidates };
   });
 
   // Fora da transação: apagar arquivo é irreversível e não pode acontecer antes do commit.
   if (body.artFrontUrl !== undefined) await removeOrphanUpload(changed.artFrontUrl);
   if (body.artBackUrl !== undefined) await removeOrphanUpload(changed.artBackUrl);
+  if (body.artworkConfig !== undefined) {
+    for (const url of changed.orphanCandidates) await removeOrphanUpload(url);
+  }
   return getCampaign(code);
 }
 
@@ -797,13 +1053,26 @@ async function deleteCampaign(request, code) {
         { orderNumber: orders[0].order_number },
       );
     }
+    const [artworkRows] = await connection.execute(
+      `SELECT cva.front_url, cva.back_url
+         FROM campaign_variant_artworks cva
+         JOIN campaign_variants cv ON cv.id = cva.campaign_variant_id
+        WHERE cv.campaign_id = ?`,
+      [campaign.id],
+    );
     await connection.execute("DELETE FROM campaigns WHERE id = ?", [campaign.id]);
-    return { code, artFrontUrl: campaign.art_front_url, artBackUrl: campaign.art_back_url };
+    return {
+      code,
+      artFrontUrl: campaign.art_front_url,
+      artBackUrl: campaign.art_back_url,
+      variantArtworkUrls: artworkRows.flatMap((row) => [row.front_url, row.back_url]).filter(Boolean),
+    };
   });
 
   // A exclusão do arquivo só ocorre depois do commit e respeita o compartilhamento entre campanhas.
   await removeOrphanUpload(deleted.artFrontUrl);
   await removeOrphanUpload(deleted.artBackUrl);
+  for (const url of deleted.variantArtworkUrls) await removeOrphanUpload(url);
   return { code: deleted.code, deleted: true };
 }
 
@@ -912,8 +1181,11 @@ async function applyCampaignModels(connection, campaignId, models) {
 async function removeOrphanUpload(url) {
   if (!url || !/^\/uploads\/[0-9a-f-]{36}\.(png|jpg|webp)$/.test(url)) return;
   const [rows] = await pool.execute(
-    "SELECT 1 FROM campaigns WHERE art_front_url = ? OR art_back_url = ? LIMIT 1",
-    [url, url],
+    `SELECT 1 FROM campaigns WHERE art_front_url = ? OR art_back_url = ?
+     UNION ALL
+     SELECT 1 FROM campaign_variant_artworks WHERE front_url = ? OR back_url = ?
+     LIMIT 1`,
+    [url, url, url, url],
   );
   if (rows.length > 0) return;
   try {
@@ -1039,7 +1311,9 @@ async function trackOrder(requestUrl, orderNumber) {
             o.payment_status, o.delivery_status,
             o.total_cents, o.created_at, o.paid_at, o.delivered_at,
             c.code AS campaign_code, c.title AS campaign_title, c.phase AS campaign_phase,
-            c.representative_name, c.pickup_instructions, c.art_front_url, c.art_back_url
+            c.representative_name, c.pickup_instructions, c.art_front_url, c.art_back_url, c.art_render_mode,
+            c.art_front_x, c.art_front_y, c.art_front_scale, c.art_front_rotation,
+            c.art_back_x, c.art_back_y, c.art_back_scale, c.art_back_rotation
        FROM orders o
        JOIN campaigns c ON c.id = o.campaign_id
       WHERE o.order_number = ? AND o.customer_whatsapp = ?
@@ -1049,15 +1323,21 @@ async function trackOrder(requestUrl, orderNumber) {
   if (rows.length === 0) throw new ApiError(404, "ORDER_NOT_FOUND", "Pedido não encontrado com os dados informados.");
   const order = rows[0];
   const [items] = await pool.execute(
-    `SELECT sm.name AS model_name, co.name AS color_name, co.hex_color, sz.code AS size,
-            sz.size_group, oi.quantity, oi.unit_price_cents, oi.line_total_cents
+    `SELECT cv.id AS variant_id, sm.name AS model_name, co.name AS color_name, co.hex_color, sz.code AS size,
+            sz.size_group, oi.quantity, oi.unit_price_cents, oi.line_total_cents,
+            cva.artwork_mode, cva.front_source, cva.front_url, cva.front_transform_override,
+            cva.front_x, cva.front_y, cva.front_scale, cva.front_rotation,
+            cva.back_source, cva.back_url, cva.back_transform_override,
+            cva.back_x, cva.back_y, cva.back_scale, cva.back_rotation
        FROM order_items oi
        JOIN campaign_variants cv ON cv.id = oi.campaign_variant_id
        JOIN shirt_models sm ON sm.id = cv.shirt_model_id
        JOIN colors co ON co.id = cv.color_id
        JOIN sizes sz ON sz.id = oi.size_id
-      WHERE oi.order_id = ? ORDER BY oi.id`,
-    [order.id],
+       LEFT JOIN campaign_variant_artworks cva
+         ON cva.campaign_variant_id = cv.id AND cva.artwork_mode = ?
+       WHERE oi.order_id = ? ORDER BY oi.id`,
+    [order.art_render_mode, order.id],
   );
   return {
     number: order.order_number,
@@ -1078,6 +1358,7 @@ async function trackOrder(requestUrl, orderNumber) {
       pickupInstructions: order.pickup_instructions,
       artFrontUrl: order.art_front_url,
       artBackUrl: order.art_back_url,
+      artRenderMode: order.art_render_mode,
     },
     items: items.map((item) => ({
       modelName: item.model_name,
@@ -1087,6 +1368,7 @@ async function trackOrder(requestUrl, orderNumber) {
       quantity: item.quantity,
       unitPriceCents: item.unit_price_cents,
       lineTotalCents: item.line_total_cents,
+      artwork: resolveVariantArtwork(order, item),
     })),
   };
 }

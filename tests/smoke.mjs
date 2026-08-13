@@ -272,7 +272,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "010_campaign_art_compositor");
+  assert.equal(health.schema.current, "011_variant_artwork_editor");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -311,6 +311,83 @@ try {
   assert.ok(customVariant);
   assert.equal(customVariant.color.hex, "#8B5CF6");
   step("campanha aceita e publica cor personalizada com nome e código HEX");
+
+  const identityTransform = { x: 0, y: 0, scale: 1, rotation: 0 };
+  const adjustedOverlay = {
+    mode: "overlay",
+    base: {
+      front: { url: "/uploads/smoke-base-overlay.png", transform: { x: 4, y: -6, scale: 1.15, rotation: 3 } },
+      back: null,
+    },
+    variants: [
+      {
+        modelCode: "common",
+        colorName: "Lilás lavanda",
+        front: { source: "inherit", transformOverride: true, transform: { x: 12, y: 8, scale: 0.9, rotation: -7 } },
+        back: { source: "none", transformOverride: false, transform: identityTransform },
+      },
+      {
+        modelCode: "oversized",
+        colorName: "Preto",
+        front: { source: "custom", url: "/uploads/smoke-oversized-art.png", transformOverride: true, transform: { x: -5, y: 10, scale: 1.4, rotation: 15 } },
+        back: { source: "none", transformOverride: false, transform: identityTransform },
+      },
+    ],
+  };
+  await request(`/api/admin/campaigns/${customCampaign.code}`, { method: "PATCH", token, body: { artworkConfig: adjustedOverlay } });
+  const campaignWithAdjustedArt = (await request(`/api/campaigns/${customCampaign.code}`)).campaign;
+  const inheritedArtwork = campaignWithAdjustedArt.variants.find((candidate) => candidate.model.code === "common").artwork.front;
+  const customArtwork = campaignWithAdjustedArt.variants.find((candidate) => candidate.model.code === "oversized").artwork.front;
+  assert.equal(inheritedArtwork.url, "/uploads/smoke-base-overlay.png");
+  assert.deepEqual(inheritedArtwork.transform, { x: 12, y: 8, scale: 0.9, rotation: -7 });
+  assert.equal(customArtwork.url, "/uploads/smoke-oversized-art.png");
+  assert.deepEqual(customArtwork.transform, { x: -5, y: 10, scale: 1.4, rotation: 15 });
+  step("arte-base, substituição e ajuste independente são resolvidos por corte e cor");
+
+  const individualPayload = {
+    ...customCampaignPayload,
+    code: "MENDES-MOCKUPS-26",
+    title: "Campanha com mockups individuais",
+    artFrontUrl: undefined,
+    artRenderMode: undefined,
+    models: [
+      { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Branco", hex: "#F3F3EF" }], sizes: ["P"] },
+      { modelCode: "oversized", unitPriceCents: 6990, colors: [{ name: "Preto", hex: "#111315" }], sizes: ["M"] },
+    ],
+    artworkConfig: {
+      mode: "variant_mockup",
+      base: { front: null, back: null },
+      variants: [
+        { modelCode: "common", colorName: "Branco", front: { source: "custom", url: "/uploads/smoke-white-front.jpg", transform: identityTransform }, back: { source: "none", transform: identityTransform } },
+        { modelCode: "oversized", colorName: "Preto", front: { source: "none", transform: identityTransform }, back: { source: "custom", url: "/uploads/smoke-black-back.webp", transform: identityTransform } },
+      ],
+    },
+  };
+  await request("/api/admin/campaigns", { method: "POST", expected: 201, token, body: individualPayload });
+  const individualCampaign = (await request("/api/campaigns/MENDES-MOCKUPS-26")).campaign;
+  assert.equal(individualCampaign.artRenderMode, "variant_mockup");
+  assert.equal(individualCampaign.variants.find((candidate) => candidate.model.code === "common").artwork.front.url, "/uploads/smoke-white-front.jpg");
+  assert.equal(individualCampaign.variants.find((candidate) => candidate.model.code === "oversized").artwork.front, null);
+  assert.equal(individualCampaign.variants.find((candidate) => candidate.model.code === "oversized").artwork.back.url, "/uploads/smoke-black-back.webp");
+  await request("/api/admin/campaigns", {
+    method: "POST",
+    expected: 422,
+    token,
+    body: {
+      ...individualPayload,
+      code: "MENDES-MOCKUP-INVALIDO",
+      artworkConfig: { ...individualPayload.artworkConfig, variants: individualPayload.artworkConfig.variants.slice(0, 1) },
+    },
+  });
+  step("mockup individual aceita frente ou costas e recusa combinação sem imagem");
+  await request(`/api/admin/campaigns/${individualCampaign.code}/phase`, { method: "PATCH", token, body: { targetPhase: "orders_closed" } });
+  const changedIndividualArtwork = structuredClone(individualPayload.artworkConfig);
+  changedIndividualArtwork.variants[0].front.url = "/uploads/smoke-white-front-v2.jpg";
+  await request(`/api/admin/campaigns/${individualCampaign.code}`, { method: "PATCH", token, body: { artworkConfig: changedIndividualArtwork } });
+  await request(`/api/admin/campaigns/${individualCampaign.code}`, { method: "PATCH", expected: 409, token, body: { models: individualPayload.models } });
+  const closedCampaign = (await request(`/api/campaigns/${individualCampaign.code}`)).campaign;
+  assert.equal(closedCampaign.variants.find((candidate) => candidate.model.code === "common").artwork.front.url, "/uploads/smoke-white-front-v2.jpg");
+  step("arte continua editável após fechar pedidos, enquanto as variantes permanecem travadas");
 
   const disposableCampaignPayload = {
     ...customCampaignPayload,

@@ -34,8 +34,17 @@ export type SizeCode = "PP" | "P" | "M" | "G" | "GG" | "XG" | "PPB" | "PB" | "MB
  * `overlay` é a arte transparente que o site aplica sobre o mockup colorido.
  * `legacy_mockup` preserva campanhas antigas que já enviaram a foto completa da peça.
  */
-export type CampaignArtMode = "overlay" | "legacy_mockup";
-export type CampaignArt = { front: string; back: string | null; mode?: CampaignArtMode };
+export type CampaignArtMode = "overlay" | "variant_mockup" | "legacy_mockup";
+export type ArtworkTransform = { x: number; y: number; scale: number; rotation: number };
+export type ArtworkAsset = { url: string; transform: ArtworkTransform };
+export type VariantArtwork = { front: ArtworkAsset | null; back: ArtworkAsset | null };
+export type CampaignArt = {
+  front: string;
+  back: string | null;
+  mode?: CampaignArtMode;
+  frontTransform?: ArtworkTransform;
+  backTransform?: ArtworkTransform;
+};
 
 export type PrivateCampaign = {
   code: string;
@@ -53,6 +62,7 @@ export type PrivateCampaign = {
   representativeWhatsapp?: string | null;
   colors?: Record<ShirtModelName, ShirtColorOption[]>;
   variantIds?: Partial<Record<ShirtModelName, Partial<Record<ShirtColorName, number>>>>;
+  variantArtworks?: Record<number, VariantArtwork>;
 };
 
 export const shirtColors: ShirtColorOption[] = [

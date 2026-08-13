@@ -1,11 +1,42 @@
 import { shirtColors, shirtModels, sortSizes } from "./data";
-import type { PrivateCampaign, ShirtColorName, ShirtColorOption, ShirtModelName, SizeCode } from "./data";
+import type { ArtworkTransform, PrivateCampaign, ShirtColorName, ShirtColorOption, ShirtModelName, SizeCode, VariantArtwork } from "./data";
+
+export type ArtworkSource = "inherit" | "custom" | "none";
+export type ArtworkSideConfig = {
+  source: ArtworkSource;
+  url?: string | null;
+  transformOverride?: boolean;
+  transform: ArtworkTransform;
+};
+export type VariantArtworkConfig = {
+  modelCode: string;
+  colorName: string;
+  front: ArtworkSideConfig;
+  back: ArtworkSideConfig;
+};
+export type CampaignArtworkConfig = {
+  mode: "overlay" | "variant_mockup";
+  base: {
+    front: { url: string; transform: ArtworkTransform } | null;
+    back: { url: string; transform: ArtworkTransform } | null;
+  };
+  variants: VariantArtworkConfig[];
+};
 
 type ApiCampaignVariant = {
   id: number;
   model: { code: string; name: string };
   color: { name: string; hex: string };
   unitPriceCents: number;
+  artwork: VariantArtwork;
+  artworkConfig?: {
+    front: ArtworkSideConfig;
+    back: ArtworkSideConfig;
+  } | null;
+  artworkConfigs?: Partial<Record<"overlay" | "variant_mockup", {
+    front: ArtworkSideConfig;
+    back: ArtworkSideConfig;
+  }>>;
 };
 
 type ApiCampaignSize = {
@@ -26,7 +57,14 @@ export type ApiCampaign = {
   representativeWhatsapp: string | null;
   artFrontUrl: string | null;
   artBackUrl: string | null;
-  artRenderMode: "overlay" | "legacy_mockup";
+  artRenderMode: "overlay" | "variant_mockup" | "legacy_mockup";
+  artworkConfig?: {
+    mode: "overlay" | "variant_mockup" | "legacy_mockup";
+    base: {
+      front: { url: string; transform: ArtworkTransform } | null;
+      back: { url: string; transform: ArtworkTransform } | null;
+    };
+  };
   variants: ApiCampaignVariant[];
   sizes: ApiCampaignSize[];
 };
@@ -59,6 +97,7 @@ export type TrackedOrder = {
     representativeName: string;
     artFrontUrl: string | null;
     artBackUrl: string | null;
+    artRenderMode: "overlay" | "variant_mockup" | "legacy_mockup";
   };
   items: Array<{
     modelName: string;
@@ -68,6 +107,7 @@ export type TrackedOrder = {
     quantity: number;
     unitPriceCents: number;
     lineTotalCents: number;
+    artwork: VariantArtwork;
   }>;
 };
 
@@ -133,6 +173,7 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
   const colors = {} as Record<ShirtModelName, ShirtColorOption[]>;
   const sizes = {} as Record<ShirtModelName, SizeCode[]>;
   const variantIds: NonNullable<PrivateCampaign["variantIds"]> = {};
+  const variantArtworks: NonNullable<PrivateCampaign["variantArtworks"]> = {};
   const models: ShirtModelName[] = [];
 
   for (const model of shirtModels) {
@@ -149,6 +190,13 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
     variantIds[model.name] = Object.fromEntries(
       variants.map((variant) => [variant.color.name, variant.id]),
     );
+    variants.forEach((variant) => {
+      if (!variant.artwork) return;
+      variantArtworks[variant.id] = {
+        front: variant.artwork.front ? { ...variant.artwork.front, url: assetUrl(variant.artwork.front.url) ?? variant.artwork.front.url } : null,
+        back: variant.artwork.back ? { ...variant.artwork.back, url: assetUrl(variant.artwork.back.url) ?? variant.artwork.back.url } : null,
+      };
+    });
   }
 
   const deadline = new Date(campaign.deadlineAt);
@@ -160,6 +208,8 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
       front: assetUrl(campaign.artFrontUrl) ?? shirtModels[0].image,
       back: assetUrl(campaign.artBackUrl),
       mode: campaign.artRenderMode,
+      frontTransform: campaign.artworkConfig?.base.front?.transform,
+      backTransform: campaign.artworkConfig?.base.back?.transform,
     },
     models,
     prices,
@@ -172,6 +222,7 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
     representativeWhatsapp: campaign.representativeWhatsapp,
     colors,
     variantIds,
+    variantArtworks,
   };
 }
 
@@ -342,7 +393,7 @@ export type ApiAdminCampaign = {
   representative: { name: string; whatsapp: string | null };
   artFrontUrl: string | null;
   artBackUrl: string | null;
-  artRenderMode: "overlay" | "legacy_mockup";
+  artRenderMode: "overlay" | "variant_mockup" | "legacy_mockup";
   orderCount: number;
   paidTotalCents: number;
   canDelete: boolean;
@@ -404,9 +455,10 @@ export type CreateCampaignPayload = {
   deadlineAt: string;
   pickupInstructions: string;
   representative: { name: string; whatsapp: string };
-  artFrontUrl: string;
+  artFrontUrl?: string | null;
   artBackUrl?: string | null;
-  artRenderMode: "overlay";
+  artRenderMode?: "overlay" | "variant_mockup";
+  artworkConfig: CampaignArtworkConfig;
   models: CampaignModelPayload[];
 };
 
@@ -422,7 +474,8 @@ export type UpdateCampaignPayload = {
   representative?: { name: string; whatsapp: string };
   artFrontUrl?: string;
   artBackUrl?: string | null;
-  artRenderMode?: "overlay" | "legacy_mockup";
+  artRenderMode?: "overlay" | "variant_mockup" | "legacy_mockup";
+  artworkConfig?: CampaignArtworkConfig;
   models?: CampaignModelPayload[];
 };
 
