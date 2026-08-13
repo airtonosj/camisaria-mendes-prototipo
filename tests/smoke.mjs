@@ -272,7 +272,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "012_campaign_color_real_photos");
+  assert.equal(health.schema.current, "013_campaign_visual_options");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -299,6 +299,7 @@ try {
     representative: { name: "Representante das Cores", whatsapp: "5598999992000" },
     artFrontUrl: "/uploads/smoke-custom-color.png",
     artRenderMode: "overlay",
+    presentationConfig: { mockupEnabled: true, realPhotosEnabled: true },
     realPhotos: [
       { colorName: "Lilás lavanda", urls: ["/uploads/11111111-1111-4111-8111-111111111111.jpg", "/uploads/22222222-2222-4222-8222-222222222222.webp"] },
       { colorName: "Preto", urls: ["/uploads/33333333-3333-4333-8333-333333333333.png"] },
@@ -311,6 +312,7 @@ try {
   await request("/api/admin/campaigns", { method: "POST", expected: 201, token, body: customCampaignPayload });
   const customCampaign = (await request("/api/campaigns/MENDES-CORES-26")).campaign;
   assert.equal(customCampaign.artRenderMode, "overlay");
+  assert.deepEqual(customCampaign.presentationConfig, customCampaignPayload.presentationConfig);
   const customVariant = customCampaign.variants.find((candidate) => candidate.color.name === "Lilás lavanda");
   assert.ok(customVariant);
   assert.equal(customVariant.color.hex, "#8B5CF6");
@@ -325,6 +327,36 @@ try {
     body: { realPhotos: [{ colorName: "Lilás lavanda", urls: Array.from({ length: 7 }, (_, index) => `/uploads/44444444-4444-4444-8444-44444444444${index}.jpg`) }] },
   });
   step("galeria real limita seis fotos por cor");
+
+  const galleryOnlyPayload = {
+    ...customCampaignPayload,
+    code: "MENDES-GALERIA-26",
+    title: "Campanha somente com fotos reais",
+    artFrontUrl: undefined,
+    artRenderMode: undefined,
+    artworkConfig: undefined,
+    presentationConfig: { mockupEnabled: false, realPhotosEnabled: true },
+    models: [{ modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Branco", hex: "#F3F3EF" }], sizes: ["M"] }],
+    realPhotos: [{ colorName: "Branco", urls: ["/uploads/55555555-5555-4555-8555-555555555555.jpg"] }],
+  };
+  await request("/api/admin/campaigns", { method: "POST", expected: 201, token, body: galleryOnlyPayload });
+  const galleryOnlyCampaign = (await request(`/api/campaigns/${galleryOnlyPayload.code}`)).campaign;
+  assert.deepEqual(galleryOnlyCampaign.presentationConfig, { mockupEnabled: false, realPhotosEnabled: true });
+  assert.equal(galleryOnlyCampaign.artFrontUrl, null);
+  assert.deepEqual(galleryOnlyCampaign.realPhotos[0].urls, galleryOnlyPayload.realPhotos[0].urls);
+  await request("/api/admin/campaigns", {
+    method: "POST",
+    expected: 422,
+    token,
+    body: { ...galleryOnlyPayload, code: "MENDES-SEM-IMAGEM", presentationConfig: { mockupEnabled: false, realPhotosEnabled: false } },
+  });
+  await request("/api/admin/campaigns", {
+    method: "POST",
+    expected: 422,
+    token,
+    body: { ...galleryOnlyPayload, code: "MENDES-GALERIA-VAZIA", realPhotos: [] },
+  });
+  step("campanha aceita somente galeria e recusa salvar sem nenhuma opção visual ou sem foto por cor");
 
   const identityTransform = { x: 0, y: 0, scale: 1, rotation: 0 };
   const adjustedOverlay = {
@@ -364,6 +396,7 @@ try {
     title: "Campanha com mockups individuais",
     artFrontUrl: undefined,
     artRenderMode: undefined,
+    presentationConfig: { mockupEnabled: true, realPhotosEnabled: false },
     realPhotos: [],
     models: [
       { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Branco", hex: "#F3F3EF" }], sizes: ["P"] },

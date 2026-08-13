@@ -826,6 +826,8 @@ function Campaigns({ data }: { data: PanelData }) {
   const [front, setFront] = useState<ArtDraft>({ file: null, preview: "" });
   const [back, setBack] = useState<ArtDraft>({ file: null, preview: "" });
   const [artMode, setArtMode] = useState<EditableArtMode>("overlay");
+  const [mockupEnabled, setMockupEnabled] = useState(true);
+  const [realPhotosEnabled, setRealPhotosEnabled] = useState(false);
   const [artScope, setArtScope] = useState<"base" | "variant">("base");
   const [baseTransforms, setBaseTransforms] = useState<{ front: ArtworkTransform; back: ArtworkTransform }>({ front: { ...defaultTransform }, back: { ...defaultTransform } });
   const [variantArts, setVariantArts] = useState<Record<string, Partial<Record<"overlay" | "variant_mockup", VariantArtDraft>>>>({});
@@ -912,6 +914,8 @@ function Campaigns({ data }: { data: PanelData }) {
     setFront({ file: null, preview: "" });
     setBack({ file: null, preview: "" });
     setArtMode("overlay");
+    setMockupEnabled(true);
+    setRealPhotosEnabled(false);
     setArtScope("base");
     setBaseTransforms({ front: { ...defaultTransform }, back: { ...defaultTransform } });
     setVariantArts({});
@@ -966,6 +970,8 @@ function Campaigns({ data }: { data: PanelData }) {
       const detail = await fetchCampaignDetail(campaign.code);
       setEditing({ code: detail.code, phase: campaign.phase, hadBackArt: Boolean(detail.artBackUrl), artRenderMode: detail.artRenderMode });
       setArtMode(detail.artRenderMode);
+      setMockupEnabled(detail.presentationConfig?.mockupEnabled ?? true);
+      setRealPhotosEnabled(detail.presentationConfig?.realPhotosEnabled ?? Boolean(detail.realPhotos?.length));
       setArtScope(detail.artRenderMode === "variant_mockup" ? "variant" : "base");
       setCampaignName(detail.title);
       setCampaignCodeInput(detail.code);
@@ -1445,13 +1451,24 @@ function Campaigns({ data }: { data: PanelData }) {
   async function submitCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFormError("");
-    if (!editing && artMode === "overlay" && !front.file) {
+    if (!mockupEnabled && !realPhotosEnabled) {
+      setFormError("Ative o mockup, as fotos reais ou ambos.");
+      return;
+    }
+    if (mockupEnabled && !editing && artMode === "overlay" && !front.file) {
       setArtError("Envie a arte-base de frente antes de criar o acesso.");
       return;
     }
-    if (editing?.artRenderMode === "legacy_mockup" && artMode === "overlay" && !front.file) {
+    if (mockupEnabled && editing?.artRenderMode === "legacy_mockup" && artMode === "overlay" && !front.file) {
       setArtError("Para converter esta campanha antiga, envie uma nova arte-base transparente de frente.");
       return;
+    }
+    if (realPhotosEnabled) {
+      const colorWithoutPhoto = activeRealPhotoColors.find((color) => !(realPhotosByColor[colorKey(color.name)]?.length));
+      if (colorWithoutPhoto) {
+        setArtError(`Envie pelo menos uma foto real para a cor ${colorWithoutPhoto.name}.`);
+        return;
+      }
     }
     if (!variantsLocked) {
       const selectedCampaignModels = shirtModels.filter((item) => selectedModels[item.name]);
@@ -1479,8 +1496,9 @@ function Campaigns({ data }: { data: PanelData }) {
 
     setSubmitting(true);
     try {
-      const artworkConfig = artMode === "legacy_mockup" ? undefined : await buildArtworkConfig();
-      const realPhotos = await buildRealPhotos();
+      const artworkConfig = mockupEnabled && artMode !== "legacy_mockup" ? await buildArtworkConfig() : undefined;
+      const realPhotos = realPhotosEnabled ? await buildRealPhotos() : undefined;
+      const presentationConfig = { mockupEnabled, realPhotosEnabled };
       if (editing) {
         const payload: UpdateCampaignPayload = {
           title: campaignName,
@@ -1488,9 +1506,10 @@ function Campaigns({ data }: { data: PanelData }) {
           deadlineAt: new Date(`${deadline}T23:59:59`).toISOString(),
           pickupInstructions: pickup,
           representative: { name: representative, whatsapp: representativePhone },
-          realPhotos,
+          presentationConfig,
         };
         if (artworkConfig) payload.artworkConfig = artworkConfig;
+        if (realPhotos) payload.realPhotos = realPhotos;
         if (!variantsLocked) payload.models = campaignModels();
 
         await updateCampaignInApi(editing.code, payload);
@@ -1508,7 +1527,8 @@ function Campaigns({ data }: { data: PanelData }) {
         deadlineAt: new Date(`${deadline}T23:59:59`).toISOString(),
         pickupInstructions: pickup,
         representative: { name: representative, whatsapp: representativePhone },
-        artworkConfig: artworkConfig!,
+        presentationConfig,
+        artworkConfig,
         realPhotos,
         models: campaignModels(),
       });
@@ -1639,7 +1659,15 @@ function Campaigns({ data }: { data: PanelData }) {
               <p className="campaign-size-summary"><span className="material-symbols-rounded" aria-hidden="true">straighten</span><strong>{modelSizes[sizeModel].length}</strong> {modelSizes[sizeModel].length === 1 ? "tamanho liberado" : "tamanhos liberados"} para {sizeModel === "Comum" ? "Padrão" : sizeModel}.</p>
             </fieldset>
 
-            <fieldset className="campaign-artwork"><legend>Arte e mockup da campanha</legend>
+            <fieldset className="campaign-visual-options"><legend>Exibição das imagens</legend>
+              <p>Ative pelo menos uma opção. Você pode usar somente o mockup, somente as fotos reais ou os dois juntos.</p>
+              <div>
+                <label><span><strong>Usar mockup</strong><small>Exibe a montagem do site ou o mockup individual.</small></span><input type="checkbox" role="switch" checked={mockupEnabled} onChange={(event) => { const checked = event.target.checked; if (!checked && !realPhotosEnabled) { setFormError("Ative primeiro as fotos reais antes de desligar o mockup."); return; } setMockupEnabled(checked); setFormError(""); }} /><i aria-hidden="true" /></label>
+                <label><span><strong>Usar fotos reais</strong><small>Exibe a galeria enviada para cada cor.</small></span><input type="checkbox" role="switch" checked={realPhotosEnabled} onChange={(event) => { const checked = event.target.checked; if (!checked && !mockupEnabled) { setFormError("Ative primeiro o mockup antes de desligar as fotos reais."); return; } setRealPhotosEnabled(checked); setFormError(""); }} /><i aria-hidden="true" /></label>
+              </div>
+            </fieldset>
+
+            {mockupEnabled && <fieldset className="campaign-artwork"><legend>Arte e mockup da campanha</legend>
               <div className="campaign-art-mode" role="group" aria-label="Modo de apresentação das camisas">
                 <button className={artMode === "overlay" ? "is-active" : ""} type="button" onClick={() => { setArtMode("overlay"); setArtScope("base"); setArtPreviewSide("front"); setArtError(""); }}><span className="material-symbols-rounded" aria-hidden="true">layers</span><strong>Montar no site</strong><small>Ajuste a estampa sobre a camisa.</small></button>
                 <button className={artMode === "variant_mockup" ? "is-active" : ""} type="button" onClick={() => { setArtMode("variant_mockup"); setArtScope("variant"); setArtPreviewSide("front"); setArtError(""); }}><span className="material-symbols-rounded" aria-hidden="true">photo_library</span><strong>Mockup individual</strong><small>Envie a peça pronta por corte e cor.</small></button>
@@ -1716,21 +1744,21 @@ function Campaigns({ data }: { data: PanelData }) {
                 </>
               )}
               {artError && <p className="campaign-artwork-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{artError}</p>}
-            </fieldset>
+            </fieldset>}
 
-            <fieldset className="campaign-real-photos"><legend>Fotos reais por cor</legend>
+            {realPhotosEnabled && <fieldset className="campaign-real-photos"><legend>Fotos reais por cor</legend>
               <div className="campaign-artwork-guidance"><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span><div><strong>Galeria opcional da camisa pronta</strong><p>Envie até <b>seis fotos por cor</b> em PNG, JPG ou WEBP, com no máximo <b>2 MB cada</b>. A mesma galeria atende todos os cortes que usam a cor e aparece ao lado do mockup para o cliente.</p></div></div>
               <div className="campaign-real-photo-grid">
                 {activeRealPhotoColors.map((color) => {
                   const photos = realPhotosByColor[colorKey(color.name)] ?? [];
                   return <article className="campaign-real-photo-card" key={color.name}>
                     <header><span><i style={{ backgroundColor: color.hex }} /><strong>{color.name}</strong></span><small>{photos.length}/6</small></header>
-                    {photos.length > 0 ? <div className="campaign-real-photo-list">{photos.map((photo, index) => <figure key={`${photo.preview || photo.url}-${index}`}><img src={photo.preview || photo.url || ""} alt={`Foto real ${index + 1} da camisa ${color.name}`} /><button type="button" onClick={() => removeRealPhoto(color.name, index)} aria-label={`Remover foto ${index + 1} da cor ${color.name}`}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></figure>)}</div> : <p>Nenhuma foto real. O cliente verá somente o mockup.</p>}
+                    {photos.length > 0 ? <div className="campaign-real-photo-list">{photos.map((photo, index) => <figure key={`${photo.preview || photo.url}-${index}`}><img src={photo.preview || photo.url || ""} alt={`Foto real ${index + 1} da camisa ${color.name}`} /><button type="button" onClick={() => removeRealPhoto(color.name, index)} aria-label={`Remover foto ${index + 1} da cor ${color.name}`}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></figure>)}</div> : <p>Envie pelo menos uma foto para habilitar a galeria desta cor.</p>}
                     {photos.length < 6 && <label><span className="material-symbols-rounded" aria-hidden="true">add_photo_alternate</span>Adicionar fotos<input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => chooseRealPhotos(event, color.name)} aria-label={`Adicionar fotos reais da cor ${color.name}`} /></label>}
                   </article>;
                 })}
               </div>
-            </fieldset>
+            </fieldset>}
 
             {formError && <p className="campaign-form-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{formError}</p>}
             <div className="campaign-create-actions">

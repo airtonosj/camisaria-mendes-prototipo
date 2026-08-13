@@ -215,6 +215,14 @@ function SizeGuide({ model, open, onClose }: { model: ShirtModelName; open: bool
 
 /** Mostra a primeira combinação do carrinho; campanhas antigas mantêm a imagem completa. */
 function ArtThumbs({ campaign, label, items }: { campaign: PrivateCampaign; label: string; items: CartItem[] }) {
+  if (items.length > 0 && campaign.presentation?.mockupEnabled === false && campaign.presentation.realPhotosEnabled) return (
+    <div className={`campaign-art-thumbs campaign-art-thumbs--variants ${items.length === 1 ? "is-single" : ""}`} aria-label="Fotos reais das camisas selecionadas">
+      {items.map((item) => {
+        const photo = campaign.realPhotos?.[item.color.name]?.[0];
+        return photo ? <img key={itemKey(item)} src={photo} alt={`${label} — ${item.modelName}, ${item.color.name}`} /> : null;
+      })}
+    </div>
+  );
   if (items.length > 0 && campaign.art.mode !== "legacy_mockup") return (
     <div className={`campaign-art-thumbs campaign-art-thumbs--variants ${items.length === 1 ? "is-single" : ""}`} aria-label="Camisas selecionadas">
       {items.map((item) => {
@@ -268,10 +276,12 @@ function CartLines({ items, editable = false, onQuantity, onRemove }: {
 
 export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: PrivateCampaign; resumePayment?: string }) {
   const initialModel = campaignModels(campaign)[0]?.name ?? shirtModels[0].name;
+  const mockupEnabled = campaign.presentation?.mockupEnabled ?? true;
+  const realPhotosEnabled = campaign.presentation?.realPhotosEnabled ?? false;
   const [step, setStep] = useState<CampaignStep>(resumePayment ? "payment" : "model");
   const [model, setModel] = useState<ShirtModelName>(initialModel);
   const [previewSide, setPreviewSide] = useState<"front" | "back">("front");
-  const [previewMode, setPreviewMode] = useState<"mockup" | "real">("mockup");
+  const [previewMode, setPreviewMode] = useState<"mockup" | "real">(mockupEnabled ? "mockup" : "real");
   const [realPhotoIndex, setRealPhotoIndex] = useState(0);
   const [color, setColor] = useState(() => campaignColors(campaign, initialModel)[0]?.name ?? "");
   const [size, setSize] = useState<SizeCode>(() => campaignSizes(campaign, initialModel)[0] ?? "M");
@@ -352,8 +362,9 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
 
   useEffect(() => {
     setRealPhotoIndex(0);
-    if (!selectedRealPhotos.length) setPreviewMode("mockup");
-  }, [selectedColor.name, selectedRealPhotos.length]);
+    if (!mockupEnabled) setPreviewMode("real");
+    else if (!realPhotosEnabled || !selectedRealPhotos.length) setPreviewMode("mockup");
+  }, [selectedColor.name, selectedRealPhotos.length, mockupEnabled, realPhotosEnabled]);
 
   function selectModel(nextModel: ShirtModelName) {
     setModel(nextModel);
@@ -489,7 +500,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
           </section>
           <form className="campaign-configurator" onSubmit={submitConfiguration}>
             <section className="campaign-art-stage">
-              {selectedRealPhotos.length > 0 && <div className="campaign-visual-switch" role="group" aria-label="Tipo de visualizacao da camisa"><button className={previewMode === "mockup" ? "is-active" : ""} type="button" aria-pressed={previewMode === "mockup"} onClick={() => setPreviewMode("mockup")}><span className="material-symbols-rounded" aria-hidden="true">checkroom</span>Mockup</button><button className={previewMode === "real" ? "is-active" : ""} type="button" aria-pressed={previewMode === "real"} onClick={() => setPreviewMode("real")}><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span>Fotos reais</button></div>}
+              {mockupEnabled && realPhotosEnabled && selectedRealPhotos.length > 0 && <div className="campaign-visual-switch" role="group" aria-label="Tipo de visualizacao da camisa"><button className={previewMode === "mockup" ? "is-active" : ""} type="button" aria-pressed={previewMode === "mockup"} onClick={() => setPreviewMode("mockup")}><span className="material-symbols-rounded" aria-hidden="true">checkroom</span>Mockup</button><button className={previewMode === "real" ? "is-active" : ""} type="button" aria-pressed={previewMode === "real"} onClick={() => setPreviewMode("real")}><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span>Fotos reais</button></div>}
               {previewMode === "mockup" && (selectedArtwork.front && selectedArtwork.back || canShowBack && !selectedArtwork.front) && <div className="campaign-side-switch" role="group" aria-label="Visualizar lado da camiseta"><button className={previewSide === "front" ? "is-active" : ""} type="button" disabled={!selectedArtwork.front} aria-pressed={previewSide === "front"} onClick={() => setPreviewSide("front")}>Frente</button><button className={previewSide === "back" ? "is-active" : ""} type="button" disabled={!selectedArtwork.back} aria-pressed={previewSide === "back"} onClick={() => setPreviewSide("back")}>Costas</button></div>}
               <div className="campaign-art-viewer">
                 {previewMode === "real" && selectedRealPhotos.length > 0 ? (

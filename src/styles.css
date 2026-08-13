@@ -1297,6 +1297,22 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-color-error { color: #a43d32 !important; }
 .campaign-color-summary { color: #32785d !important; }
 .campaign-color-error .material-symbols-rounded, .campaign-color-summary .material-symbols-rounded { font-size: 16px; }
+.campaign-visual-options { grid-column: 1 / -1; min-width: 0; margin: 3px 0 0; border: 0; border-top: 1px solid #e3e6e4; padding: 21px 0 0; }
+.campaign-visual-options legend { padding: 0 12px 0 0; color: #4e5559; font-size: .61rem; font-weight: 700; }
+.campaign-visual-options > p { margin: 0 0 12px; color: #747c80; font-size: .57rem; line-height: 1.5; }
+.campaign-visual-options > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.campaign-visual-options label { position: relative; min-width: 0; min-height: 74px; display: grid; grid-template-columns: minmax(0, 1fr) 46px; align-items: center; gap: 14px; border: 1px solid #d2d9d6; cursor: pointer; padding: 13px 14px; background: #f7f8f7; }
+.campaign-visual-options label:has(input:checked) { border-color: #6bc1ee; background: #f1faff; box-shadow: inset 0 0 0 1px #6bc1ee; }
+.campaign-visual-options label > span { min-width: 0; }
+.campaign-visual-options strong, .campaign-visual-options small { display: block; }
+.campaign-visual-options strong { color: #293135; font-size: .63rem; }
+.campaign-visual-options small { margin-top: 4px; color: #7a8489; font-size: .51rem; line-height: 1.4; }
+.campaign-visual-options input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.campaign-visual-options label > i { position: relative; width: 44px; height: 24px; border-radius: 14px; background: #aeb6b2; transition: background .18s ease; }
+.campaign-visual-options label > i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .22); transition: transform .18s ease; }
+.campaign-visual-options input:checked + i { background: #087fca; }
+.campaign-visual-options input:checked + i::after { transform: translateX(20px); }
+.campaign-visual-options label:focus-within { outline: 2px solid #75caf4; outline-offset: 2px; }
 .campaign-artwork { grid-column: 1 / -1; min-width: 0; margin: 3px 0 0; border: 0; border-top: 1px solid #e3e6e4; padding: 21px 0 0; }
 .campaign-artwork legend { padding: 0 12px 0 0; color: #4e5559; font-size: .61rem; font-weight: 700; }
 .campaign-real-photos { grid-column: 1 / -1; min-width: 0; margin: 3px 0 0; border: 0; border-top: 1px solid #e3e6e4; padding: 21px 0 0; }
@@ -1818,7 +1834,7 @@ main > section[id] { scroll-margin-top: 78px; }
   .admin-list article { padding-inline: 15px; }
   .campaign-create-panel { padding: 19px 16px; }
   .campaign-create-panel form { grid-template-columns: 1fr; gap: 14px; }
-  .campaign-field--wide, .campaign-model-pricing, .campaign-color-setup, .campaign-artwork, .campaign-real-photos, .campaign-create-actions { grid-column: 1; }
+  .campaign-field--wide, .campaign-model-pricing, .campaign-color-setup, .campaign-visual-options, .campaign-artwork, .campaign-real-photos, .campaign-create-actions { grid-column: 1; }
   .campaign-model-pricing > div > article { grid-template-columns: minmax(0, 1fr) 105px; padding: 11px; }
   .campaign-color-palette { grid-template-columns: 1fr 1fr; gap: 7px; }
   .campaign-color-palette label { padding-inline: 9px; }
@@ -1839,6 +1855,7 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-artwork-uploads > label > div, .campaign-art-upload-slot > label > div { min-height: 205px; }
   .campaign-artwork-uploads img { height: 205px; padding: 6px; }
   .campaign-real-photo-grid { grid-template-columns: 1fr; }
+  .campaign-visual-options > div { grid-template-columns: 1fr; }
   .campaign-artwork-uploads > label > div > .material-symbols-rounded, .campaign-art-upload-slot > label > div > .material-symbols-rounded { right: 8px; bottom: 8px; width: 34px; height: 34px; }
   .campaign-art-mode { grid-template-columns: 1fr; }
   .campaign-art-controls label { grid-template-columns: 1fr 48px; }

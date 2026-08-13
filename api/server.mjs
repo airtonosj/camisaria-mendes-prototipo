@@ -483,6 +483,21 @@ function parseArtRenderMode(value) {
   throw new ApiError(422, "VALIDATION_ERROR", "O modo de exibição da arte é inválido.");
 }
 
+function parsePresentationConfig(value, fallback = { mockupEnabled: true, realPhotosEnabled: false }) {
+  if (value === undefined) return fallback;
+  if (!value || typeof value !== "object") {
+    throw new ApiError(422, "VALIDATION_ERROR", "Configure como as imagens da campanha serão exibidas.");
+  }
+  const presentation = {
+    mockupEnabled: Boolean(value.mockupEnabled),
+    realPhotosEnabled: Boolean(value.realPhotosEnabled),
+  };
+  if (!presentation.mockupEnabled && !presentation.realPhotosEnabled) {
+    throw new ApiError(422, "CAMPAIGN_VISUAL_REQUIRED", "Ative o mockup, as fotos reais ou ambos.");
+  }
+  return presentation;
+}
+
 const defaultArtworkTransform = Object.freeze({ x: 0, y: 0, scale: 1, rotation: 0 });
 
 function parseArtworkNumber(value, field, minimum, maximum, fallback) {
@@ -578,6 +593,7 @@ async function getCampaign(code) {
   const [campaignRows] = await pool.execute(
     `SELECT id, code, title, subtitle, phase, deadline_at, pickup_instructions,
             representative_name, representative_whatsapp, art_front_url, art_back_url, art_render_mode,
+            mockup_enabled, real_photos_enabled,
             art_front_x, art_front_y, art_front_scale, art_front_rotation,
             art_back_x, art_back_y, art_back_scale, art_back_rotation
        FROM campaigns WHERE code = ? LIMIT 1`,
@@ -650,6 +666,10 @@ async function getCampaign(code) {
     artFrontUrl: campaign.art_front_url,
     artBackUrl: campaign.art_back_url,
     artRenderMode: campaign.art_render_mode,
+    presentationConfig: {
+      mockupEnabled: Boolean(campaign.mockup_enabled),
+      realPhotosEnabled: Boolean(campaign.real_photos_enabled),
+    },
     artworkConfig: {
       mode: campaign.art_render_mode,
       base: campaignBaseArtwork(campaign),
@@ -683,6 +703,10 @@ async function listCampaigns() {
             c.representative_name, c.representative_whatsapp, c.art_front_url, c.art_back_url, c.art_render_mode,
             COALESCE(
               c.art_front_url,
+              (SELECT ccp.photo_url
+                 FROM campaign_color_photos ccp
+                WHERE ccp.campaign_id = c.id
+                ORDER BY ccp.sort_order, ccp.id LIMIT 1),
               (SELECT COALESCE(NULLIF(cva.front_url, ''), NULLIF(cva.back_url, ''))
                  FROM campaign_variants cover_variant
                  JOIN campaign_variant_artworks cva ON cva.campaign_variant_id = cover_variant.id
@@ -999,6 +1023,57 @@ async function applyRealPhotos(connection, campaignId, value) {
   return [...new Set(oldUrls.filter(Boolean))];
 }
 
+async function validateRealPhotoCoverage(connection, campaignId) {
+  const [missing] = await connection.execute(
+    `SELECT co.name
+       FROM campaign_variants cv
+       JOIN colors co ON co.id = cv.color_id
+      WHERE cv.campaign_id = ? AND cv.active = TRUE
+      GROUP BY co.id, co.name
+     HAVING NOT EXISTS (
+       SELECT 1 FROM campaign_color_photos ccp
+        WHERE ccp.campaign_id = ? AND ccp.color_id = co.id
+     )
+      ORDER BY co.name LIMIT 1`,
+    [campaignId, campaignId],
+  );
+  if (missing.length > 0) {
+    throw new ApiError(422, "REAL_PHOTO_REQUIRED", `Envie pelo menos uma foto real para a cor ${missing[0].name}.`);
+  }
+}
+
+async function validateMockupCoverage(connection, campaignId) {
+  const [campaignRows] = await connection.execute(
+    "SELECT art_render_mode, art_front_url, art_back_url FROM campaigns WHERE id = ? LIMIT 1",
+    [campaignId],
+  );
+  const campaign = campaignRows[0];
+  if (!campaign) return;
+  if (campaign.art_render_mode === "overlay" && !campaign.art_front_url) {
+    throw new ApiError(422, "MOCKUP_REQUIRED", "Envie a arte-base de frente para habilitar o mockup.");
+  }
+  if (campaign.art_render_mode === "legacy_mockup" && !campaign.art_front_url && !campaign.art_back_url) {
+    throw new ApiError(422, "MOCKUP_REQUIRED", "Envie uma imagem para habilitar o mockup.");
+  }
+  if (campaign.art_render_mode === "variant_mockup") {
+    const [missing] = await connection.execute(
+      `SELECT sm.name AS model_name, co.name AS color_name
+         FROM campaign_variants cv
+         JOIN shirt_models sm ON sm.id = cv.shirt_model_id
+         JOIN colors co ON co.id = cv.color_id
+         LEFT JOIN campaign_variant_artworks cva
+           ON cva.campaign_variant_id = cv.id AND cva.artwork_mode = 'variant_mockup'
+        WHERE cv.campaign_id = ? AND cv.active = TRUE
+          AND (cva.campaign_variant_id IS NULL OR (cva.front_source <> 'custom' AND cva.back_source <> 'custom'))
+        LIMIT 1`,
+      [campaignId],
+    );
+    if (missing.length > 0) {
+      throw new ApiError(422, "MOCKUP_REQUIRED", `Envie frente ou costas para ${missing[0].model_name} · ${missing[0].color_name}.`);
+    }
+  }
+}
+
 async function createCampaign(request) {
   const staff = await requireStaff(request);
   const body = await readJson(request);
@@ -1011,7 +1086,11 @@ async function createCampaign(request) {
   const representativeName = requireText(representative.name, "representative.name", 160);
   const representativeWhatsapp = normalizeWhatsapp(representative.whatsapp, "representative.whatsapp");
   const artworkConfig = body.artworkConfig;
-  const artFrontUrl = artworkConfig ? optionalText(body.artFrontUrl, 2048) : requireText(body.artFrontUrl, "artFrontUrl", 2048);
+  const presentation = parsePresentationConfig(body.presentationConfig, {
+    mockupEnabled: Boolean(artworkConfig || body.artFrontUrl),
+    realPhotosEnabled: false,
+  });
+  const artFrontUrl = artworkConfig || !presentation.mockupEnabled ? optionalText(body.artFrontUrl, 2048) : requireText(body.artFrontUrl, "artFrontUrl", 2048);
   const artBackUrl = optionalText(body.artBackUrl, 2048);
   const artRenderMode = artworkConfig ? parseArtRenderMode(artworkConfig.mode) : body.artRenderMode === undefined ? "legacy_mockup" : parseArtRenderMode(body.artRenderMode);
   const models = parseCampaignModels(body.models);
@@ -1024,9 +1103,10 @@ async function createCampaign(request) {
     const [campaignResult] = await connection.execute(
       `INSERT INTO campaigns
         (code, title, subtitle, deadline_at, pickup_instructions, representative_name,
-         representative_whatsapp, art_front_url, art_back_url, art_render_mode, created_by_user_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [code, title, subtitle, deadlineAt, pickupInstructions, representativeName, representativeWhatsapp, artFrontUrl, artBackUrl, artRenderMode, staff.id],
+         representative_whatsapp, art_front_url, art_back_url, art_render_mode,
+         mockup_enabled, real_photos_enabled, created_by_user_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [code, title, subtitle, deadlineAt, pickupInstructions, representativeName, representativeWhatsapp, artFrontUrl, artBackUrl, artRenderMode, presentation.mockupEnabled, presentation.realPhotosEnabled, staff.id],
     );
     for (const model of models) {
       for (const color of model.colors) {
@@ -1047,6 +1127,8 @@ async function createCampaign(request) {
     }
     if (artworkConfig) await applyArtworkConfig(connection, campaignResult.insertId, artworkConfig);
     if (body.realPhotos !== undefined) await applyRealPhotos(connection, campaignResult.insertId, body.realPhotos);
+    if (presentation.mockupEnabled) await validateMockupCoverage(connection, campaignResult.insertId);
+    if (presentation.realPhotosEnabled) await validateRealPhotoCoverage(connection, campaignResult.insertId);
   });
   return getCampaign(code);
 }
@@ -1067,11 +1149,15 @@ async function updateCampaign(request, code) {
 
   const changed = await withTransaction(async (connection) => {
     const [rows] = await connection.execute(
-      "SELECT id, phase, art_front_url, art_back_url, art_render_mode FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE",
+      "SELECT id, phase, art_front_url, art_back_url, art_render_mode, mockup_enabled, real_photos_enabled FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE",
       [code],
     );
     if (rows.length === 0) throw new ApiError(404, "CAMPAIGN_NOT_FOUND", "Campanha não encontrada.");
     const campaign = rows[0];
+    const presentation = parsePresentationConfig(body.presentationConfig, {
+      mockupEnabled: Boolean(campaign.mockup_enabled),
+      realPhotosEnabled: Boolean(campaign.real_photos_enabled),
+    });
     const orphanCandidates = [];
 
     const assignments = [];
@@ -1090,6 +1176,10 @@ async function updateCampaign(request, code) {
     if (body.artFrontUrl !== undefined) set("art_front_url", requireText(body.artFrontUrl, "artFrontUrl", 2048));
     if (body.artBackUrl !== undefined) set("art_back_url", optionalText(body.artBackUrl, 2048));
     if (body.artRenderMode !== undefined) set("art_render_mode", parseArtRenderMode(body.artRenderMode));
+    if (body.presentationConfig !== undefined) {
+      set("mockup_enabled", presentation.mockupEnabled);
+      set("real_photos_enabled", presentation.realPhotosEnabled);
+    }
     if (assignments.length > 0) {
       await connection.execute(`UPDATE campaigns SET ${assignments.join(", ")} WHERE id = ?`, [...parameters, campaign.id]);
     }
@@ -1107,6 +1197,8 @@ async function updateCampaign(request, code) {
     if (body.realPhotos !== undefined) {
       orphanCandidates.push(...await applyRealPhotos(connection, campaign.id, body.realPhotos));
     }
+    if (presentation.mockupEnabled) await validateMockupCoverage(connection, campaign.id);
+    if (presentation.realPhotosEnabled) await validateRealPhotoCoverage(connection, campaign.id);
 
     return { artFrontUrl: campaign.art_front_url, artBackUrl: campaign.art_back_url, orphanCandidates };
   });

@@ -65,6 +65,7 @@ export type PrivateCampaign = {
   variantArtworks?: Record<number, VariantArtwork>;
   /** Galeria opcional de fotos reais, compartilhada entre os cortes que usam a cor. */
   realPhotos?: Partial<Record<ShirtColorName, string[]>>;
+  presentation?: { mockupEnabled: boolean; realPhotosEnabled: boolean };
 };
 
 export const shirtColors: ShirtColorOption[] = [

@@ -41,6 +41,7 @@ type ApiCampaignVariant = {
 };
 
 export type CampaignRealPhotoConfig = { colorName: string; urls: string[] };
+export type CampaignPresentationConfig = { mockupEnabled: boolean; realPhotosEnabled: boolean };
 
 type ApiCampaignSize = {
   model: { code: string; name: string };
@@ -61,6 +62,7 @@ export type ApiCampaign = {
   artFrontUrl: string | null;
   artBackUrl: string | null;
   artRenderMode: "overlay" | "variant_mockup" | "legacy_mockup";
+  presentationConfig?: CampaignPresentationConfig;
   artworkConfig?: {
     mode: "overlay" | "variant_mockup" | "legacy_mockup";
     base: {
@@ -235,6 +237,7 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
     variantIds,
     variantArtworks,
     realPhotos,
+    presentation: campaign.presentationConfig ?? { mockupEnabled: true, realPhotosEnabled: false },
   };
 }
 
@@ -470,7 +473,8 @@ export type CreateCampaignPayload = {
   artFrontUrl?: string | null;
   artBackUrl?: string | null;
   artRenderMode?: "overlay" | "variant_mockup";
-  artworkConfig: CampaignArtworkConfig;
+  artworkConfig?: CampaignArtworkConfig;
+  presentationConfig: CampaignPresentationConfig;
   realPhotos?: CampaignRealPhotoConfig[];
   models: CampaignModelPayload[];
 };
@@ -489,6 +493,7 @@ export type UpdateCampaignPayload = {
   artBackUrl?: string | null;
   artRenderMode?: "overlay" | "variant_mockup" | "legacy_mockup";
   artworkConfig?: CampaignArtworkConfig;
+  presentationConfig?: CampaignPresentationConfig;
   realPhotos?: CampaignRealPhotoConfig[];
   models?: CampaignModelPayload[];
 };
