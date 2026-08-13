@@ -26,6 +26,7 @@ export type ApiCampaign = {
   representativeWhatsapp: string | null;
   artFrontUrl: string | null;
   artBackUrl: string | null;
+  artRenderMode: "overlay" | "legacy_mockup";
   variants: ApiCampaignVariant[];
   sizes: ApiCampaignSize[];
 };
@@ -158,6 +159,7 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
     art: {
       front: assetUrl(campaign.artFrontUrl) ?? shirtModels[0].image,
       back: assetUrl(campaign.artBackUrl),
+      mode: campaign.artRenderMode,
     },
     models,
     prices,
@@ -340,6 +342,7 @@ export type ApiAdminCampaign = {
   representative: { name: string; whatsapp: string | null };
   artFrontUrl: string | null;
   artBackUrl: string | null;
+  artRenderMode: "overlay" | "legacy_mockup";
   orderCount: number;
   paidTotalCents: number;
 };
@@ -402,6 +405,7 @@ export type CreateCampaignPayload = {
   representative: { name: string; whatsapp: string };
   artFrontUrl: string;
   artBackUrl?: string | null;
+  artRenderMode: "overlay";
   models: CampaignModelPayload[];
 };
 
@@ -417,6 +421,7 @@ export type UpdateCampaignPayload = {
   representative?: { name: string; whatsapp: string };
   artFrontUrl?: string;
   artBackUrl?: string | null;
+  artRenderMode?: "overlay" | "legacy_mockup";
   models?: CampaignModelPayload[];
 };
 

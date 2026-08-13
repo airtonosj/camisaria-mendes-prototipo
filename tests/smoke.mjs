@@ -272,7 +272,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "009_order_refunds");
+  assert.equal(health.schema.current, "010_campaign_art_compositor");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -298,6 +298,7 @@ try {
     pickupInstructions: "Retirada com a representante",
     representative: { name: "Representante das Cores", whatsapp: "5598999992000" },
     artFrontUrl: "/uploads/smoke-custom-color.png",
+    artRenderMode: "overlay",
     models: [
       { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Lilás lavanda", hex: "#8B5CF6" }], sizes: ["P", "M"] },
       { modelCode: "oversized", unitPriceCents: 6990, colors: [{ name: "Preto", hex: "#111315" }], sizes: ["M", "G"] },
@@ -305,6 +306,7 @@ try {
   };
   await request("/api/admin/campaigns", { method: "POST", expected: 201, token, body: customCampaignPayload });
   const customCampaign = (await request("/api/campaigns/MENDES-CORES-26")).campaign;
+  assert.equal(customCampaign.artRenderMode, "overlay");
   const customVariant = customCampaign.variants.find((candidate) => candidate.color.name === "Lilás lavanda");
   assert.ok(customVariant);
   assert.equal(customVariant.color.hex, "#8B5CF6");

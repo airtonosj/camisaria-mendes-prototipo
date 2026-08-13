@@ -268,8 +268,24 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-side-switch button + button { border-left: 1px solid #4b5156; }
 .campaign-side-switch button.is-active { color: #fff; background: #087fca; }
 .campaign-side-switch button:focus-visible { position: relative; z-index: 1; outline: 2px solid #75caf4; outline-offset: -3px; }
-.campaign-art-viewer { position: relative; min-height: 500px; display: grid; place-content: center; margin-top: 14px; overflow: hidden; background: #0b0e10; }
-.campaign-art-viewer img { width: min(100%, 580px); height: 470px; object-fit: contain; }
+.campaign-art-viewer { position: relative; min-height: 500px; display: grid; place-items: center; margin-top: 14px; overflow: hidden; background: #0b0e10; }
+.campaign-art-viewer > .shirt-mockup-legacy { width: min(100%, 580px); height: 470px; object-fit: contain; }
+.campaign-art-viewer > .shirt-mockup-composite { width: min(100%, 580px); }
+.shirt-mockup-legacy { display: block; object-fit: contain; }
+.shirt-mockup-composite { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; isolation: isolate; }
+.shirt-mockup-color, .shirt-mockup-texture, .shirt-mockup-highlight { position: absolute; inset: 0; width: 100%; height: 100%; }
+.shirt-mockup-color {
+  background: var(--shirt-color);
+  -webkit-mask: var(--shirt-mask) center / contain no-repeat;
+  mask: var(--shirt-mask) center / contain no-repeat;
+}
+.shirt-mockup-texture, .shirt-mockup-highlight { display: block; object-fit: contain; pointer-events: none; }
+.shirt-mockup-texture { z-index: 1; filter: grayscale(1) contrast(1.12); mix-blend-mode: multiply; }
+.shirt-mockup-highlight { z-index: 2; opacity: .2; filter: grayscale(1) contrast(2.15) brightness(.62); mix-blend-mode: screen; }
+.shirt-mockup-art { position: absolute; z-index: 3; display: grid; place-content: center; pointer-events: none; }
+.shirt-mockup-composite--front .shirt-mockup-art { inset: 27% 31% 27% 31%; }
+.shirt-mockup-composite--back .shirt-mockup-art { inset: 23% 24% 25% 24%; }
+.shirt-mockup-art img { width: 100%; height: 100%; display: block; object-fit: contain; }
 .campaign-art-note { margin: 10px 0 0; color: #9da4a8; font-size: .68rem; text-align: center; }
 .campaign-cut-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
 .campaign-cut-options label { position: relative; min-width: 0; display: grid; gap: 4px; border: 1px solid #444a4f; cursor: pointer; padding: 13px 15px 15px; }
@@ -394,7 +410,8 @@ main > section[id] { scroll-margin-top: 78px; }
 .checkout-product-row { display: grid; grid-template-columns: minmax(280px, .95fr) minmax(245px, 1.05fr); gap: 30px; align-items: center; margin-top: 26px; }
 .campaign-art-thumbs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; overflow: hidden; background: #0b0e10; }
 .campaign-art-thumbs.is-single { grid-template-columns: 1fr; }
-.campaign-art-thumbs img { width: 100%; height: 100%; padding: 6px; object-fit: contain; }
+.campaign-art-thumbs > img { width: 100%; height: 100%; padding: 6px; object-fit: contain; }
+.campaign-art-thumbs > .shirt-mockup-composite { align-self: center; }
 .checkout-product-row .campaign-art-thumbs { min-height: 365px; }
 .checkout-product-copy { min-width: 0; display: grid; align-content: center; }
 .checkout-product-copy > strong { color: #fff; font-size: clamp(1rem, 1.55vw, 1.35rem); line-height: 1.25; letter-spacing: -.03em; }
@@ -696,7 +713,8 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-side-switch button { min-height: 42px; font-size: .7rem; }
   .campaign-art-note { margin-top: 7px; font-size: .56rem; }
   .campaign-art-viewer { min-height: 268px; margin-top: 5px; }
-  .campaign-art-viewer img { height: 268px; transform: scale(1.08); }
+  .campaign-art-viewer > .shirt-mockup-legacy { height: 268px; transform: scale(1.08); }
+  .campaign-art-viewer > .shirt-mockup-composite { width: 300px; max-width: 100%; transform: scale(1.06); }
   .campaign-cut-options { gap: 7px; margin-top: 10px; }
   .campaign-cut-options label { padding: 9px 10px 11px; }
   .campaign-cut-head strong { font-size: .66rem; }
@@ -755,7 +773,7 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-customer-form h2 { font-size: 1.08rem; }
   .checkout-product-row { grid-template-columns: 1.08fr .92fr; gap: 14px; margin-top: 18px; }
   .checkout-product-row .campaign-art-thumbs { min-height: 172px; }
-  .campaign-art-thumbs img { padding: 3px; }
+  .campaign-art-thumbs > img { padding: 3px; }
   .checkout-product-copy > strong { font-size: .82rem; line-height: 1.35; }
   .checkout-product-copy .campaign-cart-copy strong { overflow: visible; font-size: .56rem; line-height: 1.35; text-overflow: clip; white-space: normal; }
   .checkout-product-copy > span { margin-top: 5px; font-size: .58rem; }
@@ -1267,6 +1285,20 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-artwork-guidance strong { display: block; color: #273034; font-size: .63rem; }
 .campaign-artwork-guidance p { max-width: 780px; margin: 5px 0 0; color: #667176; font-size: .57rem; line-height: 1.62; }
 .campaign-artwork-guidance b { color: #334047; font-weight: 740; }
+.campaign-artwork-composer-preview { margin-bottom: 16px; border: 1px solid #cfd8dd; padding: 14px; background: #f7f9fa; }
+.campaign-artwork-composer-preview > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.campaign-artwork-composer-preview > header strong, .campaign-artwork-composer-preview > header small { display: block; }
+.campaign-artwork-composer-preview > header strong { color: #273034; font-size: .65rem; }
+.campaign-artwork-composer-preview > header small { margin-top: 4px; color: #748087; font-size: .53rem; }
+.campaign-artwork-composer-preview > header > div:last-child { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #cbd5da; }
+.campaign-artwork-composer-preview > header button { min-width: 82px; min-height: 36px; border: 0; border-left: 1px solid #cbd5da; cursor: pointer; color: #68757c; background: #fff; font-size: .55rem; font-weight: 700; }
+.campaign-artwork-composer-preview > header button:first-child { border-left: 0; }
+.campaign-artwork-composer-preview > header button.is-active { color: #fff; background: #087fca; }
+.campaign-artwork-composer-preview > header button:disabled { cursor: not-allowed; opacity: .45; }
+.campaign-artwork-composer-preview > div { height: 360px; display: grid; place-items: center; margin-top: 12px; overflow: hidden; background: #0b0e10; }
+.campaign-artwork-composer-preview .shirt-mockup-composite { width: 360px; max-width: 100%; }
+.campaign-artwork-composer-preview .shirt-mockup-legacy { width: 100%; height: 340px; padding: 10px; object-fit: contain; }
+.campaign-artwork-composer-preview > p { margin: 10px 0 0; color: #667176; font-size: .55rem; line-height: 1.5; text-align: center; }
 .campaign-artwork-tabs { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid #d7deda; background: #f2f4f3; }
 .campaign-artwork-tabs button { min-width: 0; min-height: 42px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-left: 1px solid #d7deda; cursor: pointer; padding: 0 10px; color: #727a7e; background: transparent; font-size: .59rem; font-weight: 700; }
 .campaign-artwork-tabs button:first-child { border-left: 0; }
@@ -1720,6 +1752,11 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-custom-color-list { display: grid; grid-template-columns: 1fr; }
   .campaign-artwork-guidance { grid-template-columns: 28px minmax(0, 1fr); gap: 9px; padding: 12px; }
   .campaign-artwork-guidance > .material-symbols-rounded { width: 28px; height: 28px; font-size: 16px; }
+  .campaign-artwork-composer-preview > header { align-items: stretch; flex-direction: column; }
+  .campaign-artwork-composer-preview > header > div:last-child { width: 100%; }
+  .campaign-artwork-composer-preview > header button { min-width: 0; }
+  .campaign-artwork-composer-preview > div { height: 280px; }
+  .campaign-artwork-composer-preview .shirt-mockup-composite { width: 280px; }
   .campaign-artwork-tabs button { min-height: 44px; padding-inline: 5px; font-size: .54rem; }
   .campaign-artwork-tabs button .material-symbols-rounded { font-size: 14px; }
   .campaign-artwork-uploads { gap: 8px; }

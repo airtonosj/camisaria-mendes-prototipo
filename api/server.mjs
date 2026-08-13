@@ -478,10 +478,15 @@ function parseDeadline(value) {
   return parsed;
 }
 
+function parseArtRenderMode(value) {
+  if (value === "overlay" || value === "legacy_mockup") return value;
+  throw new ApiError(422, "VALIDATION_ERROR", "O modo de exibição da arte é inválido.");
+}
+
 async function getCampaign(code) {
   const [campaignRows] = await pool.execute(
     `SELECT id, code, title, subtitle, phase, deadline_at, pickup_instructions,
-            representative_name, representative_whatsapp, art_front_url, art_back_url
+            representative_name, representative_whatsapp, art_front_url, art_back_url, art_render_mode
        FROM campaigns WHERE code = ? LIMIT 1`,
     [code],
   );
@@ -519,6 +524,7 @@ async function getCampaign(code) {
     representativeWhatsapp: campaign.representative_whatsapp,
     artFrontUrl: campaign.art_front_url,
     artBackUrl: campaign.art_back_url,
+    artRenderMode: campaign.art_render_mode,
     variants: variants.map((variant) => ({
       id: variant.id,
       model: { code: variant.model_code, name: variant.model_name },
@@ -537,7 +543,7 @@ async function getCampaign(code) {
 async function listCampaigns() {
   const [rows] = await pool.execute(
     `SELECT c.id, c.code, c.title, c.subtitle, c.phase, c.deadline_at, c.pickup_instructions,
-            c.representative_name, c.representative_whatsapp, c.art_front_url, c.art_back_url,
+            c.representative_name, c.representative_whatsapp, c.art_front_url, c.art_back_url, c.art_render_mode,
             COUNT(DISTINCT o.id) AS order_count,
             COALESCE(SUM(CASE WHEN o.payment_status = 'paid' THEN o.total_cents ELSE 0 END), 0) AS paid_total_cents
        FROM campaigns c
@@ -556,6 +562,7 @@ async function listCampaigns() {
     representative: { name: row.representative_name, whatsapp: row.representative_whatsapp },
     artFrontUrl: row.art_front_url,
     artBackUrl: row.art_back_url,
+    artRenderMode: row.art_render_mode,
     orderCount: Number(row.order_count),
     paidTotalCents: Number(row.paid_total_cents),
   }));
@@ -668,6 +675,7 @@ async function createCampaign(request) {
   const representativeWhatsapp = normalizeWhatsapp(representative.whatsapp, "representative.whatsapp");
   const artFrontUrl = requireText(body.artFrontUrl, "artFrontUrl", 2048);
   const artBackUrl = optionalText(body.artBackUrl, 2048);
+  const artRenderMode = body.artRenderMode === undefined ? "legacy_mockup" : parseArtRenderMode(body.artRenderMode);
   const models = parseCampaignModels(body.models);
 
   await withTransaction(async (connection) => {
@@ -678,9 +686,9 @@ async function createCampaign(request) {
     const [campaignResult] = await connection.execute(
       `INSERT INTO campaigns
         (code, title, subtitle, deadline_at, pickup_instructions, representative_name,
-         representative_whatsapp, art_front_url, art_back_url, created_by_user_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [code, title, subtitle, deadlineAt, pickupInstructions, representativeName, representativeWhatsapp, artFrontUrl, artBackUrl, staff.id],
+         representative_whatsapp, art_front_url, art_back_url, art_render_mode, created_by_user_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [code, title, subtitle, deadlineAt, pickupInstructions, representativeName, representativeWhatsapp, artFrontUrl, artBackUrl, artRenderMode, staff.id],
     );
     for (const model of models) {
       for (const color of model.colors) {
@@ -719,7 +727,7 @@ async function updateCampaign(request, code) {
 
   const changed = await withTransaction(async (connection) => {
     const [rows] = await connection.execute(
-      "SELECT id, phase, art_front_url, art_back_url FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE",
+      "SELECT id, phase, art_front_url, art_back_url, art_render_mode FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE",
       [code],
     );
     if (rows.length === 0) throw new ApiError(404, "CAMPAIGN_NOT_FOUND", "Campanha não encontrada.");
@@ -740,6 +748,7 @@ async function updateCampaign(request, code) {
     }
     if (body.artFrontUrl !== undefined) set("art_front_url", requireText(body.artFrontUrl, "artFrontUrl", 2048));
     if (body.artBackUrl !== undefined) set("art_back_url", optionalText(body.artBackUrl, 2048));
+    if (body.artRenderMode !== undefined) set("art_render_mode", parseArtRenderMode(body.artRenderMode));
     if (assignments.length > 0) {
       await connection.execute(`UPDATE campaigns SET ${assignments.join(", ")} WHERE id = ?`, [...parameters, campaign.id]);
     }

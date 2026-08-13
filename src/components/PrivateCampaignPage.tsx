@@ -4,6 +4,7 @@ import { createInfinitePayCheckout, createOrderInApi } from "../api";
 import type { PrivateCampaign, ShirtColorOption, ShirtModelName, SizeCode } from "../data";
 import { defaultCampaignColors, defaultCampaignSizes, shirtModels, sizeCatalog, sizeGroupLabels } from "../data";
 import { Brand } from "./Brand";
+import { ShirtMockupPreview } from "./ShirtMockupPreview";
 
 type CampaignStep = "model" | "details" | "payment" | "received";
 
@@ -205,8 +206,16 @@ function SizeGuide({ model, open, onClose }: { model: ShirtModelName; open: bool
   );
 }
 
-/** Mostra a arte da campanha. Se não houver imagem de costas, mostra só a frente. */
-function ArtThumbs({ art, label }: { art: PrivateCampaign["art"]; label: string }) {
+/** Mostra a primeira combinação do carrinho; campanhas antigas mantêm a imagem completa. */
+function ArtThumbs({ art, label, item }: { art: PrivateCampaign["art"]; label: string; item?: CartItem }) {
+  if (art.mode === "overlay" && item) {
+    return (
+      <div className={`campaign-art-thumbs ${art.back ? "" : "is-single"}`} aria-label={art.back ? "Camisa de frente e costas" : "Camisa selecionada"}>
+        <ShirtMockupPreview model={item.modelName} color={item.color} art={art} side="front" label={`${label} — frente`} compact />
+        {art.back && <ShirtMockupPreview model={item.modelName} color={item.color} art={art} side="back" label={`${label} — costas`} compact />}
+      </div>
+    );
+  }
   return (
     <div className={`campaign-art-thumbs ${art.back ? "" : "is-single"}`} aria-label={art.back ? "Arte de frente e costas" : "Arte da campanha"}>
       <img src={art.front} alt={`${label} — frente`} />
@@ -318,10 +327,11 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
   }, [availableSizes]);
 
   const art = campaign.art;
-  const displayedArt = previewSide === "back" && art.back ? art.back : art.front;
+  const canShowBack = art.mode === "overlay" || Boolean(art.back);
   const unitPriceCents = Math.round(campaign.prices[activeModel] * 100);
   const cartTotal = cart.reduce((total, item) => total + item.unitPriceCents * item.quantity, 0);
   const cartUnits = cart.reduce((total, item) => total + item.quantity, 0);
+  const previewItem = cart[0];
 
   function selectModel(nextModel: ShirtModelName) {
     setModel(nextModel);
@@ -457,9 +467,17 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
           </section>
           <form className="campaign-configurator" onSubmit={submitConfiguration}>
             <section className="campaign-art-stage">
-              {art.back && <div className="campaign-side-switch" role="group" aria-label="Visualizar lado da camiseta"><button className={previewSide === "front" ? "is-active" : ""} type="button" aria-pressed={previewSide === "front"} onClick={() => setPreviewSide("front")}>Frente</button><button className={previewSide === "back" ? "is-active" : ""} type="button" aria-pressed={previewSide === "back"} onClick={() => setPreviewSide("back")}>Costas</button></div>}
-              <div className="campaign-art-viewer"><img src={displayedArt} alt={`Arte da campanha ${campaign.title}${art.back ? ` — ${previewSide === "front" ? "frente" : "costas"}` : ""}`} /></div>
-              <p className="campaign-art-note">A arte é a mesma em todos os cortes e tamanhos.</p>
+              {canShowBack && <div className="campaign-side-switch" role="group" aria-label="Visualizar lado da camiseta"><button className={previewSide === "front" ? "is-active" : ""} type="button" aria-pressed={previewSide === "front"} onClick={() => setPreviewSide("front")}>Frente</button><button className={previewSide === "back" ? "is-active" : ""} type="button" aria-pressed={previewSide === "back"} onClick={() => setPreviewSide("back")}>Costas</button></div>}
+              <div className="campaign-art-viewer">
+                <ShirtMockupPreview
+                  model={activeModel}
+                  color={selectedColor}
+                  art={art}
+                  side={previewSide}
+                  label={`${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name}, ${selectedColor.name}, ${previewSide === "front" ? "frente" : "costas"}`}
+                />
+              </div>
+              <p className="campaign-art-note">{art.mode === "overlay" ? `${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name} · ${selectedColor.name} · ${previewSide === "front" ? "Frente" : "Costas"}` : "A arte é a mesma em todos os cortes e tamanhos."}</p>
               {cart.length > 0 && (
                 <section className="campaign-cart-preview" aria-labelledby="cart-preview-title">
                   <header>
@@ -499,7 +517,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
         <main className="campaign-checkout">
           <section className="campaign-checkout-heading"><h1>Revise e identifique</h1><div className="campaign-progress-copy"><strong>2 de 3</strong><span>·</span><span>Seus dados</span></div><div className="campaign-progress campaign-progress--details" aria-hidden="true"><span /></div></section>
           <form className="campaign-customer-form" onSubmit={submitCustomerDetails}>
-            <section className="checkout-order-review" aria-labelledby="order-review-title"><h2 id="order-review-title">Seu pedido</h2><div className="checkout-product-row"><ArtThumbs art={art} label={`Arte da campanha ${campaign.title}`} /><div className="checkout-product-copy"><CartLines items={cart} /><div className="checkout-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span><span>Retirada com <b>{campaign.representative}</b></span></div><div className="checkout-total"><span>{cartUnits} {cartUnits === 1 ? "peça" : "peças"} · Total</span><strong>{formatCents(cartTotal)}</strong></div></div></div><button className="checkout-edit" type="button" onClick={() => goToStep("model")}>Editar carrinho</button></section>
+            <section className="checkout-order-review" aria-labelledby="order-review-title"><h2 id="order-review-title">Seu pedido</h2><div className="checkout-product-row"><ArtThumbs art={art} label={`Camisa da campanha ${campaign.title}`} item={previewItem} /><div className="checkout-product-copy"><CartLines items={cart} /><div className="checkout-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span><span>Retirada com <b>{campaign.representative}</b></span></div><div className="checkout-total"><span>{cartUnits} {cartUnits === 1 ? "peça" : "peças"} · Total</span><strong>{formatCents(cartTotal)}</strong></div></div></div><button className="checkout-edit" type="button" onClick={() => goToStep("model")}>Editar carrinho</button></section>
             <section className="checkout-customer-fields" aria-labelledby="customer-fields-title"><h2 id="customer-fields-title">Quem vai retirar?</h2><label><span className="sr-only">Nome completo</span><input name="name" type="text" placeholder="Nome completo" autoComplete="name" minLength={3} value={customerName} onChange={(event) => setCustomerName(event.target.value)} required /></label><label><span className="sr-only">WhatsApp</span><input name="phone" type="tel" placeholder="WhatsApp" autoComplete="tel" inputMode="tel" minLength={10} value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} required /></label><label><span className="sr-only">E-mail</span><input name="email" type="email" placeholder="E-mail para confirmação" autoComplete="email" value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} required /></label><p className="checkout-privacy"><span className="material-symbols-rounded" aria-hidden="true">lock</span><span>Seus dados serão usados para processar e acompanhar o pedido. <a href={buildRoute("politica-privacidade")} target="_blank">Leia a política de privacidade.</a></span></p></section>
             <button className="checkout-payment-button" type="submit">Ir para pagamento<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
           </form>
@@ -507,7 +525,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
       ) : step === "payment" ? (
         <main className="campaign-payment">
           <section className="campaign-payment-heading"><h1>Pagamento seguro</h1><div className="campaign-progress-copy"><strong>3 de 3</strong><span>·</span><span>Pagamento</span></div><div className="campaign-progress campaign-progress--payment" aria-hidden="true"><span /></div></section>
-          {!resumePayment && <section className="payment-order-summary" aria-label="Resumo do pedido"><ArtThumbs art={art} label={`Arte da campanha ${campaign.title}`} /><div className="payment-order-copy"><strong>{cartUnits} {cartUnits === 1 ? "peça" : "peças"} em {cart.length} {cart.length === 1 ? "combinação" : "combinações"}</strong><b>{formatCents(cartTotal)}</b><button type="button" onClick={() => goToStep("details")}>Revisar pedido</button></div></section>}
+          {!resumePayment && <section className="payment-order-summary" aria-label="Resumo do pedido"><ArtThumbs art={art} label={`Camisa da campanha ${campaign.title}`} item={previewItem} /><div className="payment-order-copy"><strong>{cartUnits} {cartUnits === 1 ? "peça" : "peças"} em {cart.length} {cart.length === 1 ? "combinação" : "combinações"}</strong><b>{formatCents(cartTotal)}</b><button type="button" onClick={() => goToStep("details")}>Revisar pedido</button></div></section>}
           <form className="payment-form" onSubmit={submitPayment}>
             {resumePayment && <p className="payment-resume-note"><span className="material-symbols-rounded" aria-hidden="true">replay</span>Retomando o pagamento do pedido <strong>#{resumePayment}</strong>.</p>}
             <div className="payment-provider-choice"><span className="material-symbols-rounded" aria-hidden="true">verified_user</span><div><h2>Checkout InfinitePay</h2><p>Você escolherá Pix ou cartão no ambiente seguro da InfinitePay.</p></div></div>
@@ -522,7 +540,7 @@ export function PrivateCampaignPage({ campaign, resumePayment }: { campaign: Pri
           <section className="received-hero"><span className="received-hero-icon material-symbols-rounded" aria-hidden="true">schedule</span><p className="received-eyebrow">Pedido recebido</p><h1>Aguardando a confirmação do pagamento.</h1><p className="received-intro">Seu pedido está guardado como pendente. Ele será liberado somente depois que a InfinitePay confirmar o pagamento.</p><span className="received-status"><span className="material-symbols-rounded" aria-hidden="true">hourglass_top</span>Aguardando confirmação</span></section>
           {simulated && <p className="received-simulation" role="status"><span className="material-symbols-rounded" aria-hidden="true">science</span>Pedido simulado em desenvolvimento. Nada foi gravado no banco e este número não existe.</p>}
           <section className="received-payment-panel"><header><span className="material-symbols-rounded" aria-hidden="true">verified_user</span><div><h2>Pagamento seguro pela InfinitePay</h2><p>Pix ou cartão serão vinculados ao número do pedido e confirmados automaticamente.</p></div></header><dl className="received-payment-summary"><div><dt>Forma de pagamento</dt><dd>Escolhida na InfinitePay</dd></div><div><dt>Valor</dt><dd>{formatCents(cartTotal)}</dd></div><div><dt>Pedido</dt><dd>#{orderNumber}</dd></div></dl></section>
-          <div className="received-content"><section className="received-order-card"><header><div><small>Número do pedido</small><h2>#{orderNumber}</h2></div><button type="button" onClick={copyOrderNumber}><span className="material-symbols-rounded" aria-hidden="true">content_copy</span>Copiar</button></header><div className="received-product-row"><ArtThumbs art={art} label={`Arte da campanha ${campaign.title}`} /><div className="received-product-copy"><CartLines items={cart} /><dl><div><dt>Total</dt><dd>{formatCents(cartTotal)}</dd></div></dl></div></div><p className="received-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span>Retirada com <strong>{campaign.representative}</strong></p></section><aside className="received-next-steps"><h2>Próximos passos</h2><ol><li className="is-complete"><span className="material-symbols-rounded" aria-hidden="true">check</span><div><strong>Pedido criado</strong><small>Seus dados e suas peças foram registrados.</small></div></li><li className="is-current"><span className="material-symbols-rounded" aria-hidden="true">payments</span><div><strong>Pagamento na InfinitePay</strong><small>Conclua pelo checkout seguro do provedor.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">verified</span><div><strong>Confirmação automática</strong><small>A InfinitePay atualiza o pedido pela integração.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">inventory_2</span><div><strong>Envio para produção</strong><small>Acontece somente depois da confirmação.</small></div></li></ol></aside></div>
+          <div className="received-content"><section className="received-order-card"><header><div><small>Número do pedido</small><h2>#{orderNumber}</h2></div><button type="button" onClick={copyOrderNumber}><span className="material-symbols-rounded" aria-hidden="true">content_copy</span>Copiar</button></header><div className="received-product-row"><ArtThumbs art={art} label={`Camisa da campanha ${campaign.title}`} item={previewItem} /><div className="received-product-copy"><CartLines items={cart} /><dl><div><dt>Total</dt><dd>{formatCents(cartTotal)}</dd></div></dl></div></div><p className="received-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span>Retirada com <strong>{campaign.representative}</strong></p></section><aside className="received-next-steps"><h2>Próximos passos</h2><ol><li className="is-complete"><span className="material-symbols-rounded" aria-hidden="true">check</span><div><strong>Pedido criado</strong><small>Seus dados e suas peças foram registrados.</small></div></li><li className="is-current"><span className="material-symbols-rounded" aria-hidden="true">payments</span><div><strong>Pagamento na InfinitePay</strong><small>Conclua pelo checkout seguro do provedor.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">verified</span><div><strong>Confirmação automática</strong><small>A InfinitePay atualiza o pedido pela integração.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">inventory_2</span><div><strong>Envio para produção</strong><small>Acontece somente depois da confirmação.</small></div></li></ol></aside></div>
           <div className="received-actions"><button className="received-copy-action" type="button" onClick={copyOrderNumber}>Copiar número do pedido<span className="material-symbols-rounded" aria-hidden="true">content_copy</span></button><a className="received-back-action" href={buildRoute("acompanhar-pedido", undefined, orderNumber)}>Acompanhar pedido</a><p className="received-copy-status" role="status" aria-live="polite">{orderCopied ? "Número do pedido copiado." : "Guarde este número para acompanhar seu pedido."}</p></div>
         </main>
       )}

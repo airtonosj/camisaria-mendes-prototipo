@@ -2,11 +2,16 @@ import campaignAdmin from "../assets/campaign-admin-v2.png";
 import campaignEngineering from "../assets/campaign-engineering-v2.png";
 import campaignLaw from "../assets/campaign-law.png";
 import campaignNursing from "../assets/campaign-nursing-v2.png";
+import logoMendes from "../assets/logo-mendes.png";
 import shirtBabyLook from "../assets/shirt-babylook.png";
 import shirtCommon from "../assets/shirt-common.png";
 import shirtCommonBack from "../assets/shirt-common-back.png";
 import shirtOversized from "../assets/shirt-oversized.png";
 import shirtOversizedBack from "../assets/shirt-oversized-back.png";
+import shirtStandardMockup from "../assets/mockups/standard-front-v1.png";
+import shirtStandardMockupBack from "../assets/mockups/standard-back-v1.png";
+import shirtOversizedMockup from "../assets/mockups/oversized-front-v1.png";
+import shirtOversizedMockupBack from "../assets/mockups/oversized-back-v1.png";
 
 export type ShowcaseCampaign = {
   course: string;
@@ -25,8 +30,12 @@ export type ShirtColorOption = { name: ShirtColorName; hex: string };
 export type SizeGroup = "standard" | "baby_look";
 export type SizeCode = "PP" | "P" | "M" | "G" | "GG" | "XG" | "PPB" | "PB" | "MB" | "GB" | "GGB" | "XGB";
 
-/** A arte da campanha. Uma imagem de frente serve para todos os cortes; costas é opcional. */
-export type CampaignArt = { front: string; back: string | null };
+/**
+ * `overlay` é a arte transparente que o site aplica sobre o mockup colorido.
+ * `legacy_mockup` preserva campanhas antigas que já enviaram a foto completa da peça.
+ */
+export type CampaignArtMode = "overlay" | "legacy_mockup";
+export type CampaignArt = { front: string; back: string | null; mode?: CampaignArtMode };
 
 export type PrivateCampaign = {
   code: string;
@@ -144,7 +153,7 @@ export const privateCampaigns: Record<string, PrivateCampaign> = {
     code: "MENDES-ENG-26",
     title: "Engenharia Civil — Turma 2026",
     subtitle: "Campanha exclusiva para os alunos da turma",
-    art: { front: campaignEngineering, back: null },
+    art: { front: campaignEngineering, back: null, mode: "legacy_mockup" },
     models: ["Comum", "Oversized"],
     prices: { Comum: 59.9, Oversized: 69.9 },
     sizes: {
@@ -163,7 +172,7 @@ export const privateCampaigns: Record<string, PrivateCampaign> = {
     code: "MENDES-ADS-26",
     title: "Análise e Desenvolvimento de Sistemas — 2026.2",
     subtitle: "Campanha exclusiva para os alunos da turma",
-    art: { front: campaignAdmin, back: null },
+    art: { front: logoMendes, back: null, mode: "overlay" },
     models: ["Comum", "Oversized"],
     prices: { Comum: 59.9, Oversized: 69.9 },
     sizes: defaultCampaignSizes,
@@ -189,9 +198,33 @@ export const privateCodeAliases: Record<string, string> = {
 export const heroShirts = [shirtCommon, shirtOversized, shirtBabyLook];
 
 /** Fotos de catálogo, usadas só como reserva quando a campanha ainda não tem arte. */
-export const shirtModels: Array<{ name: ShirtModelName; code: string; image: string; backImage: string; description: string }> = [
-  { name: "Comum", code: "common", image: shirtCommon, backImage: shirtCommonBack, description: "Caimento tradicional" },
-  { name: "Oversized", code: "oversized", image: shirtOversized, backImage: shirtOversizedBack, description: "Amplo e contemporâneo" },
+export const shirtModels: Array<{
+  name: ShirtModelName;
+  code: string;
+  image: string;
+  backImage: string;
+  mockupImage: string;
+  mockupBackImage: string;
+  description: string;
+}> = [
+  {
+    name: "Comum",
+    code: "common",
+    image: shirtCommon,
+    backImage: shirtCommonBack,
+    mockupImage: shirtStandardMockup,
+    mockupBackImage: shirtStandardMockupBack,
+    description: "Caimento tradicional",
+  },
+  {
+    name: "Oversized",
+    code: "oversized",
+    image: shirtOversized,
+    backImage: shirtOversizedBack,
+    mockupImage: shirtOversizedMockup,
+    mockupBackImage: shirtOversizedMockupBack,
+    description: "Amplo e contemporâneo",
+  },
 ];
 
 export const whatsappCampaignUrl =

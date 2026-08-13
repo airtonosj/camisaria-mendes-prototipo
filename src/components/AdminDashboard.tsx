@@ -46,6 +46,7 @@ import {
   printProductionReport,
   ProductionReport,
 } from "./ProductionReport";
+import { ShirtMockupPreview } from "./ShirtMockupPreview";
 
 type AdminSection = "overview" | "campaigns" | "orders" | "products" | "reports" | "account";
 
@@ -764,7 +765,7 @@ function Campaigns({ data }: { data: PanelData }) {
   const [notice, setNotice] = useState("");
 
   /** Fora de `null`, o formulário está editando a campanha deste código. */
-  const [editing, setEditing] = useState<{ code: string; phase: CampaignPhaseCode; hadBackArt: boolean } | null>(null);
+  const [editing, setEditing] = useState<{ code: string; phase: CampaignPhaseCode; hadBackArt: boolean; artRenderMode: "overlay" | "legacy_mockup" } | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [existingArt, setExistingArt] = useState<{ front: string; back: string }>({ front: "", back: "" });
   const [campaignName, setCampaignName] = useState("");
@@ -779,6 +780,7 @@ function Campaigns({ data }: { data: PanelData }) {
   const [selectedModels, setSelectedModels] = useState<Record<ShirtModelName, boolean>>({ Comum: true, Oversized: true });
   const [front, setFront] = useState<ArtDraft>({ file: null, preview: "" });
   const [back, setBack] = useState<ArtDraft>({ file: null, preview: "" });
+  const [artPreviewSide, setArtPreviewSide] = useState<"front" | "back">("front");
   const [artError, setArtError] = useState("");
   const [colorModel, setColorModel] = useState<ShirtModelName>("Comum");
   const [campaignColorOptions, setCampaignColorOptions] = useState<ShirtColorOption[]>(() => mergeCampaignColors(shirtColors));
@@ -800,6 +802,18 @@ function Campaigns({ data }: { data: PanelData }) {
    * campos continuam visíveis, desabilitados, com o motivo à vista.
    */
   const variantsLocked = editing !== null && editing.phase !== "receiving_orders";
+  const previewModel = selectedModels[colorModel]
+    ? colorModel
+    : shirtModels.find((item) => selectedModels[item.name])?.name ?? "Comum";
+  const previewColorName = modelColors[previewModel][0];
+  const previewColor = campaignColorOptions.find((option) => colorKey(option.name) === colorKey(previewColorName ?? ""))
+    ?? defaultCampaignColors[previewModel][0];
+  const previewArtMode = !editing || editing.artRenderMode === "overlay" || Boolean(front.file) ? "overlay" : "legacy_mockup";
+  const previewArt = {
+    front: front.preview || existingArt.front,
+    back: back.preview || existingArt.back || null,
+    mode: previewArtMode,
+  } as const;
 
   function resetForm() {
     setCampaignName("");
@@ -811,6 +825,7 @@ function Campaigns({ data }: { data: PanelData }) {
     setDeadline("");
     setFront({ file: null, preview: "" });
     setBack({ file: null, preview: "" });
+    setArtPreviewSide("front");
     setExistingArt({ front: "", back: "" });
     setArtError("");
     setCampaignColorOptions(mergeCampaignColors(shirtColors));
@@ -848,13 +863,13 @@ function Campaigns({ data }: { data: PanelData }) {
     setShared(null);
     setNotice("");
     setCreating(true);
-    setEditing({ code: campaign.code, phase: campaign.phase, hadBackArt: false });
+    setEditing({ code: campaign.code, phase: campaign.phase, hadBackArt: false, artRenderMode: "legacy_mockup" });
     setLoadingDetail(true);
     resetForm();
     window.scrollTo({ top: 0, behavior: "smooth" });
     try {
       const detail = await fetchCampaignDetail(campaign.code);
-      setEditing({ code: detail.code, phase: campaign.phase, hadBackArt: Boolean(detail.artBackUrl) });
+      setEditing({ code: detail.code, phase: campaign.phase, hadBackArt: Boolean(detail.artBackUrl), artRenderMode: detail.artRenderMode });
       setCampaignName(detail.title);
       setCampaignCodeInput(detail.code);
       setSubtitle(detail.subtitle ?? "");
@@ -995,8 +1010,8 @@ function Campaigns({ data }: { data: PanelData }) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      setArtError("Formato inválido. Envie uma imagem PNG, JPG ou WEBP.");
+    if (!["image/png", "image/webp"].includes(file.type)) {
+      setArtError("Formato inválido. Envie a arte em PNG ou WEBP com fundo transparente.");
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
@@ -1007,9 +1022,29 @@ function Campaigns({ data }: { data: PanelData }) {
     const url = URL.createObjectURL(file);
     preview.onerror = () => { URL.revokeObjectURL(url); setArtError("O arquivo não contém uma imagem válida."); };
     preview.onload = () => {
-      if (preview.width < 600 || preview.height < 800) {
+      if (preview.width < 500 || preview.height < 300) {
         URL.revokeObjectURL(url);
-        setArtError("A imagem precisa ter pelo menos 600 × 800 pixels.");
+        setArtError("A arte precisa ter pelo menos 500 × 300 pixels.");
+        return;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = 96;
+      canvas.height = 96;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      context?.drawImage(preview, 0, 0, canvas.width, canvas.height);
+      const pixels = context?.getImageData(0, 0, canvas.width, canvas.height).data;
+      let hasTransparentPixel = false;
+      if (pixels) {
+        for (let index = 3; index < pixels.length; index += 4) {
+          if (pixels[index] < 250) {
+            hasTransparentPixel = true;
+            break;
+          }
+        }
+      }
+      if (!hasTransparentPixel) {
+        URL.revokeObjectURL(url);
+        setArtError("A arte precisa ter fundo transparente para aparecer corretamente em todas as cores.");
         return;
       }
       const setter = side === "front" ? setFront : setBack;
@@ -1050,6 +1085,10 @@ function Campaigns({ data }: { data: PanelData }) {
       setArtError("Envie a arte da campanha antes de criar o acesso.");
       return;
     }
+    if (editing?.artRenderMode === "legacy_mockup" && back.file && !front.file) {
+      setArtError("Para ativar a visualização por cor nesta campanha antiga, envie também uma nova arte transparente de frente.");
+      return;
+    }
     if (!variantsLocked) {
       const selectedCampaignModels = shirtModels.filter((item) => selectedModels[item.name]);
       if (selectedCampaignModels.length === 0) {
@@ -1085,9 +1124,12 @@ function Campaigns({ data }: { data: PanelData }) {
           representative: { name: representative, whatsapp: representativePhone },
         };
         // Arte só viaja quando um arquivo novo foi escolhido; a antiga fica onde está.
-        if (front.file) payload.artFrontUrl = await uploadCampaignArt(front.file);
+        if (front.file) {
+          payload.artFrontUrl = await uploadCampaignArt(front.file);
+          payload.artRenderMode = "overlay";
+        }
         if (back.file) payload.artBackUrl = await uploadCampaignArt(back.file);
-        else if (editing.hadBackArt && !existingArt.back) payload.artBackUrl = null;
+        else if ((front.file && editing.artRenderMode === "legacy_mockup") || (editing.hadBackArt && !existingArt.back)) payload.artBackUrl = null;
         if (!variantsLocked) payload.models = campaignModels();
 
         await updateCampaignInApi(editing.code, payload);
@@ -1109,6 +1151,7 @@ function Campaigns({ data }: { data: PanelData }) {
         representative: { name: representative, whatsapp: representativePhone },
         artFrontUrl,
         artBackUrl,
+        artRenderMode: "overlay",
         models: campaignModels(),
       });
       closeForm();
@@ -1238,7 +1281,14 @@ function Campaigns({ data }: { data: PanelData }) {
             </fieldset>
 
             <fieldset className="campaign-artwork"><legend>Arte da campanha</legend>
-              <div className="campaign-artwork-guidance"><span className="material-symbols-rounded" aria-hidden="true">info</span><div><strong>Uma imagem só</strong><p>A mesma arte vale para todos os cortes e tamanhos. Envie <b>PNG, JPG ou WEBP</b> com até <b>2 MB</b>. Recomendamos <b>1200 × 1500 px</b>, proporção próxima de <b>4:5</b>, peça centralizada e fundo neutro ou transparente. O mínimo aceito é <b>600 × 800 px</b>.</p></div></div>
+              <div className="campaign-artwork-guidance"><span className="material-symbols-rounded" aria-hidden="true">info</span><div><strong>Envie somente a estampa</strong><p>O sistema aplica automaticamente a arte sobre o corte e a cor escolhidos. Envie <b>PNG ou WEBP com fundo transparente</b>, até <b>2 MB</b>. A frente é obrigatória; as costas são opcionais.</p></div></div>
+              {previewArt.front && (
+                <section className="campaign-artwork-composer-preview" aria-label="Prévia automática da camisa">
+                  <header><div><strong>Prévia automática</strong><small>{previewModel === "Comum" ? "Padrão" : previewModel} · {previewColor.name}</small></div><div role="group" aria-label="Lado da prévia"><button className={artPreviewSide === "front" ? "is-active" : ""} type="button" onClick={() => setArtPreviewSide("front")}>Frente</button><button className={artPreviewSide === "back" ? "is-active" : ""} type="button" disabled={previewArt.mode === "legacy_mockup" && !previewArt.back} onClick={() => setArtPreviewSide("back")}>Costas</button></div></header>
+                  <div><ShirtMockupPreview model={previewModel} color={previewColor} art={previewArt} side={artPreviewSide} label={`Prévia ${previewModel === "Comum" ? "Padrão" : previewModel}, ${previewColor.name}, ${artPreviewSide === "front" ? "frente" : "costas"}`} /></div>
+                  <p>Uma única arte será reaproveitada nas cores e cortes liberados para a campanha.</p>
+                </section>
+              )}
               <div className="campaign-artwork-uploads">
                 <label className="campaign-artwork-main">
                   <span>Frente<b>obrigatória</b></span>
@@ -1246,7 +1296,7 @@ function Campaigns({ data }: { data: PanelData }) {
                     {front.preview || existingArt.front ? <img src={front.preview || existingArt.front} alt="Prévia da arte de frente da campanha" /> : <span className="campaign-artwork-empty"><span className="material-symbols-rounded" aria-hidden="true">add_photo_alternate</span>Selecionar arquivo</span>}
                     <span className="material-symbols-rounded" aria-hidden="true">upload</span>
                   </div>
-                  <input type="file" accept="image/png,image/jpeg,image/webp" aria-label="Enviar a arte de frente da campanha" onChange={(event) => chooseArt(event, "front")} />
+                  <input type="file" accept="image/png,image/webp" aria-label="Enviar a arte de frente da campanha" onChange={(event) => chooseArt(event, "front")} />
                   <small>{front.preview ? "Arte nova selecionada" : existingArt.front ? "Arte atual. Clique para trocar" : "Clique para selecionar"}</small>
                 </label>
                 <label className="campaign-artwork-optional">
@@ -1255,7 +1305,7 @@ function Campaigns({ data }: { data: PanelData }) {
                     {back.preview || existingArt.back ? <img src={back.preview || existingArt.back} alt="Prévia da arte de costas da campanha" /> : <span className="campaign-artwork-empty"><span className="material-symbols-rounded" aria-hidden="true">add</span>Só se a arte tiver costas</span>}
                     <span className="material-symbols-rounded" aria-hidden="true">upload</span>
                   </div>
-                  <input type="file" accept="image/png,image/jpeg,image/webp" aria-label="Enviar a arte de costas da campanha" onChange={(event) => chooseArt(event, "back")} />
+                  <input type="file" accept="image/png,image/webp" aria-label="Enviar a arte de costas da campanha" onChange={(event) => chooseArt(event, "back")} />
                   <small>{back.preview ? "Arte nova selecionada" : existingArt.back ? "Arte atual. Clique para trocar" : "Sem esta imagem, o aluno vê só a frente"}</small>
                 </label>
               </div>
@@ -1264,7 +1314,7 @@ function Campaigns({ data }: { data: PanelData }) {
               <p className="campaign-artwork-status">
                 <span className="material-symbols-rounded" aria-hidden="true">{front.preview || existingArt.front ? "verified" : "pending"}</span>
                 {front.preview
-                  ? `Arte nova pronta para os ${shirtModels.length} cortes da campanha. A anterior é apagada ao salvar.`
+                  ? "Arte transparente pronta para ser aplicada automaticamente às cores e cortes selecionados."
                   : existingArt.front
                     ? "A campanha já tem arte. Envie um arquivo só se quiser trocá-la."
                     : "Envie a arte de frente para liberar a campanha."}
