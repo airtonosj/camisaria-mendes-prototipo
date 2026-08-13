@@ -24,6 +24,7 @@ import type {
   ApiProductionRow,
   CampaignPhaseCode,
   CampaignArtworkConfig,
+  CampaignRealPhotoConfig,
   DeliveryStatusCode,
   PaymentStatusCode,
   StaffUser,
@@ -761,6 +762,7 @@ function suggestCode(title: string) {
 }
 
 type ArtDraft = { file: File | null; preview: string };
+type RealPhotoDraft = { file: File | null; preview: string; url: string | null };
 type EditableArtMode = "overlay" | "variant_mockup" | "legacy_mockup";
 type ArtSideDraft = {
   file: File | null;
@@ -827,6 +829,7 @@ function Campaigns({ data }: { data: PanelData }) {
   const [artScope, setArtScope] = useState<"base" | "variant">("base");
   const [baseTransforms, setBaseTransforms] = useState<{ front: ArtworkTransform; back: ArtworkTransform }>({ front: { ...defaultTransform }, back: { ...defaultTransform } });
   const [variantArts, setVariantArts] = useState<Record<string, Partial<Record<"overlay" | "variant_mockup", VariantArtDraft>>>>({});
+  const [realPhotosByColor, setRealPhotosByColor] = useState<Record<string, RealPhotoDraft[]>>({});
   const [artVariant, setArtVariant] = useState<{ model: ShirtModelName; color: string }>({ model: "Comum", color: defaultCampaignColors.Comum[0].name });
   const [artPreviewSide, setArtPreviewSide] = useState<"front" | "back">("front");
   const [artError, setArtError] = useState("");
@@ -894,6 +897,9 @@ function Campaigns({ data }: { data: PanelData }) {
   const activeVariantCombinations = shirtModels.flatMap((model) => selectedModels[model.name]
     ? modelColors[model.name].map((colorName) => ({ model: model.name, colorName, key: variantArtKey(model.name, colorName) }))
     : []);
+  const activeRealPhotoColors = campaignColorOptions.filter((option) => shirtModels.some((model) =>
+    selectedModels[model.name] && modelColors[model.name].some((name) => colorKey(name) === colorKey(option.name)),
+  ));
 
   function resetForm() {
     setCampaignName("");
@@ -909,6 +915,10 @@ function Campaigns({ data }: { data: PanelData }) {
     setArtScope("base");
     setBaseTransforms({ front: { ...defaultTransform }, back: { ...defaultTransform } });
     setVariantArts({});
+    setRealPhotosByColor((current) => {
+      Object.values(current).flat().forEach((photo) => { if (photo.preview) URL.revokeObjectURL(photo.preview); });
+      return {};
+    });
     setArtVariant({ model: "Comum", color: defaultCampaignColors.Comum[0].name });
     setArtPreviewSide("front");
     setExistingArt({ front: "", back: "" });
@@ -974,6 +984,10 @@ function Campaigns({ data }: { data: PanelData }) {
       setOversizedPrice(priceInput(priceOf("Oversized")) || "69,90");
       const colorsFromCampaign = detail.variants.map((variant) => ({ name: variant.color.name, hex: variant.color.hex }));
       setCampaignColorOptions(mergeCampaignColors(shirtColors, colorsFromCampaign));
+      setRealPhotosByColor(Object.fromEntries((detail.realPhotos ?? []).map((gallery) => [
+        colorKey(gallery.colorName),
+        gallery.urls.map((url) => ({ file: null, preview: "", url: assetUrl(url) })),
+      ])));
       const colorsOf = (model: ShirtModelName) => detail.variants
         .filter((variant) => variant.model.name === model)
         .map((variant) => variant.color.name);
@@ -1193,6 +1207,37 @@ function Campaigns({ data }: { data: PanelData }) {
     preview.src = url;
   }
 
+  function chooseRealPhotos(event: ChangeEvent<HTMLInputElement>, colorName: string) {
+    const files = [...(event.target.files ?? [])];
+    event.target.value = "";
+    if (!files.length) return;
+    const key = colorKey(colorName);
+    const currentCount = realPhotosByColor[key]?.length ?? 0;
+    if (currentCount + files.length > 6) {
+      setArtError(`Cada cor aceita até seis fotos reais. ${colorName} já possui ${currentCount}.`);
+      return;
+    }
+    const invalid = files.find((file) => !["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 2 * 1024 * 1024);
+    if (invalid) {
+      setArtError("As fotos reais devem ser PNG, JPG ou WEBP, com no máximo 2 MB cada.");
+      return;
+    }
+    const additions = files.map((file) => ({ file, preview: URL.createObjectURL(file), url: null }));
+    setRealPhotosByColor((current) => ({ ...current, [key]: [...(current[key] ?? []), ...additions] }));
+    setArtError("");
+  }
+
+  function removeRealPhoto(colorName: string, index: number) {
+    const key = colorKey(colorName);
+    setRealPhotosByColor((current) => {
+      const photos = current[key] ?? [];
+      const removed = photos[index];
+      if (removed?.preview) URL.revokeObjectURL(removed.preview);
+      return { ...current, [key]: photos.filter((_, photoIndex) => photoIndex !== index) };
+    });
+    setArtError("");
+  }
+
   function removeBackArt() {
     setBack((current) => {
       if (current.preview) URL.revokeObjectURL(current.preview);
@@ -1373,6 +1418,18 @@ function Campaigns({ data }: { data: PanelData }) {
     };
   }
 
+  async function buildRealPhotos(): Promise<CampaignRealPhotoConfig[]> {
+    return Promise.all(activeRealPhotoColors.map(async (color) => ({
+      colorName: color.name,
+      urls: await Promise.all((realPhotosByColor[colorKey(color.name)] ?? []).map(async (photo) => {
+        if (photo.file) return uploadCampaignArt(photo.file);
+        const stored = storedArtworkUrl(photo.url);
+        if (!stored) throw new Error(`Uma foto real de ${color.name} não está disponível. Remova-a e envie novamente.`);
+        return stored;
+      })),
+    })));
+  }
+
   function campaignModels() {
     return shirtModels.filter((model) => selectedModels[model.name]).map((model) => ({
       modelCode: model.code,
@@ -1423,6 +1480,7 @@ function Campaigns({ data }: { data: PanelData }) {
     setSubmitting(true);
     try {
       const artworkConfig = artMode === "legacy_mockup" ? undefined : await buildArtworkConfig();
+      const realPhotos = await buildRealPhotos();
       if (editing) {
         const payload: UpdateCampaignPayload = {
           title: campaignName,
@@ -1430,6 +1488,7 @@ function Campaigns({ data }: { data: PanelData }) {
           deadlineAt: new Date(`${deadline}T23:59:59`).toISOString(),
           pickupInstructions: pickup,
           representative: { name: representative, whatsapp: representativePhone },
+          realPhotos,
         };
         if (artworkConfig) payload.artworkConfig = artworkConfig;
         if (!variantsLocked) payload.models = campaignModels();
@@ -1450,6 +1509,7 @@ function Campaigns({ data }: { data: PanelData }) {
         pickupInstructions: pickup,
         representative: { name: representative, whatsapp: representativePhone },
         artworkConfig: artworkConfig!,
+        realPhotos,
         models: campaignModels(),
       });
       closeForm();
@@ -1656,6 +1716,20 @@ function Campaigns({ data }: { data: PanelData }) {
                 </>
               )}
               {artError && <p className="campaign-artwork-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{artError}</p>}
+            </fieldset>
+
+            <fieldset className="campaign-real-photos"><legend>Fotos reais por cor</legend>
+              <div className="campaign-artwork-guidance"><span className="material-symbols-rounded" aria-hidden="true">photo_camera</span><div><strong>Galeria opcional da camisa pronta</strong><p>Envie até <b>seis fotos por cor</b> em PNG, JPG ou WEBP, com no máximo <b>2 MB cada</b>. A mesma galeria atende todos os cortes que usam a cor e aparece ao lado do mockup para o cliente.</p></div></div>
+              <div className="campaign-real-photo-grid">
+                {activeRealPhotoColors.map((color) => {
+                  const photos = realPhotosByColor[colorKey(color.name)] ?? [];
+                  return <article className="campaign-real-photo-card" key={color.name}>
+                    <header><span><i style={{ backgroundColor: color.hex }} /><strong>{color.name}</strong></span><small>{photos.length}/6</small></header>
+                    {photos.length > 0 ? <div className="campaign-real-photo-list">{photos.map((photo, index) => <figure key={`${photo.preview || photo.url}-${index}`}><img src={photo.preview || photo.url || ""} alt={`Foto real ${index + 1} da camisa ${color.name}`} /><button type="button" onClick={() => removeRealPhoto(color.name, index)} aria-label={`Remover foto ${index + 1} da cor ${color.name}`}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></figure>)}</div> : <p>Nenhuma foto real. O cliente verá somente o mockup.</p>}
+                    {photos.length < 6 && <label><span className="material-symbols-rounded" aria-hidden="true">add_photo_alternate</span>Adicionar fotos<input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={(event) => chooseRealPhotos(event, color.name)} aria-label={`Adicionar fotos reais da cor ${color.name}`} /></label>}
+                  </article>;
+                })}
+              </div>
             </fieldset>
 
             {formError && <p className="campaign-form-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{formError}</p>}

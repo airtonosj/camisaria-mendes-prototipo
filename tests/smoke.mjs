@@ -272,7 +272,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "011_variant_artwork_editor");
+  assert.equal(health.schema.current, "012_campaign_color_real_photos");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -299,6 +299,10 @@ try {
     representative: { name: "Representante das Cores", whatsapp: "5598999992000" },
     artFrontUrl: "/uploads/smoke-custom-color.png",
     artRenderMode: "overlay",
+    realPhotos: [
+      { colorName: "Lilás lavanda", urls: ["/uploads/11111111-1111-4111-8111-111111111111.jpg", "/uploads/22222222-2222-4222-8222-222222222222.webp"] },
+      { colorName: "Preto", urls: ["/uploads/33333333-3333-4333-8333-333333333333.png"] },
+    ],
     models: [
       { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Lilás lavanda", hex: "#8B5CF6" }], sizes: ["P", "M"] },
       { modelCode: "oversized", unitPriceCents: 6990, colors: [{ name: "Preto", hex: "#111315" }], sizes: ["M", "G"] },
@@ -310,7 +314,17 @@ try {
   const customVariant = customCampaign.variants.find((candidate) => candidate.color.name === "Lilás lavanda");
   assert.ok(customVariant);
   assert.equal(customVariant.color.hex, "#8B5CF6");
+  assert.deepEqual(customVariant.realPhotoUrls, customCampaignPayload.realPhotos[0].urls);
+  assert.deepEqual(customCampaign.realPhotos.find((gallery) => gallery.colorName === "Preto").urls, customCampaignPayload.realPhotos[1].urls);
   step("campanha aceita e publica cor personalizada com nome e código HEX");
+
+  await request(`/api/admin/campaigns/${customCampaign.code}`, {
+    method: "PATCH",
+    expected: 422,
+    token,
+    body: { realPhotos: [{ colorName: "Lilás lavanda", urls: Array.from({ length: 7 }, (_, index) => `/uploads/44444444-4444-4444-8444-44444444444${index}.jpg`) }] },
+  });
+  step("galeria real limita seis fotos por cor");
 
   const identityTransform = { x: 0, y: 0, scale: 1, rotation: 0 };
   const adjustedOverlay = {
@@ -350,6 +364,7 @@ try {
     title: "Campanha com mockups individuais",
     artFrontUrl: undefined,
     artRenderMode: undefined,
+    realPhotos: [],
     models: [
       { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Branco", hex: "#F3F3EF" }], sizes: ["P"] },
       { modelCode: "oversized", unitPriceCents: 6990, colors: [{ name: "Preto", hex: "#111315" }], sizes: ["M"] },
@@ -427,6 +442,7 @@ try {
   });
   const campaignWithoutOversized = (await request(`/api/campaigns/${customCampaign.code}`)).campaign;
   assert.equal(campaignWithoutOversized.variants.some((candidate) => candidate.model.code === "oversized"), false);
+  assert.deepEqual(campaignWithoutOversized.realPhotos.find((gallery) => gallery.colorName === "Preto").urls, customCampaignPayload.realPhotos[1].urls);
   const preservedHistoricalOrder = await request(`/api/orders/${historicalOrder.order.number}?whatsapp=5598999992026`);
   assert.equal(preservedHistoricalOrder.order.items[0].modelName, "Oversized");
   await request("/api/orders", {

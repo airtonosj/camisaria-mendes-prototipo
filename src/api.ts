@@ -37,7 +37,10 @@ type ApiCampaignVariant = {
     front: ArtworkSideConfig;
     back: ArtworkSideConfig;
   }>>;
+  realPhotoUrls?: string[];
 };
+
+export type CampaignRealPhotoConfig = { colorName: string; urls: string[] };
 
 type ApiCampaignSize = {
   model: { code: string; name: string };
@@ -65,6 +68,7 @@ export type ApiCampaign = {
       back: { url: string; transform: ArtworkTransform } | null;
     };
   };
+  realPhotos?: CampaignRealPhotoConfig[];
   variants: ApiCampaignVariant[];
   sizes: ApiCampaignSize[];
 };
@@ -174,6 +178,7 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
   const sizes = {} as Record<ShirtModelName, SizeCode[]>;
   const variantIds: NonNullable<PrivateCampaign["variantIds"]> = {};
   const variantArtworks: NonNullable<PrivateCampaign["variantArtworks"]> = {};
+  const realPhotos: NonNullable<PrivateCampaign["realPhotos"]> = {};
   const models: ShirtModelName[] = [];
 
   for (const model of shirtModels) {
@@ -196,7 +201,13 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
         front: variant.artwork.front ? { ...variant.artwork.front, url: assetUrl(variant.artwork.front.url) ?? variant.artwork.front.url } : null,
         back: variant.artwork.back ? { ...variant.artwork.back, url: assetUrl(variant.artwork.back.url) ?? variant.artwork.back.url } : null,
       };
+      if (variant.realPhotoUrls?.length && !realPhotos[variant.color.name]) {
+        realPhotos[variant.color.name] = variant.realPhotoUrls.map((url) => assetUrl(url) ?? url);
+      }
     });
+  }
+  for (const gallery of campaign.realPhotos ?? []) {
+    realPhotos[gallery.colorName] = gallery.urls.map((url) => assetUrl(url) ?? url);
   }
 
   const deadline = new Date(campaign.deadlineAt);
@@ -223,6 +234,7 @@ function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
     colors,
     variantIds,
     variantArtworks,
+    realPhotos,
   };
 }
 
@@ -459,6 +471,7 @@ export type CreateCampaignPayload = {
   artBackUrl?: string | null;
   artRenderMode?: "overlay" | "variant_mockup";
   artworkConfig: CampaignArtworkConfig;
+  realPhotos?: CampaignRealPhotoConfig[];
   models: CampaignModelPayload[];
 };
 
@@ -476,6 +489,7 @@ export type UpdateCampaignPayload = {
   artBackUrl?: string | null;
   artRenderMode?: "overlay" | "variant_mockup" | "legacy_mockup";
   artworkConfig?: CampaignArtworkConfig;
+  realPhotos?: CampaignRealPhotoConfig[];
   models?: CampaignModelPayload[];
 };
 

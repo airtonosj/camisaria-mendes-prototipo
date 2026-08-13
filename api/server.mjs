@@ -586,7 +586,7 @@ async function getCampaign(code) {
   if (campaignRows.length === 0) throw new ApiError(404, "CAMPAIGN_NOT_FOUND", "Campanha não encontrada.");
   const campaign = campaignRows[0];
   const [variants] = await pool.execute(
-    `SELECT cv.id, sm.code AS model_code, sm.name AS model_name, co.name AS color_name,
+    `SELECT cv.id, cv.color_id, sm.code AS model_code, sm.name AS model_name, co.name AS color_name,
             co.hex_color, cv.unit_price_cents, cva.artwork_mode,
             cva.front_source, cva.front_url, cva.front_transform_override,
             cva.front_x, cva.front_y, cva.front_scale, cva.front_rotation,
@@ -616,6 +616,20 @@ async function getCampaign(code) {
       WHERE cv.campaign_id = ?`,
     [campaign.id],
   );
+  const [realPhotoRows] = await pool.execute(
+    `SELECT ccp.color_id, co.name AS color_name, ccp.photo_url, ccp.sort_order
+       FROM campaign_color_photos ccp
+       JOIN colors co ON co.id = ccp.color_id
+      WHERE ccp.campaign_id = ?
+      ORDER BY co.name, ccp.sort_order, ccp.id`,
+    [campaign.id],
+  );
+  const realPhotosByColorId = new Map();
+  for (const row of realPhotoRows) {
+    const photos = realPhotosByColorId.get(Number(row.color_id)) ?? [];
+    photos.push(row.photo_url);
+    realPhotosByColorId.set(Number(row.color_id), photos);
+  }
   const artworkConfigsByVariant = new Map();
   for (const row of allArtworkRows) {
     const current = artworkConfigsByVariant.get(Number(row.campaign_variant_id)) ?? {};
@@ -648,7 +662,12 @@ async function getCampaign(code) {
       artwork: resolveVariantArtwork(campaign, variant),
       artworkConfig: rawVariantArtworkConfig(variant.artwork_mode ? variant : null),
       artworkConfigs: artworkConfigsByVariant.get(Number(variant.id)) ?? {},
+      realPhotoUrls: realPhotosByColorId.get(Number(variant.color_id)) ?? [],
     })),
+    realPhotos: [...new Map(realPhotoRows.map((row) => [row.color_name, {
+      colorName: row.color_name,
+      urls: realPhotosByColorId.get(Number(row.color_id)) ?? [],
+    }])).values()],
     sizes: sizes.map((size) => ({
       model: { code: size.model_code, name: size.model_name },
       code: size.code,
@@ -910,6 +929,76 @@ async function applyArtworkConfig(connection, campaignId, value) {
   return [...new Set(oldUrls.filter(Boolean))];
 }
 
+function parseRealPhotoConfig(value) {
+  if (!Array.isArray(value) || value.length > 32) {
+    throw new ApiError(422, "VALIDATION_ERROR", "As fotos reais precisam ser organizadas por cor.");
+  }
+  const configs = new Map();
+  for (const [index, item] of value.entries()) {
+    if (!item || typeof item !== "object") {
+      throw new ApiError(422, "VALIDATION_ERROR", `A galeria ${index + 1} é inválida.`);
+    }
+    const colorName = requireText(item.colorName, `realPhotos[${index}].colorName`, 80);
+    const key = colorName.toLocaleLowerCase("pt-BR");
+    if (configs.has(key)) throw new ApiError(422, "VALIDATION_ERROR", `A cor ${colorName} foi repetida nas fotos reais.`);
+    if (!Array.isArray(item.urls) || item.urls.length > 6) {
+      throw new ApiError(422, "VALIDATION_ERROR", `Envie no máximo seis fotos reais para ${colorName}.`);
+    }
+    const urls = item.urls.map((rawUrl, photoIndex) => {
+      const url = requireText(rawUrl, `realPhotos[${index}].urls[${photoIndex}]`, 2048);
+      if (!/^\/uploads\/[0-9a-f-]{36}\.(png|jpg|webp)$/i.test(url)) {
+        throw new ApiError(422, "INVALID_UPLOAD", `Uma foto real de ${colorName} não pertence aos uploads da campanha.`);
+      }
+      return url;
+    });
+    if (new Set(urls).size !== urls.length) {
+      throw new ApiError(422, "VALIDATION_ERROR", `A galeria de ${colorName} possui fotos repetidas.`);
+    }
+    configs.set(key, { colorName, urls });
+  }
+  return configs;
+}
+
+/** Substitui apenas as galerias das cores ativas; cores desativadas permanecem preservadas. */
+async function applyRealPhotos(connection, campaignId, value) {
+  const configs = parseRealPhotoConfig(value);
+  const [activeColors] = await connection.execute(
+    `SELECT DISTINCT co.id, co.name
+       FROM campaign_variants cv
+       JOIN colors co ON co.id = cv.color_id
+      WHERE cv.campaign_id = ? AND cv.active = TRUE`,
+    [campaignId],
+  );
+  const activeByKey = new Map(activeColors.map((color) => [color.name.toLocaleLowerCase("pt-BR"), color]));
+  for (const config of configs.values()) {
+    if (!activeByKey.has(config.colorName.toLocaleLowerCase("pt-BR"))) {
+      throw new ApiError(422, "INVALID_COLOR", `A cor ${config.colorName} não está ativa nesta campanha.`);
+    }
+  }
+
+  const oldUrls = [];
+  for (const color of activeColors) {
+    const [oldRows] = await connection.execute(
+      "SELECT photo_url FROM campaign_color_photos WHERE campaign_id = ? AND color_id = ?",
+      [campaignId, color.id],
+    );
+    oldUrls.push(...oldRows.map((row) => row.photo_url));
+    await connection.execute(
+      "DELETE FROM campaign_color_photos WHERE campaign_id = ? AND color_id = ?",
+      [campaignId, color.id],
+    );
+    const urls = configs.get(color.name.toLocaleLowerCase("pt-BR"))?.urls ?? [];
+    for (const [sortOrder, url] of urls.entries()) {
+      await connection.execute(
+        `INSERT INTO campaign_color_photos (campaign_id, color_id, photo_url, sort_order)
+         VALUES (?, ?, ?, ?)`,
+        [campaignId, color.id, url, sortOrder],
+      );
+    }
+  }
+  return [...new Set(oldUrls.filter(Boolean))];
+}
+
 async function createCampaign(request) {
   const staff = await requireStaff(request);
   const body = await readJson(request);
@@ -957,6 +1046,7 @@ async function createCampaign(request) {
       }
     }
     if (artworkConfig) await applyArtworkConfig(connection, campaignResult.insertId, artworkConfig);
+    if (body.realPhotos !== undefined) await applyRealPhotos(connection, campaignResult.insertId, body.realPhotos);
   });
   return getCampaign(code);
 }
@@ -1014,6 +1104,9 @@ async function updateCampaign(request, code) {
     if (body.artworkConfig !== undefined) {
       orphanCandidates.push(...await applyArtworkConfig(connection, campaign.id, body.artworkConfig));
     }
+    if (body.realPhotos !== undefined) {
+      orphanCandidates.push(...await applyRealPhotos(connection, campaign.id, body.realPhotos));
+    }
 
     return { artFrontUrl: campaign.art_front_url, artBackUrl: campaign.art_back_url, orphanCandidates };
   });
@@ -1021,7 +1114,7 @@ async function updateCampaign(request, code) {
   // Fora da transação: apagar arquivo é irreversível e não pode acontecer antes do commit.
   if (body.artFrontUrl !== undefined) await removeOrphanUpload(changed.artFrontUrl);
   if (body.artBackUrl !== undefined) await removeOrphanUpload(changed.artBackUrl);
-  if (body.artworkConfig !== undefined) {
+  if (body.artworkConfig !== undefined || body.realPhotos !== undefined) {
     for (const url of changed.orphanCandidates) await removeOrphanUpload(url);
   }
   return getCampaign(code);
@@ -1060,12 +1153,17 @@ async function deleteCampaign(request, code) {
         WHERE cv.campaign_id = ?`,
       [campaign.id],
     );
+    const [photoRows] = await connection.execute(
+      "SELECT photo_url FROM campaign_color_photos WHERE campaign_id = ?",
+      [campaign.id],
+    );
     await connection.execute("DELETE FROM campaigns WHERE id = ?", [campaign.id]);
     return {
       code,
       artFrontUrl: campaign.art_front_url,
       artBackUrl: campaign.art_back_url,
       variantArtworkUrls: artworkRows.flatMap((row) => [row.front_url, row.back_url]).filter(Boolean),
+      realPhotoUrls: photoRows.map((row) => row.photo_url),
     };
   });
 
@@ -1073,6 +1171,7 @@ async function deleteCampaign(request, code) {
   await removeOrphanUpload(deleted.artFrontUrl);
   await removeOrphanUpload(deleted.artBackUrl);
   for (const url of deleted.variantArtworkUrls) await removeOrphanUpload(url);
+  for (const url of deleted.realPhotoUrls) await removeOrphanUpload(url);
   return { code: deleted.code, deleted: true };
 }
 
@@ -1184,8 +1283,10 @@ async function removeOrphanUpload(url) {
     `SELECT 1 FROM campaigns WHERE art_front_url = ? OR art_back_url = ?
      UNION ALL
      SELECT 1 FROM campaign_variant_artworks WHERE front_url = ? OR back_url = ?
+     UNION ALL
+     SELECT 1 FROM campaign_color_photos WHERE photo_url = ?
      LIMIT 1`,
-    [url, url, url, url],
+    [url, url, url, url, url],
   );
   if (rows.length > 0) return;
   try {

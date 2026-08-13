@@ -109,7 +109,7 @@ const source = await mysql.createConnection({ ...config.database, charset: "utf8
 const restored = await mysql.createConnection({ ...config.database, database: targetDatabase, charset: "utf8mb4" });
 const comparisons = {};
 try {
-  const tables = ["schema_migrations", "campaigns", "orders", "payments", "order_refunds", "users"];
+  const tables = ["schema_migrations", "campaigns", "campaign_variant_artworks", "campaign_color_photos", "orders", "payments", "order_refunds", "users"];
   for (const table of tables) {
     const [sourceExists] = await source.query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?", [config.database.database, table]);
     if (sourceExists.length === 0) continue;

@@ -263,6 +263,12 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-configurator { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr); align-items: start; gap: 0 44px; }
 .campaign-art-stage { grid-column: 1; grid-row: 1 / span 6; }
 .campaign-configurator h2 { margin: 0; color: #f8f9fa; font-size: .9rem; letter-spacing: -.02em; }
+.campaign-visual-switch { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #4b5156; }
+.campaign-visual-switch button { min-height: 46px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-left: 1px solid #4b5156; cursor: pointer; color: #aeb4b8; background: transparent; font-size: .76rem; font-weight: 680; }
+.campaign-visual-switch button:first-child { border-left: 0; }
+.campaign-visual-switch button.is-active { color: #fff; background: #087fca; }
+.campaign-visual-switch button:focus-visible { position: relative; z-index: 1; outline: 2px solid #75caf4; outline-offset: -3px; }
+.campaign-visual-switch .material-symbols-rounded { font-size: 18px; }
 .campaign-side-switch { display: grid; grid-template-columns: 1fr 1fr; margin-top: 20px; border: 1px solid #4b5156; }
 .campaign-side-switch button { min-height: 54px; border: 0; cursor: pointer; color: #aeb4b8; background: transparent; font-size: .84rem; font-weight: 650; }
 .campaign-side-switch button + button { border-left: 1px solid #4b5156; }
@@ -271,6 +277,13 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-art-viewer { position: relative; min-height: 500px; display: grid; place-items: center; margin-top: 14px; overflow: hidden; background: #0b0e10; }
 .campaign-art-viewer > .shirt-mockup-legacy { width: min(100%, 580px); height: 470px; object-fit: contain; }
 .campaign-art-viewer > .shirt-mockup-composite { width: min(100%, 580px); }
+.campaign-real-photo-main { width: 100%; height: 500px; display: block; object-fit: contain; }
+.campaign-real-photo-thumbnails { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 10px; }
+.campaign-real-photo-thumbnails button { position: relative; width: 64px; height: 64px; overflow: hidden; border: 2px solid transparent; cursor: pointer; padding: 0; background: #1a1e20; }
+.campaign-real-photo-thumbnails button.is-active { border-color: #27aef0; }
+.campaign-real-photo-thumbnails img { width: 100%; height: 100%; display: block; object-fit: cover; opacity: .74; }
+.campaign-real-photo-thumbnails button.is-active img { opacity: 1; }
+.campaign-real-photo-thumbnails span { position: absolute; right: 3px; bottom: 3px; min-width: 17px; height: 17px; display: grid; place-content: center; border-radius: 50%; color: #fff; background: rgba(0, 0, 0, .72); font-size: .56rem; }
 .shirt-mockup-legacy { display: block; object-fit: contain; }
 .shirt-mockup-composite { position: relative; width: 100%; aspect-ratio: 1; overflow: hidden; isolation: isolate; }
 .shirt-mockup-color, .shirt-mockup-texture, .shirt-mockup-highlight { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -719,6 +732,8 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-art-viewer { min-height: 268px; margin-top: 5px; }
   .campaign-art-viewer > .shirt-mockup-legacy { height: 268px; transform: scale(1.08); }
   .campaign-art-viewer > .shirt-mockup-composite { width: 300px; max-width: 100%; transform: scale(1.06); }
+  .campaign-real-photo-main { height: 268px; }
+  .campaign-real-photo-thumbnails button { width: 52px; height: 52px; }
   .campaign-cut-options { gap: 7px; margin-top: 10px; }
   .campaign-cut-options label { padding: 9px 10px 11px; }
   .campaign-cut-head strong { font-size: .66rem; }
@@ -1284,6 +1299,24 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-color-error .material-symbols-rounded, .campaign-color-summary .material-symbols-rounded { font-size: 16px; }
 .campaign-artwork { grid-column: 1 / -1; min-width: 0; margin: 3px 0 0; border: 0; border-top: 1px solid #e3e6e4; padding: 21px 0 0; }
 .campaign-artwork legend { padding: 0 12px 0 0; color: #4e5559; font-size: .61rem; font-weight: 700; }
+.campaign-real-photos { grid-column: 1 / -1; min-width: 0; margin: 3px 0 0; border: 0; border-top: 1px solid #e3e6e4; padding: 21px 0 0; }
+.campaign-real-photos legend { padding: 0 12px 0 0; color: #4e5559; font-size: .61rem; font-weight: 700; }
+.campaign-real-photo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.campaign-real-photo-card { min-width: 0; border: 1px solid #d6ddda; padding: 13px; background: #fafbfa; }
+.campaign-real-photo-card > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.campaign-real-photo-card > header > span { display: flex; align-items: center; gap: 8px; color: #30383c; font-size: .61rem; }
+.campaign-real-photo-card > header i { width: 18px; height: 18px; border: 1px solid rgba(18, 25, 28, .16); border-radius: 50%; }
+.campaign-real-photo-card > header small { color: #778186; font-size: .53rem; }
+.campaign-real-photo-card > p { margin: 16px 0; color: #818a8e; font-size: .54rem; line-height: 1.5; }
+.campaign-real-photo-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin: 12px 0; }
+.campaign-real-photo-list figure { position: relative; min-width: 0; aspect-ratio: 1; margin: 0; overflow: hidden; background: #e8ecea; }
+.campaign-real-photo-list img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.campaign-real-photo-list button { position: absolute; top: 5px; right: 5px; width: 25px; height: 25px; display: grid; place-content: center; border: 0; border-radius: 50%; cursor: pointer; color: #fff; background: rgba(24, 31, 34, .82); }
+.campaign-real-photo-list button .material-symbols-rounded { font-size: 15px; }
+.campaign-real-photo-card > label { min-height: 38px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px dashed #9eb3bd; cursor: pointer; padding: 7px 10px; color: #087fca; background: #f2f9fc; font-size: .55rem; font-weight: 700; }
+.campaign-real-photo-card > label:hover, .campaign-real-photo-card > label:focus-within { border-color: #087fca; }
+.campaign-real-photo-card > label .material-symbols-rounded { font-size: 17px; }
+.campaign-real-photo-card > label input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .campaign-artwork-guidance { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; margin-bottom: 16px; border: 1px solid #c9e4f2; padding: 14px; background: #f3fafe; }
 .campaign-artwork-guidance > .material-symbols-rounded { width: 32px; height: 32px; display: grid; place-content: center; color: #087fca; background: #dff2fc; font-size: 18px; }
 .campaign-artwork-guidance strong { display: block; color: #273034; font-size: .63rem; }
@@ -1785,7 +1818,7 @@ main > section[id] { scroll-margin-top: 78px; }
   .admin-list article { padding-inline: 15px; }
   .campaign-create-panel { padding: 19px 16px; }
   .campaign-create-panel form { grid-template-columns: 1fr; gap: 14px; }
-  .campaign-field--wide, .campaign-model-pricing, .campaign-color-setup, .campaign-artwork, .campaign-create-actions { grid-column: 1; }
+  .campaign-field--wide, .campaign-model-pricing, .campaign-color-setup, .campaign-artwork, .campaign-real-photos, .campaign-create-actions { grid-column: 1; }
   .campaign-model-pricing > div > article { grid-template-columns: minmax(0, 1fr) 105px; padding: 11px; }
   .campaign-color-palette { grid-template-columns: 1fr 1fr; gap: 7px; }
   .campaign-color-palette label { padding-inline: 9px; }
@@ -1805,6 +1838,7 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-artwork-uploads { gap: 8px; }
   .campaign-artwork-uploads > label > div, .campaign-art-upload-slot > label > div { min-height: 205px; }
   .campaign-artwork-uploads img { height: 205px; padding: 6px; }
+  .campaign-real-photo-grid { grid-template-columns: 1fr; }
   .campaign-artwork-uploads > label > div > .material-symbols-rounded, .campaign-art-upload-slot > label > div > .material-symbols-rounded { right: 8px; bottom: 8px; width: 34px; height: 34px; }
   .campaign-art-mode { grid-template-columns: 1fr; }
   .campaign-art-controls label { grid-template-columns: 1fr 48px; }
