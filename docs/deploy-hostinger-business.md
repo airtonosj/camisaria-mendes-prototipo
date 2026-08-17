@@ -29,7 +29,6 @@ API_PORT=3000
 TRUST_PROXY=true
 CORS_ORIGIN=https://camisariamendes.com.br
 PUBLIC_APP_URL=https://camisariamendes.com.br
-ADMIN_API_TOKEN_ENABLED=false
 
 DB_HOST=localhost
 DB_PORT=3306

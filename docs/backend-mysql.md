@@ -19,8 +19,9 @@ falha de servidor aparece como erro com "tentar novamente".
 - A transição legítima para `paid` agenda, na mesma transação, um e-mail com o código da compra para o comprador.
 - Redirecionamento do navegador não confirma pagamento; webhook e retorno apenas solicitam a validação server-to-server por `payment_check`.
 - `Idempotency-Key` impede que uma tentativa repetida crie dois pedidos.
-- O navegador nunca recebe o `ADMIN_API_TOKEN`. O painel autentica com login e usa um
-  token de sessão de 12 horas; o token estático fica no servidor, para scripts.
+- O painel autentica com login e usa um token de sessão atribuído a uma conta da camisaria:
+  12 horas de inatividade e no máximo 7 dias de vida. Não existe credencial administrativa
+  estática ou sem expiração.
 - Quem mudou fase, confirmou pagamento ou registrou entrega fica gravado no histórico.
 
 ## Preparar o banco
@@ -82,14 +83,11 @@ Invoke-RestMethod http://127.0.0.1:3333/api/health
 
 ## Acesso da equipe
 
-As rotas administrativas aceitam duas credenciais:
-
-- `Authorization: Bearer <token>` — a sessão criada em `POST /api/auth/login`, usada pelo
-  painel. Expira em 12 horas e o banco guarda só o SHA-256 do token, em `staff_sessions`.
-- `X-Admin-Token: <ADMIN_API_TOKEN>` — a chave estática, para scripts e manutenção no
-  servidor. Ela só funciona quando `ADMIN_API_TOKEN_ENABLED=true` e fica desabilitada por
-  padrão em produção. **Nunca entregue essa chave ao navegador**: ela não expira e dá
-  acesso total.
+As rotas administrativas aceitam apenas `Authorization: Bearer <token>`, com a sessão
+criada em `POST /api/auth/login`. Ela expira após 12 horas de inatividade e, mesmo em uso,
+exige novo login ao completar 7 dias. A sessão pertence a uma conta identificada e o banco
+guarda só o SHA-256 do token em `staff_sessions`. Variáveis antigas
+`ADMIN_API_TOKEN*` e o cabeçalho `X-Admin-Token` são ignorados.
 
 Somente contas com `role = 'camisaria'` entram no painel. O papel `representative` permanece
 reservado no schema, mas o login e todas as rotas administrativas recusam esse acesso.
@@ -159,9 +157,12 @@ com o corpo binário puro e o `Content-Type` da imagem:
 ```powershell
 $bytes = [IO.File]::ReadAllBytes("arte-frente.png")
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:3333/api/admin/uploads `
-  -Headers @{ "X-Admin-Token" = $env:ADMIN_API_TOKEN } `
+  -Headers @{ Authorization = "Bearer $env:CAMISARIA_SESSION_TOKEN" } `
   -ContentType "image/png" -Body $bytes
 ```
+
+`CAMISARIA_SESSION_TOKEN` deve conter uma sessão temporária obtida pelo login de uma conta
+da camisaria; encerre a sessão depois da manutenção.
 
 A resposta traz `{ "url": "/uploads/<uuid>.png" }`. Aceita `PNG`, `JPG` e `WEBP` com até
 `2 MB`, confere a assinatura do arquivo antes de gravar e serve de volta com

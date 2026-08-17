@@ -25,6 +25,7 @@ import type {
   ApiProductionRow,
   CampaignPhaseCode,
   CampaignArtworkConfig,
+  CampaignCoupon,
   CampaignRealPhotoConfig,
   CampaignRealVideoConfig,
   DeliveryStatusCode,
@@ -132,6 +133,7 @@ type PanelCampaign = {
   orderCount: number;
   paidTotalCents: number;
   canDelete: boolean;
+  activeCoupon?: CampaignCoupon | null;
 };
 
 type PanelOrder = {
@@ -366,6 +368,7 @@ function usePanelData(): PanelData {
             orderCount: campaign.orderCount,
             paidTotalCents: campaign.paidTotalCents,
             canDelete: campaign.canDelete,
+            activeCoupon: campaign.activeCoupon,
           })),
         );
         setMode("live");
@@ -881,6 +884,11 @@ function Campaigns({ data }: { data: PanelData }) {
   const [deadline, setDeadline] = useState("");
   const [commonPrice, setCommonPrice] = useState("59,90");
   const [oversizedPrice, setOversizedPrice] = useState("69,90");
+  const [couponEnabled, setCouponEnabled] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponDiscounts, setCouponDiscounts] = useState<Record<ShirtModelName, string>>({ Comum: "10,00", Oversized: "10,00" });
+  const [couponExpires, setCouponExpires] = useState("");
+  const [couponLimit, setCouponLimit] = useState("");
   const [selectedModels, setSelectedModels] = useState<Record<ShirtModelName, boolean>>({ Comum: true, Oversized: true });
   const [front, setFront] = useState<ArtDraft>({ file: null, preview: "" });
   const [back, setBack] = useState<ArtDraft>({ file: null, preview: "" });
@@ -981,7 +989,16 @@ function Campaigns({ data }: { data: PanelData }) {
     && representativePhone.replace(/\D/g, "").length >= 10
     && Boolean(deadline)
     && Boolean(pickup.trim());
-  const productsComplete = selectedCampaignModels.length > 0 && selectedCampaignModels.every((model) => (
+  const couponComplete = !couponEnabled || (
+    /^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(couponCode.trim().toUpperCase().replace(/\s+/g, "-"))
+    && selectedCampaignModels.every((model) => {
+      const discount = parseCampaignPrice(couponDiscounts[model.name]);
+      const price = parseCampaignPrice(model.name === "Comum" ? commonPrice : oversizedPrice);
+      return discount > 0 && discount < price;
+    })
+    && (!couponLimit || /^\d+$/.test(couponLimit) && Number(couponLimit) > 0)
+  );
+  const productsComplete = couponComplete && selectedCampaignModels.length > 0 && selectedCampaignModels.every((model) => (
     parseCampaignPrice(model.name === "Comum" ? commonPrice : oversizedPrice) > 0
     && modelColors[model.name].length > 0
     && modelSizes[model.name].length > 0
@@ -1035,6 +1052,11 @@ function Campaigns({ data }: { data: PanelData }) {
     setRepresentative("");
     setRepresentativePhone("");
     setDeadline("");
+    setCouponEnabled(false);
+    setCouponCode("");
+    setCouponDiscounts({ Comum: "10,00", Oversized: "10,00" });
+    setCouponExpires("");
+    setCouponLimit("");
     setFront({ file: null, preview: "" });
     setBack({ file: null, preview: "" });
     setArtMode("overlay");
@@ -1088,6 +1110,11 @@ function Campaigns({ data }: { data: PanelData }) {
         deadline?: string;
         commonPrice?: string;
         oversizedPrice?: string;
+        couponEnabled?: boolean;
+        couponCode?: string;
+        couponDiscounts?: Record<ShirtModelName, string>;
+        couponExpires?: string;
+        couponLimit?: string;
         selectedModels?: Record<ShirtModelName, boolean>;
         modelColors?: Record<ShirtModelName, ShirtColorName[]>;
         modelSizes?: Record<ShirtModelName, SizeCode[]>;
@@ -1103,6 +1130,11 @@ function Campaigns({ data }: { data: PanelData }) {
       setDeadline(saved.deadline ?? "");
       if (saved.commonPrice) setCommonPrice(saved.commonPrice);
       if (saved.oversizedPrice) setOversizedPrice(saved.oversizedPrice);
+      setCouponEnabled(Boolean(saved.couponEnabled));
+      setCouponCode(saved.couponCode ?? "");
+      if (saved.couponDiscounts) setCouponDiscounts(saved.couponDiscounts);
+      setCouponExpires(saved.couponExpires ?? "");
+      setCouponLimit(saved.couponLimit ?? "");
       if (saved.selectedModels) setSelectedModels(saved.selectedModels);
       if (saved.modelColors) setModelColors(saved.modelColors);
       if (saved.modelSizes) setModelSizes(saved.modelSizes);
@@ -1128,6 +1160,11 @@ function Campaigns({ data }: { data: PanelData }) {
       deadline,
       commonPrice,
       oversizedPrice,
+      couponEnabled,
+      couponCode,
+      couponDiscounts,
+      couponExpires,
+      couponLimit,
       selectedModels,
       modelColors,
       modelSizes,
@@ -1190,6 +1227,14 @@ function Campaigns({ data }: { data: PanelData }) {
       const priceOf = (model: ShirtModelName) => detail.variants.find((variant) => variant.model.name === model)?.unitPriceCents;
       setCommonPrice(priceInput(priceOf("Comum")) || "59,90");
       setOversizedPrice(priceInput(priceOf("Oversized")) || "69,90");
+      setCouponEnabled(Boolean(detail.activeCoupon));
+      setCouponCode(detail.activeCoupon?.code ?? "");
+      setCouponDiscounts({
+        Comum: priceInput(detail.activeCoupon?.discounts.find((discount) => discount.modelName === "Comum")?.discountCents) || "10,00",
+        Oversized: priceInput(detail.activeCoupon?.discounts.find((discount) => discount.modelName === "Oversized")?.discountCents) || "10,00",
+      });
+      setCouponExpires(detail.activeCoupon?.expiresAt ? dateInput(detail.activeCoupon.expiresAt) : "");
+      setCouponLimit(detail.activeCoupon?.usageLimit ? String(detail.activeCoupon.usageLimit) : "");
       const colorsFromCampaign = detail.variants.map((variant) => ({ name: variant.color.name, hex: variant.color.hex }));
       setCampaignColorOptions(mergeCampaignColors(shirtColors, colorsFromCampaign));
       setRealPhotosByColor(Object.fromEntries((detail.realPhotos ?? []).map((gallery) => [
@@ -1766,6 +1811,19 @@ function Campaigns({ data }: { data: PanelData }) {
     }));
   }
 
+  function campaignCoupon() {
+    if (!couponEnabled) return null;
+    return {
+      code: couponCode.trim().toUpperCase().replace(/\s+/g, "-"),
+      discounts: selectedCampaignModels.map((model) => ({
+        modelCode: model.code,
+        discountCents: Math.round(parseCampaignPrice(couponDiscounts[model.name]) * 100),
+      })),
+      expiresAt: couponExpires ? new Date(`${couponExpires}T23:59:59`).toISOString() : null,
+      usageLimit: couponLimit ? Number(couponLimit) : null,
+    };
+  }
+
   function focusCampaignPanel() {
     window.setTimeout(() => document.getElementById("campaign-create-title")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
@@ -1805,13 +1863,39 @@ function Campaigns({ data }: { data: PanelData }) {
   }
 
   function validateProductsStep() {
-    if (variantsLocked) return true;
     if (selectedCampaignModels.length === 0) {
       setFormError("Selecione pelo menos um corte para a campanha.");
       setFormStep("products");
       focusCampaignPanel();
       return false;
     }
+    if (couponEnabled) {
+      const normalizedCoupon = couponCode.trim().toUpperCase().replace(/\s+/g, "-");
+      if (!/^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(normalizedCoupon)) {
+        setFormError("Informe um cupom de 3 a 32 caracteres, usando letras, números, hífen ou sublinhado.");
+        setFormStep("products");
+        focusCampaignPanel();
+        return false;
+      }
+      const invalidDiscount = selectedCampaignModels.find((model) => {
+        const discount = parseCampaignPrice(couponDiscounts[model.name]);
+        const price = parseCampaignPrice(model.name === "Comum" ? commonPrice : oversizedPrice);
+        return discount <= 0 || discount >= price;
+      });
+      if (invalidDiscount) {
+        setFormError(`O desconto de ${invalidDiscount.name === "Comum" ? "Padrão" : invalidDiscount.name} deve ser maior que zero e menor que o preço do corte.`);
+        setFormStep("products");
+        focusCampaignPanel();
+        return false;
+      }
+      if (couponLimit && (!/^\d+$/.test(couponLimit) || Number(couponLimit) < 1)) {
+        setFormError("O limite de utilizações do cupom precisa ser um número inteiro maior que zero.");
+        setFormStep("products");
+        focusCampaignPanel();
+        return false;
+      }
+    }
+    if (variantsLocked) return true;
     const modelWithoutPrice = selectedCampaignModels.find((model) => parseCampaignPrice(model.name === "Comum" ? commonPrice : oversizedPrice) <= 0);
     if (modelWithoutPrice) {
       setFormError(`Informe o preço do corte ${modelWithoutPrice.name === "Comum" ? "Padrão" : modelWithoutPrice.name}.`);
@@ -1979,6 +2063,7 @@ function Campaigns({ data }: { data: PanelData }) {
           pickupInstructions: pickup,
           representative: { name: representative, whatsapp: representativePhone },
           presentationConfig,
+          coupon: campaignCoupon(),
         };
         if (artworkConfig) payload.artworkConfig = artworkConfig;
         if (realPhotos) payload.realPhotos = realPhotos;
@@ -2004,6 +2089,7 @@ function Campaigns({ data }: { data: PanelData }) {
         artworkConfig,
         realPhotos,
         realVideos,
+        coupon: campaignCoupon(),
         models: campaignModels(),
       });
       sessionStorage.removeItem(campaignDraftKey);
@@ -2019,6 +2105,14 @@ function Campaigns({ data }: { data: PanelData }) {
         orderCount: 0,
         paidTotalCents: 0,
         canDelete: true,
+        activeCoupon: couponEnabled ? {
+          ...campaignCoupon()!,
+          discounts: selectedCampaignModels.map((model) => ({
+            modelCode: model.code,
+            modelName: model.name,
+            discountCents: Math.round(parseCampaignPrice(couponDiscounts[model.name]) * 100),
+          })),
+        } : null,
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (submitError) {
@@ -2109,6 +2203,16 @@ function Campaigns({ data }: { data: PanelData }) {
                 </article>;
               })}
             </div><small>Marque somente os cortes que a campanha oferecerá. {editing && !variantsLocked ? "Trocar o preço vale para os próximos pedidos; os já registrados guardam o valor da compra." : "O preço vale para todos os tamanhos do corte, inclusive os baby look."}</small></fieldset>
+
+            <fieldset className="campaign-coupon-setup"><legend>Cupom de desconto</legend>
+              <label className="campaign-coupon-toggle"><input type="checkbox" checked={couponEnabled} onChange={(event) => { setCouponEnabled(event.target.checked); setFormError(""); }} /><span className="material-symbols-rounded" aria-hidden="true">{couponEnabled ? "check" : "add"}</span><span><strong>{couponEnabled ? "Cupom ativado" : "Adicionar cupom"}</strong><small>Opcional. Pode ser removido novamente ao editar a campanha.</small></span></label>
+              {couponEnabled && <div className="campaign-coupon-admin-fields">
+                <label className="campaign-field campaign-field--wide"><span>Código do cupom</span><input value={couponCode} onChange={(event) => setCouponCode(event.target.value.toUpperCase())} placeholder="TURMA10" maxLength={32} autoCapitalize="characters" spellCheck={false} required /><small>O aluno pode digitá-lo na página ou abrir o link com o cupom aplicado.</small></label>
+                {selectedCampaignModels.map((model) => <label className="campaign-field" key={`coupon-${model.code}`}><span>Desconto para {model.name === "Comum" ? "Padrão" : model.name}</span><div className="campaign-coupon-value"><b>R$</b><input inputMode="decimal" value={couponDiscounts[model.name]} onChange={(event) => setCouponDiscounts((current) => ({ ...current, [model.name]: event.target.value }))} required /></div><small>Valor descontado de cada peça deste corte.</small></label>)}
+                <label className="campaign-field"><span>Validade até</span><input type="date" value={couponExpires} onChange={(event) => setCouponExpires(event.target.value)} /><small>Opcional. Sem data, vale enquanto estiver ativo.</small></label>
+                <label className="campaign-field"><span>Limite de utilizações</span><input type="number" min="1" step="1" inputMode="numeric" value={couponLimit} onChange={(event) => setCouponLimit(event.target.value)} placeholder="Sem limite" /><small>Opcional. Conta pedidos ativos, não a quantidade de peças.</small></label>
+              </div>}
+            </fieldset>
 
             <fieldset className="campaign-color-setup" disabled={variantsLocked}><legend>Cores disponíveis por corte</legend>
               <p>O aluno verá somente as cores liberadas aqui. Use uma das cinco opções padrão ou cadastre uma cor pelo nome e código HEX.</p>
@@ -2289,6 +2393,7 @@ function Campaigns({ data }: { data: PanelData }) {
                   <div className="campaign-review-grid">
                     <article><span className="material-symbols-rounded" aria-hidden="true">campaign</span><div><small>Campanha</small><strong>{campaignName || "Nome ainda não informado"}</strong><p>{representative || "Representante não informado"} · {deadline ? formatDeadline(new Date(`${deadline}T23:59:59`).toISOString()) : "Prazo não informado"}</p></div><button type="button" onClick={() => goToCampaignStep("information")}>Editar</button></article>
                     <article><span className="material-symbols-rounded" aria-hidden="true">checkroom</span><div><small>Produtos</small><strong>{selectedCampaignModels.map((model) => model.name === "Comum" ? "Padrão" : model.name).join(" e ") || "Nenhum corte"}</strong><p>{summaryColorCount} {summaryColorCount === 1 ? "cor" : "cores"} · {summarySizeCount} {summarySizeCount === 1 ? "tamanho" : "tamanhos"}</p></div><button type="button" onClick={() => goToCampaignStep("products")}>Editar</button></article>
+                    <article><span className="material-symbols-rounded" aria-hidden="true">sell</span><div><small>Cupom</small><strong>{couponEnabled ? couponCode || "Código não informado" : "Sem cupom"}</strong><p>{couponEnabled ? selectedCampaignModels.map((model) => `${model.name === "Comum" ? "Padrão" : model.name}: − ${formatCents(Math.round(parseCampaignPrice(couponDiscounts[model.name]) * 100))}`).join(" · ") : "A campanha seguirá com os preços normais"}</p></div><button type="button" onClick={() => goToCampaignStep("products")}>Editar</button></article>
                     <article><span className="material-symbols-rounded" aria-hidden="true">image</span><div><small>Apresentação</small><strong>{mockupEnabled && realPhotosEnabled ? "Mockup e fotos reais" : mockupEnabled ? "Mockup" : realPhotosEnabled ? "Fotos reais" : "Não configurada"}</strong><p>{realPhotosEnabled ? "Fotos e vídeo MP4 disponíveis por cor" : "Arte preparada para o mockup"}</p></div><button type="button" onClick={() => goToCampaignStep("images")}>Editar</button></article>
                   </div>
                   <div className="campaign-review-ready"><span className="material-symbols-rounded" aria-hidden="true">verified</span><div><strong>{editing ? "Tudo pronto para salvar" : "Tudo pronto para publicar"}</strong><p>{editing ? "As alterações serão aplicadas mantendo o mesmo link e código." : "O link privado e o código de acesso serão gerados após a publicação."}</p></div></div>
@@ -2302,6 +2407,7 @@ function Campaigns({ data }: { data: PanelData }) {
                   <div><dt><span className="material-symbols-rounded" aria-hidden="true">checkroom</span>Cortes</dt><dd>{selectedCampaignModels.length || "—"}</dd></div>
                   <div><dt><span className="material-symbols-rounded" aria-hidden="true">palette</span>Cores</dt><dd>{summaryColorCount || "—"}</dd></div>
                   <div><dt><span className="material-symbols-rounded" aria-hidden="true">straighten</span>Tamanhos</dt><dd>{summarySizeCount || "—"}</dd></div>
+                  <div><dt><span className="material-symbols-rounded" aria-hidden="true">sell</span>Cupom</dt><dd>{couponEnabled ? couponCode || "Ativo" : "—"}</dd></div>
                   <div><dt><span className="material-symbols-rounded" aria-hidden="true">image</span>Imagens</dt><dd>{mockupEnabled && realPhotosEnabled ? "Ambos" : mockupEnabled ? "Mockup" : realPhotosEnabled ? "Fotos" : "—"}</dd></div>
                 </dl>
                 <div className="campaign-summary-status"><span className={`material-symbols-rounded ${informationComplete && productsComplete && imagesComplete ? "is-ready" : ""}`} aria-hidden="true">{informationComplete && productsComplete && imagesComplete ? "check_circle" : "pending"}</span><span><strong>{informationComplete && productsComplete && imagesComplete ? "Configuração completa" : "Campanha em preparação"}</strong><small>{formStep === "review" ? "Pronta para a confirmação final" : `Etapa ${campaignFormSteps.findIndex((step) => step.id === formStep) + 1} de 4`}</small></span></div>
@@ -2380,11 +2486,13 @@ function Campaigns({ data }: { data: PanelData }) {
 }
 
 function CampaignSharePanel({ campaign, onClose }: { campaign: PanelCampaign; onClose: () => void }) {
-  const [copied, setCopied] = useState<"" | "code" | "link">("");
+  const [copied, setCopied] = useState<"" | "code" | "link" | "coupon" | "couponLink">("");
   const campaignLink = buildRoute(undefined, campaign.code);
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(campaignLink)}`;
+  const couponLink = campaign.activeCoupon ? buildRoute(undefined, campaign.code, undefined, undefined, campaign.activeCoupon.code) : "";
+  const qrTarget = couponLink || campaignLink;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(qrTarget)}`;
 
-  async function copy(value: string, type: "code" | "link") {
+  async function copy(value: string, type: "code" | "link" | "coupon" | "couponLink") {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(type);
@@ -2400,15 +2508,16 @@ function CampaignSharePanel({ campaign, onClose }: { campaign: PanelCampaign; on
         <div className="campaign-share-options">
           <article><span className="material-symbols-rounded" aria-hidden="true">password</span><div><small>Código da campanha</small><strong>{campaign.code}</strong></div><button type="button" onClick={() => copy(campaign.code, "code")}><span className="material-symbols-rounded" aria-hidden="true">content_copy</span>Copiar</button></article>
           <article><span className="material-symbols-rounded" aria-hidden="true">link</span><div><small>Link privado</small><strong>{campaignLink}</strong></div><button type="button" onClick={() => copy(campaignLink, "link")}><span className="material-symbols-rounded" aria-hidden="true">content_copy</span>Copiar</button></article>
+          {campaign.activeCoupon && <><article><span className="material-symbols-rounded" aria-hidden="true">sell</span><div><small>Cupom de desconto</small><strong>{campaign.activeCoupon.code}</strong></div><button type="button" onClick={() => copy(campaign.activeCoupon!.code, "coupon")}><span className="material-symbols-rounded" aria-hidden="true">content_copy</span>Copiar</button></article><article><span className="material-symbols-rounded" aria-hidden="true">link</span><div><small>Link com cupom aplicado</small><strong>{couponLink}</strong></div><button type="button" onClick={() => copy(couponLink, "couponLink")}><span className="material-symbols-rounded" aria-hidden="true">content_copy</span>Copiar</button></article></>}
           <dl className="campaign-share-sizes">
             <div><dt>Fase</dt><dd>{phaseMeta[campaign.phase].label}</dd></div>
             <div><dt>Prazo</dt><dd>{campaign.deadlineLabel}</dd></div>
             <div><dt>Representante</dt><dd>{campaign.representative}</dd></div>
           </dl>
           <a href={campaignLink} target="_blank" rel="noreferrer">Abrir página da campanha<span className="material-symbols-rounded" aria-hidden="true">open_in_new</span></a>
-          <p role="status" aria-live="polite">{copied === "code" ? "Código copiado." : copied === "link" ? "Link privado copiado." : "O acesso não aparece na página pública."}</p>
+          <p role="status" aria-live="polite">{copied === "code" ? "Código copiado." : copied === "link" ? "Link privado copiado." : copied === "coupon" ? "Cupom copiado." : copied === "couponLink" ? "Link com cupom copiado." : "O acesso não aparece na página pública."}</p>
         </div>
-        <figure><img src={qrUrl} alt={`QR Code de acesso à campanha ${campaign.title}`} /><figcaption><strong>QR Code da campanha</strong><span>O representante pode colocar este código nos materiais da turma.</span></figcaption></figure>
+        <figure><img src={qrUrl} alt={`QR Code de acesso à campanha ${campaign.title}`} /><figcaption><strong>{campaign.activeCoupon ? "QR Code com cupom" : "QR Code da campanha"}</strong><span>{campaign.activeCoupon ? "Ao abrir, o desconto já será aplicado aos preços de cada corte." : "O representante pode colocar este código nos materiais da turma."}</span></figcaption></figure>
       </div>
     </section>
   );

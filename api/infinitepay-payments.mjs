@@ -10,6 +10,14 @@ import {
 const provider = "infinitepay";
 const staleLockMinutes = 10;
 const retryDelayMinutes = 2;
+const maxPendingEventsPerOrder = 4;
+const maxEventsPerOrderPerDay = 8;
+const maxReconciliationAttempts = 6;
+const deadLetterRetentionDays = 30;
+const deadLetterCleanupIntervalMs = 60 * 60 * 1000;
+let lastDeadLetterCleanupAt = 0;
+
+class TerminalPaymentStateError extends Error {}
 
 export class PaymentIntegrationError extends Error {
   constructor(status, code, message, details) {
@@ -76,7 +84,8 @@ export async function createCheckoutForOrder(orderNumber, whatsapp) {
   }
 
   const [items] = await pool.execute(
-    `SELECT oi.quantity, oi.unit_price_cents, sm.name AS model_name, co.name AS color_name, sz.code AS size_code
+    `SELECT oi.quantity, oi.unit_price_cents, oi.unit_discount_cents,
+            sm.name AS model_name, co.name AS color_name, sz.code AS size_code
        FROM order_items oi
        JOIN campaign_variants cv ON cv.id = oi.campaign_variant_id
        JOIN shirt_models sm ON sm.id = cv.shirt_model_id
@@ -86,7 +95,7 @@ export async function createCheckoutForOrder(orderNumber, whatsapp) {
     [order.id],
   );
   const computedTotal = items.reduce(
-    (total, item) => total + Number(item.quantity) * Number(item.unit_price_cents),
+    (total, item) => total + Number(item.quantity) * (Number(item.unit_price_cents) - Number(item.unit_discount_cents)),
     0,
   );
   if (items.length === 0 || computedTotal !== Number(order.total_cents)) {
@@ -120,7 +129,7 @@ export async function createCheckoutForOrder(orderNumber, whatsapp) {
       },
       items: items.map((item) => ({
         quantity: Number(item.quantity),
-        unitPriceCents: Number(item.unit_price_cents),
+        unitPriceCents: Number(item.unit_price_cents) - Number(item.unit_discount_cents),
         description: `${item.model_name} - ${item.color_name} - ${item.size_code}`.slice(0, 120),
       })),
       redirectUrl: publicUrl({ rota: "acompanhar-pedido", pedido: order.order_number }),
@@ -156,35 +165,107 @@ export async function enqueueInfinitePayEvent(payload, source = "webhook") {
     }
     throw error;
   }
-  const [orders] = await pool.execute("SELECT id FROM orders WHERE order_number = ? LIMIT 1", [event.orderNsu]);
-  if (orders.length === 0) {
-    throw new PaymentIntegrationError(400, "ORDER_NOT_FOUND", "Pedido informado pela InfinitePay não existe.");
-  }
   const canonicalPayload = {
-    ...event.raw,
     order_nsu: event.orderNsu,
     transaction_nsu: event.transactionNsu,
     invoice_slug: event.invoiceSlug,
     receipt_url: event.receiptUrl,
+    ...(event.amount === null ? {} : { amount: event.amount }),
+    ...(event.paidAmount === null ? {} : { paid_amount: event.paidAmount }),
+    ...(event.captureMethod === null ? {} : { capture_method: event.captureMethod }),
   };
-  const [insert] = await pool.execute(
-    `INSERT IGNORE INTO payment_events
-      (provider, provider_event_id, event_type, signature_valid, payload, available_at)
-     VALUES (?, ?, ?, FALSE, ?, CURRENT_TIMESTAMP(3))`,
-    [provider, event.transactionNsu, source === "webhook" ? "payment_approved" : "browser_reconciliation", JSON.stringify(canonicalPayload)],
-  );
-  return { accepted: true, duplicate: insert.affectedRows === 0 };
+  return withTransaction(async (connection) => {
+    // O bloqueio do pedido serializa a contagem e a inserção, impedindo que
+    // requisições concorrentes ultrapassem os limites da fila.
+    const [orders] = await connection.execute(
+      `SELECT id, status, payment_status
+         FROM orders
+        WHERE order_number = ?
+        LIMIT 1 FOR UPDATE`,
+      [event.orderNsu],
+    );
+    if (orders.length === 0) {
+      throw new PaymentIntegrationError(400, "ORDER_NOT_FOUND", "Pedido informado pela InfinitePay não existe.");
+    }
+    const order = orders[0];
+
+    const [duplicates] = await connection.execute(
+      "SELECT id FROM payment_events WHERE provider = ? AND provider_event_id = ? LIMIT 1",
+      [provider, event.transactionNsu],
+    );
+    if (duplicates.length > 0) return { accepted: true, duplicate: true };
+
+    const [checkouts] = await connection.execute(
+      `SELECT status
+         FROM payment_checkouts
+        WHERE order_id = ? AND provider = ? AND checkout_url IS NOT NULL
+        LIMIT 1`,
+      [order.id, provider],
+    );
+    if (order.status !== "active" || !["pending", "failed"].includes(order.payment_status) || checkouts[0]?.status !== "pending") {
+      throw new PaymentIntegrationError(
+        409,
+        "PAYMENT_EVENT_NOT_EXPECTED",
+        "Este pedido não possui um checkout pendente para reconciliação.",
+      );
+    }
+
+    const [queueRows] = await connection.execute(
+      `SELECT
+         SUM(processed_at IS NULL AND dead_lettered_at IS NULL) AS pending_count,
+         SUM(received_at >= DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 1 DAY)) AS recent_count
+       FROM payment_events
+       WHERE provider = ? AND order_id = ?`,
+      [provider, order.id],
+    );
+    const pendingCount = Number(queueRows[0]?.pending_count ?? 0);
+    const recentCount = Number(queueRows[0]?.recent_count ?? 0);
+    if (pendingCount >= maxPendingEventsPerOrder || recentCount >= maxEventsPerOrderPerDay) {
+      throw new PaymentIntegrationError(
+        429,
+        "PAYMENT_EVENT_QUEUE_LIMIT",
+        "Muitas tentativas de reconciliação foram recebidas para este pedido. Aguarde a confirmação automática.",
+      );
+    }
+
+    const [insert] = await connection.execute(
+      `INSERT IGNORE INTO payment_events
+        (provider, order_id, provider_event_id, event_type, signature_valid, payload, available_at)
+       VALUES (?, ?, ?, ?, FALSE, ?, CURRENT_TIMESTAMP(3))`,
+      [
+        provider,
+        order.id,
+        event.transactionNsu,
+        source === "webhook" ? "payment_approved" : "browser_reconciliation",
+        JSON.stringify(canonicalPayload),
+      ],
+    );
+    return { accepted: true, duplicate: insert.affectedRows === 0 };
+  });
 }
 
 function queueCondition() {
-  return `processed_at IS NULL AND available_at <= CURRENT_TIMESTAMP(3)
+  return `processed_at IS NULL AND dead_lettered_at IS NULL AND available_at <= CURRENT_TIMESTAMP(3)
     AND (locked_at IS NULL OR locked_at < DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL ${staleLockMinutes} MINUTE))`;
 }
 
+async function pruneExpiredDeadLetters() {
+  const now = Date.now();
+  if (now - lastDeadLetterCleanupAt < deadLetterCleanupIntervalMs) return;
+  lastDeadLetterCleanupAt = now;
+  await pool.execute(
+    `DELETE FROM payment_events
+      WHERE dead_lettered_at IS NOT NULL
+        AND dead_lettered_at < DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL ${deadLetterRetentionDays} DAY)
+      LIMIT 500`,
+  );
+}
+
 export async function processInfinitePayEvents({ limit = 10 } = {}) {
+  await pruneExpiredDeadLetters();
   const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit), 10) || 10));
   const [candidates] = await pool.execute(
-    `SELECT id FROM payment_events WHERE provider = ? AND ${queueCondition()} ORDER BY available_at, id LIMIT ${safeLimit}`,
+    `SELECT id, attempts FROM payment_events WHERE provider = ? AND ${queueCondition()} ORDER BY available_at, id LIMIT ${safeLimit}`,
     [provider],
   );
   const result = { processed: 0, paid: 0, failed: 0 };
@@ -224,6 +305,11 @@ export async function processInfinitePayEvents({ limit = 10 } = {}) {
         );
         if (orders.length !== 1) throw new Error("Pedido do pagamento não existe.");
         const order = orders[0];
+        if (order.status !== "active" || !["pending", "failed"].includes(order.payment_status)) {
+          throw new TerminalPaymentStateError(
+            `Pedido não aceita pagamento: status=${order.status}, payment_status=${order.payment_status}.`,
+          );
+        }
         if (Number(order.total_cents) !== checkedAmount) {
           throw new Error(`Valor divergente: pedido=${order.total_cents}, InfinitePay=${checkedAmount}.`);
         }
@@ -243,11 +329,14 @@ export async function processInfinitePayEvents({ limit = 10 } = {}) {
              raw_response = VALUES(raw_response), confirmed_at = COALESCE(confirmed_at, CURRENT_TIMESTAMP(3))`,
           [order.id, provider, event.invoiceSlug, event.transactionNsu, checkedAmount, rawResponse],
         );
-        await connection.execute(
+        const [orderUpdate] = await connection.execute(
           `UPDATE orders SET payment_status = 'paid', paid_at = COALESCE(paid_at, CURRENT_TIMESTAMP(3))
-            WHERE id = ? AND payment_status IN ('pending', 'failed')`,
+            WHERE id = ? AND status = 'active' AND payment_status IN ('pending', 'failed')`,
           [order.id],
         );
+        if (orderUpdate.affectedRows !== 1) {
+          throw new TerminalPaymentStateError("O estado do pedido mudou durante a confirmação do pagamento.");
+        }
         await connection.execute(
           `UPDATE payment_checkouts SET status = 'paid', locked_at = NULL, last_error = NULL
             WHERE order_id = ? AND provider = ?`,
@@ -261,13 +350,30 @@ export async function processInfinitePayEvents({ limit = 10 } = {}) {
       });
       result.paid += 1;
     } catch (error) {
-      await pool.execute(
-        `UPDATE payment_events
-            SET locked_at = NULL, processing_error = ?,
-                available_at = DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ${retryDelayMinutes} MINUTE)
-          WHERE id = ? AND processed_at IS NULL`,
-        [String(error?.message ?? error).slice(0, 500), candidate.id],
-      );
+      const processingError = String(error?.message ?? error).slice(0, 500);
+      const attempts = Number(candidate.attempts) + 1;
+      if (error instanceof TerminalPaymentStateError || attempts >= maxReconciliationAttempts) {
+        await pool.execute(
+          `UPDATE payment_events
+              SET locked_at = NULL, processing_error = ?, dead_lettered_at = CURRENT_TIMESTAMP(3)
+            WHERE id = ? AND processed_at IS NULL AND dead_lettered_at IS NULL`,
+          [
+            (error instanceof TerminalPaymentStateError
+              ? `Reconciliação encerrada. ${processingError}`
+              : `Limite de ${maxReconciliationAttempts} tentativas atingido. ${processingError}`).slice(0, 500),
+            candidate.id,
+          ],
+        );
+      } else {
+        const delayMinutes = Math.min(60, retryDelayMinutes * (2 ** Math.max(0, attempts - 1)));
+        const availableAt = new Date(Date.now() + delayMinutes * 60 * 1000);
+        await pool.execute(
+          `UPDATE payment_events
+              SET locked_at = NULL, processing_error = ?, available_at = ?
+            WHERE id = ? AND processed_at IS NULL AND dead_lettered_at IS NULL`,
+          [processingError, availableAt, candidate.id],
+        );
+      }
       result.failed += 1;
       console.error(`Falha ao reconciliar evento InfinitePay ${candidate.id}:`, error);
     }

@@ -62,8 +62,6 @@ export const config = {
     .split(",")
     .map((origin) => origin.trim().replace(/\/+$/, ""))
     .filter(Boolean),
-  adminApiTokenEnabled: booleanFromEnv("ADMIN_API_TOKEN_ENABLED", environment !== "production"),
-  adminApiToken: process.env.ADMIN_API_TOKEN ?? "",
   // Só aceite cabeçalhos de endereço quando a aplicação estiver atrás do proxy
   // reverso controlado pelo operador, como acontece no Web App gerenciado da Hostinger.
   trustProxy: booleanFromEnv("TRUST_PROXY", false),
@@ -133,9 +131,6 @@ export function productionConfigurationErrors() {
   }
   if (config.corsOrigins.some((origin) => !origin.startsWith("https://"))) {
     errors.push("Todas as origens de CORS_ORIGIN precisam usar HTTPS em produção.");
-  }
-  if (config.adminApiTokenEnabled && config.adminApiToken.length < 32) {
-    errors.push("ADMIN_API_TOKEN_ENABLED exige ADMIN_API_TOKEN com pelo menos 32 caracteres.");
   }
   if (!config.trustProxy) {
     errors.push("TRUST_PROXY precisa ser true em produção para os limites por cliente funcionarem atrás do proxy reverso.");

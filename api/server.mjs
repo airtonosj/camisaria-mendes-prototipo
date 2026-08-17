@@ -1,4 +1,4 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { constants as fsConstants, createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -131,7 +131,7 @@ function applyCors(request, response) {
   if (origin && config.corsOrigins.includes(origin)) {
     response.setHeader("Access-Control-Allow-Origin", origin);
     response.setHeader("Vary", "Origin");
-    response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Admin-Token");
+    response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key");
     response.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
   }
 }
@@ -193,26 +193,13 @@ function normalizeWhatsapp(value, field = "customer.whatsapp") {
   return digits;
 }
 
-function hasValidAdminToken(request) {
-  if (!config.adminApiTokenEnabled || !config.adminApiToken) return false;
-  const received = String(request.headers["x-admin-token"] ?? "");
-  if (!received) return false;
-  const expectedHash = createHash("sha256").update(config.adminApiToken).digest();
-  const receivedHash = createHash("sha256").update(received).digest();
-  return timingSafeEqual(expectedHash, receivedHash);
-}
-
 function bearerToken(request) {
   const header = String(request.headers.authorization ?? "");
   const match = header.match(/^Bearer\s+(\S+)$/i);
   return match ? match[1] : "";
 }
 
-/**
- * Aceita duas credenciais: a sessão do navegador, criada no login, e o
- * ADMIN_API_TOKEN, que fica só no servidor para scripts e manutenção. O navegador
- * nunca recebe o token estático — vazá-lo daria acesso total e sem prazo.
- */
+/** Toda ação administrativa exige uma sessão válida, temporária e atribuída a uma conta. */
 async function requireStaff(request) {
   const session = await resolveSession(bearerToken(request));
   if (session) {
@@ -227,11 +214,10 @@ async function requireStaff(request) {
     }
     return session.user;
   }
-  if (hasValidAdminToken(request)) return { id: null, name: "Chave administrativa", email: null, role: "camisaria" };
   throw new ApiError(401, "UNAUTHORIZED", "Faça login para acessar o painel.");
 }
 
-/** Mexer na própria conta exige sessão de login: a chave de manutenção não tem dono. */
+/** Mexer na própria conta exige uma sessão de login válida. */
 async function requireSessionUser(request) {
   const session = await resolveSession(bearerToken(request));
   if (!session) throw new ApiError(401, "UNAUTHORIZED", "Entre novamente para alterar a conta.");
@@ -244,6 +230,8 @@ const loginWindowMs = 10 * 60 * 1000;
 const maxLoginAttempts = 8;
 const orderWindowMs = 10 * 60 * 1000;
 const maxOrderAttempts = 20;
+const paymentEventWindowMs = 10 * 60 * 1000;
+const maxPaymentEventAttempts = 120;
 
 function clientAddress(request) {
   const socketAddress = String(request.socket.remoteAddress ?? "desconhecido").slice(0, 64);
@@ -485,6 +473,180 @@ function parseDeadline(value) {
   return parsed;
 }
 
+function normalizeCouponCode(value) {
+  const code = String(value ?? "").trim().toUpperCase().replace(/\s+/g, "-");
+  if (!/^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(code)) {
+    throw new ApiError(422, "INVALID_COUPON_CODE", "Use um cupom de 3 a 32 caracteres, com letras, números, hífen ou sublinhado.");
+  }
+  return code;
+}
+
+function parseCouponConfig(value) {
+  if (value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(422, "VALIDATION_ERROR", "Configure o cupom ou envie null para removê-lo.");
+  }
+  const expiresAt = value.expiresAt ? new Date(value.expiresAt) : null;
+  if (expiresAt && Number.isNaN(expiresAt.getTime())) {
+    throw new ApiError(422, "VALIDATION_ERROR", "Informe uma data de validade válida para o cupom.");
+  }
+  const usageLimit = value.usageLimit === null || value.usageLimit === undefined || value.usageLimit === ""
+    ? null
+    : parsePositiveInteger(value.usageLimit, "coupon.usageLimit", 1_000_000);
+  if (!Array.isArray(value.discounts) || value.discounts.length < 1 || value.discounts.length > 4) {
+    throw new ApiError(422, "VALIDATION_ERROR", "Defina o desconto do cupom para cada corte ativo.");
+  }
+  const discounts = value.discounts.map((discount, index) => {
+    if (!discount || typeof discount !== "object") {
+      throw new ApiError(422, "VALIDATION_ERROR", `Desconto ${index + 1} do cupom inválido.`);
+    }
+    return {
+      modelCode: requireText(discount.modelCode, `coupon.discounts[${index}].modelCode`, 32),
+      discountCents: parsePositiveInteger(discount.discountCents, `coupon.discounts[${index}].discountCents`, 10_000_000),
+    };
+  });
+  if (new Set(discounts.map((discount) => discount.modelCode)).size !== discounts.length) {
+    throw new ApiError(422, "VALIDATION_ERROR", "Há cortes repetidos na configuração do cupom.");
+  }
+  return {
+    code: normalizeCouponCode(value.code),
+    discounts,
+    expiresAt,
+    usageLimit,
+  };
+}
+
+async function couponUsageCount(executor, couponId) {
+  const [rows] = await executor.execute(
+    `SELECT COUNT(*) AS used_count
+       FROM coupon_redemptions cr
+       JOIN orders o ON o.id = cr.order_id AND o.status = 'active'
+      WHERE cr.coupon_id = ?`,
+    [couponId],
+  );
+  return Number(rows[0]?.used_count ?? 0);
+}
+
+async function couponDiscounts(executor, couponId) {
+  const [rows] = await executor.execute(
+    `SELECT ccd.shirt_model_id, sm.code AS model_code, sm.name AS model_name, ccd.discount_cents
+       FROM campaign_coupon_discounts ccd
+       JOIN shirt_models sm ON sm.id = ccd.shirt_model_id
+      WHERE ccd.coupon_id = ?
+      ORDER BY sm.sort_order`,
+    [couponId],
+  );
+  return rows.map((row) => ({
+    modelId: Number(row.shirt_model_id),
+    modelCode: row.model_code,
+    modelName: row.model_name,
+    discountCents: Number(row.discount_cents),
+  }));
+}
+
+function couponPayload(row, usedCount, discounts) {
+  if (!row) return null;
+  return {
+    code: row.code,
+    discounts,
+    expiresAt: row.expires_at,
+    usageLimit: row.usage_limit === null ? null : Number(row.usage_limit),
+    usedCount,
+    remainingUses: row.usage_limit === null ? null : Math.max(0, Number(row.usage_limit) - usedCount),
+  };
+}
+
+async function activeCampaignCoupon(executor, campaignId) {
+  const [rows] = await executor.execute(
+    `SELECT id, code, expires_at, usage_limit
+       FROM campaign_coupons
+      WHERE campaign_id = ? AND active = TRUE
+      ORDER BY updated_at DESC, id DESC LIMIT 1`,
+    [campaignId],
+  );
+  if (rows.length === 0) return null;
+  return couponPayload(
+    rows[0],
+    await couponUsageCount(executor, rows[0].id),
+    await couponDiscounts(executor, rows[0].id),
+  );
+}
+
+async function validateActiveCoupon(executor, campaignId, rawCode, { lock = false } = {}) {
+  const code = normalizeCouponCode(rawCode);
+  const [rows] = await executor.execute(
+    `SELECT id, code, expires_at, usage_limit
+       FROM campaign_coupons
+      WHERE campaign_id = ? AND code = ? AND active = TRUE
+      LIMIT 1${lock ? " FOR UPDATE" : ""}`,
+    [campaignId, code],
+  );
+  if (rows.length === 0) throw new ApiError(404, "COUPON_NOT_FOUND", "Este cupom não está disponível para a campanha.");
+  const coupon = rows[0];
+  if (coupon.expires_at && new Date(coupon.expires_at).getTime() < Date.now()) {
+    throw new ApiError(410, "COUPON_EXPIRED", "Este cupom já expirou.");
+  }
+  const usedCount = await couponUsageCount(executor, coupon.id);
+  if (coupon.usage_limit !== null && usedCount >= Number(coupon.usage_limit)) {
+    throw new ApiError(409, "COUPON_EXHAUSTED", "Este cupom atingiu o limite de utilizações.");
+  }
+  return { ...coupon, usedCount, discounts: await couponDiscounts(executor, coupon.id) };
+}
+
+async function ensureCouponFitsCampaignPrices(connection, campaignId, discounts) {
+  const [rows] = await connection.execute(
+    `SELECT cv.shirt_model_id, sm.code AS model_code, sm.name AS model_name,
+            MIN(cv.unit_price_cents) AS minimum_price
+       FROM campaign_variants cv
+       JOIN shirt_models sm ON sm.id = cv.shirt_model_id
+      WHERE cv.campaign_id = ? AND cv.active = TRUE
+      GROUP BY cv.shirt_model_id, sm.code, sm.name`,
+    [campaignId],
+  );
+  const discountsByModel = new Map(discounts.map((discount) => [discount.modelCode, discount.discountCents]));
+  if (rows.length !== discountsByModel.size || rows.some((row) => !discountsByModel.has(row.model_code))) {
+    throw new ApiError(422, "COUPON_MODEL_MISMATCH", "Defina exatamente um desconto para cada corte ativo da campanha.");
+  }
+  for (const row of rows) {
+    if (discountsByModel.get(row.model_code) >= Number(row.minimum_price)) {
+      throw new ApiError(422, "COUPON_DISCOUNT_TOO_HIGH", `O desconto de ${row.model_name} precisa ser menor que o preço desse corte.`);
+    }
+  }
+  return new Map(rows.map((row) => [row.model_code, Number(row.shirt_model_id)]));
+}
+
+async function applyCampaignCoupon(connection, campaignId, value) {
+  const coupon = parseCouponConfig(value);
+  await connection.execute("UPDATE campaign_coupons SET active = FALSE WHERE campaign_id = ? AND active = TRUE", [campaignId]);
+  if (!coupon) return;
+  const modelIds = await ensureCouponFitsCampaignPrices(connection, campaignId, coupon.discounts);
+  const [existing] = await connection.execute(
+    "SELECT id FROM campaign_coupons WHERE campaign_id = ? AND code = ? LIMIT 1 FOR UPDATE",
+    [campaignId, coupon.code],
+  );
+  let couponId;
+  if (existing.length > 0) {
+    couponId = existing[0].id;
+    await connection.execute(
+      "UPDATE campaign_coupons SET expires_at = ?, usage_limit = ?, active = TRUE WHERE id = ?",
+      [coupon.expiresAt, coupon.usageLimit, couponId],
+    );
+    await connection.execute("DELETE FROM campaign_coupon_discounts WHERE coupon_id = ?", [couponId]);
+  } else {
+    const [created] = await connection.execute(
+      "INSERT INTO campaign_coupons (campaign_id, code, expires_at, usage_limit, active) VALUES (?, ?, ?, ?, TRUE)",
+      [campaignId, coupon.code, coupon.expiresAt, coupon.usageLimit],
+    );
+    couponId = created.insertId;
+  }
+  for (const discount of coupon.discounts) {
+    await connection.execute(
+      "INSERT INTO campaign_coupon_discounts (coupon_id, shirt_model_id, discount_cents) VALUES (?, ?, ?)",
+      [couponId, modelIds.get(discount.modelCode), discount.discountCents],
+    );
+  }
+}
+
 function parseArtRenderMode(value) {
   if (value === "overlay" || value === "variant_mockup" || value === "legacy_mockup") return value;
   throw new ApiError(422, "VALIDATION_ERROR", "O modo de exibição da arte é inválido.");
@@ -596,7 +758,7 @@ function rawVariantArtworkConfig(row) {
   };
 }
 
-async function getCampaign(code) {
+async function getCampaign(code, { includeCoupon = false } = {}) {
   const [campaignRows] = await pool.execute(
     `SELECT id, code, title, subtitle, phase, deadline_at, pickup_instructions,
             representative_name, representative_whatsapp, art_front_url, art_back_url, art_render_mode,
@@ -656,6 +818,7 @@ async function getCampaign(code) {
       ORDER BY co.name, ccv.id`,
     [campaign.id],
   );
+  const activeCoupon = includeCoupon ? await activeCampaignCoupon(pool, campaign.id) : undefined;
   const realPhotosByColorId = new Map();
   for (const row of realPhotoRows) {
     const photos = realPhotosByColorId.get(Number(row.color_id)) ?? [];
@@ -711,12 +874,25 @@ async function getCampaign(code) {
       durationSeconds: row.duration_seconds === null ? null : Number(row.duration_seconds),
       bytes: Number(row.bytes),
     })),
+    ...(includeCoupon ? { activeCoupon } : {}),
     sizes: sizes.map((size) => ({
       model: { code: size.model_code, name: size.model_name },
       code: size.code,
       name: size.name,
       group: size.size_group,
     })),
+  };
+}
+
+async function getPublicCampaignCoupon(campaignCode, rawCouponCode) {
+  const [campaignRows] = await pool.execute("SELECT id FROM campaigns WHERE code = ? LIMIT 1", [campaignCode]);
+  if (campaignRows.length === 0) throw new ApiError(404, "CAMPAIGN_NOT_FOUND", "Campanha não encontrada.");
+  const coupon = await validateActiveCoupon(pool, campaignRows[0].id, rawCouponCode);
+  await ensureCouponFitsCampaignPrices(pool, campaignRows[0].id, coupon.discounts);
+  return {
+    code: coupon.code,
+    discounts: coupon.discounts,
+    expiresAt: coupon.expires_at,
   };
 }
 
@@ -745,6 +921,22 @@ async function listCampaigns() {
       GROUP BY c.id
       ORDER BY c.created_at DESC`,
   );
+  const [couponRows] = await pool.execute(
+    `SELECT cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit,
+            COUNT(CASE WHEN o.status = 'active' THEN 1 END) AS used_count
+       FROM campaign_coupons cc
+       LEFT JOIN coupon_redemptions cr ON cr.coupon_id = cc.id
+      LEFT JOIN orders o ON o.id = cr.order_id
+      WHERE cc.active = TRUE
+      GROUP BY cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit`,
+  );
+  const couponsByCampaign = new Map();
+  for (const row of couponRows) {
+    couponsByCampaign.set(
+      Number(row.campaign_id),
+      couponPayload(row, Number(row.used_count), await couponDiscounts(pool, row.id)),
+    );
+  }
   return rows.map((row) => ({
     id: row.id,
     code: row.code,
@@ -760,6 +952,7 @@ async function listCampaigns() {
     orderCount: Number(row.order_count),
     paidTotalCents: Number(row.paid_total_cents),
     canDelete: Boolean(row.can_delete),
+    activeCoupon: couponsByCampaign.get(Number(row.id)) ?? null,
   }));
 }
 
@@ -1236,10 +1429,11 @@ async function createCampaign(request) {
     if (artworkConfig) await applyArtworkConfig(connection, campaignResult.insertId, artworkConfig);
     if (body.realPhotos !== undefined) await applyRealPhotos(connection, campaignResult.insertId, body.realPhotos);
     if (body.realVideos !== undefined) await applyRealVideos(connection, campaignResult.insertId, body.realVideos);
+    if (body.coupon !== undefined) await applyCampaignCoupon(connection, campaignResult.insertId, body.coupon);
     if (presentation.mockupEnabled) await validateMockupCoverage(connection, campaignResult.insertId);
     if (presentation.realPhotosEnabled) await validateRealPhotoCoverage(connection, campaignResult.insertId);
   });
-  return getCampaign(code);
+  return getCampaign(code, { includeCoupon: true });
 }
 
 /**
@@ -1298,7 +1492,18 @@ async function updateCampaign(request, code) {
         throw new ApiError(409, "CAMPAIGN_NOT_RECEIVING", "Preço, cores e tamanhos só podem mudar enquanto a campanha está recebendo pedidos.");
       }
       await applyCampaignModels(connection, campaign.id, parseCampaignModels(body.models));
+      if (body.coupon === undefined) {
+        const [couponRows] = await connection.execute(
+          "SELECT id FROM campaign_coupons WHERE campaign_id = ? AND active = TRUE ORDER BY updated_at DESC, id DESC LIMIT 1",
+          [campaign.id],
+        );
+        if (couponRows.length > 0) {
+          await ensureCouponFitsCampaignPrices(connection, campaign.id, await couponDiscounts(connection, couponRows[0].id));
+        }
+      }
     }
+
+    if (body.coupon !== undefined) await applyCampaignCoupon(connection, campaign.id, body.coupon);
 
     if (body.artworkConfig !== undefined) {
       orphanCandidates.push(...await applyArtworkConfig(connection, campaign.id, body.artworkConfig));
@@ -1321,7 +1526,7 @@ async function updateCampaign(request, code) {
   if (body.artworkConfig !== undefined || body.realPhotos !== undefined || body.realVideos !== undefined) {
     for (const url of changed.orphanCandidates) await removeOrphanUpload(url);
   }
-  return getCampaign(code);
+  return getCampaign(code, { includeCoupon: true });
 }
 
 /**
@@ -1512,6 +1717,7 @@ async function createOrder(request) {
   const idempotencyKey = requireText(request.headers["idempotency-key"], "Idempotency-Key", 128);
   const body = await readJson(request);
   const campaignCode = requireText(body.campaignCode, "campaignCode", 40).toUpperCase();
+  const couponCode = body.couponCode ? normalizeCouponCode(body.couponCode) : null;
   const customer = body.customer ?? {};
   const customerName = requireText(customer.name, "customer.name", 160);
   const customerWhatsapp = normalizeWhatsapp(customer.whatsapp);
@@ -1585,20 +1791,46 @@ async function createOrder(request) {
       return { ...item, sizeId };
     });
 
-    const totalCents = items.reduce((total, item) => total + prices.get(item.variantId) * item.quantity, 0);
+    const subtotalCents = items.reduce((total, item) => total + prices.get(item.variantId) * item.quantity, 0);
+    let coupon = null;
+    let discountsByModelId = new Map();
+    if (couponCode) {
+      coupon = await validateActiveCoupon(connection, campaign.id, couponCode, { lock: true });
+      await ensureCouponFitsCampaignPrices(connection, campaign.id, coupon.discounts);
+      discountsByModelId = new Map(coupon.discounts.map((discount) => [discount.modelId, discount.discountCents]));
+      if (items.some((item) => (discountsByModelId.get(variantModels.get(item.variantId)) ?? 0) >= prices.get(item.variantId))) {
+        throw new ApiError(409, "COUPON_UNAVAILABLE", "Este cupom não pode ser aplicado a uma das peças escolhidas.");
+      }
+    }
+    const pricedItems = items.map((item) => ({
+      ...item,
+      unitDiscountCents: discountsByModelId.get(variantModels.get(item.variantId)) ?? 0,
+    }));
+    const discountCents = pricedItems.reduce((total, item) => total + item.unitDiscountCents * item.quantity, 0);
+    const totalCents = subtotalCents - discountCents;
     const orderNumber = publicOrderNumber();
 
     const [orderResult] = await connection.execute(
       `INSERT INTO orders
-        (order_number, idempotency_key, campaign_id, customer_name, customer_whatsapp, customer_email, total_cents)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [orderNumber, idempotencyKey, campaign.id, customerName, customerWhatsapp, customerEmail, totalCents],
+        (order_number, idempotency_key, campaign_id, customer_name, customer_whatsapp, customer_email,
+         subtotal_cents, discount_cents, coupon_code, total_cents)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [orderNumber, idempotencyKey, campaign.id, customerName, customerWhatsapp, customerEmail,
+        subtotalCents, discountCents, coupon?.code ?? null, totalCents],
     );
-    for (const item of items) {
+    for (const item of pricedItems) {
       await connection.execute(
-        `INSERT INTO order_items (order_id, campaign_variant_id, size_id, quantity, unit_price_cents)
-         VALUES (?, ?, ?, ?, ?)`,
-        [orderResult.insertId, item.variantId, item.sizeId, item.quantity, prices.get(item.variantId)],
+        `INSERT INTO order_items (order_id, campaign_variant_id, size_id, quantity, unit_price_cents, unit_discount_cents)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [orderResult.insertId, item.variantId, item.sizeId, item.quantity, prices.get(item.variantId), item.unitDiscountCents],
+      );
+    }
+    if (coupon) {
+      await connection.execute(
+        `INSERT INTO coupon_redemptions
+          (coupon_id, order_id, coupon_code, total_discount_cents)
+         VALUES (?, ?, ?, ?)`,
+        [coupon.id, orderResult.insertId, coupon.code, discountCents],
       );
     }
     return { created: true, order: { order_number: orderNumber, total_cents: totalCents, payment_status: "pending" } };
@@ -1622,7 +1854,8 @@ async function trackOrder(requestUrl, orderNumber) {
     // aluno, e não como "pedido não encontrado".
     `SELECT o.id, o.order_number, o.customer_name, o.status, o.cancellation_reason,
             o.payment_status, o.delivery_status,
-            o.total_cents, o.created_at, o.paid_at, o.delivered_at,
+            o.subtotal_cents, o.discount_cents, o.coupon_code, o.total_cents,
+            o.created_at, o.paid_at, o.delivered_at,
             c.code AS campaign_code, c.title AS campaign_title, c.phase AS campaign_phase,
             c.representative_name, c.pickup_instructions, c.art_front_url, c.art_back_url, c.art_render_mode,
             c.art_front_x, c.art_front_y, c.art_front_scale, c.art_front_rotation,
@@ -1637,7 +1870,7 @@ async function trackOrder(requestUrl, orderNumber) {
   const order = rows[0];
   const [items] = await pool.execute(
     `SELECT cv.id AS variant_id, sm.name AS model_name, co.name AS color_name, co.hex_color, sz.code AS size,
-            sz.size_group, oi.quantity, oi.unit_price_cents, oi.line_total_cents,
+            sz.size_group, oi.quantity, oi.unit_price_cents, oi.unit_discount_cents, oi.line_total_cents,
             cva.artwork_mode, cva.front_source, cva.front_url, cva.front_transform_override,
             cva.front_x, cva.front_y, cva.front_scale, cva.front_rotation,
             cva.back_source, cva.back_url, cva.back_transform_override,
@@ -1658,6 +1891,9 @@ async function trackOrder(requestUrl, orderNumber) {
     cancellationReason: order.cancellation_reason,
     paymentStatus: order.payment_status,
     deliveryStatus: order.delivery_status,
+    subtotalCents: order.subtotal_cents,
+    discountCents: order.discount_cents,
+    couponCode: order.coupon_code,
     totalCents: order.total_cents,
     createdAt: order.created_at,
     paidAt: order.paid_at,
@@ -1680,6 +1916,7 @@ async function trackOrder(requestUrl, orderNumber) {
       sizeGroup: item.size_group,
       quantity: item.quantity,
       unitPriceCents: item.unit_price_cents,
+      unitDiscountCents: item.unit_discount_cents,
       lineTotalCents: item.line_total_cents,
       artwork: resolveVariantArtwork(order, item),
     })),
@@ -1694,9 +1931,9 @@ async function listCampaignOrders(code) {
   const [rows] = await pool.execute(
     `SELECT o.order_number, o.customer_name, o.customer_whatsapp, o.customer_email,
             o.status, o.cancellation_reason, o.payment_status, o.delivery_status,
-            o.total_cents, o.created_at,
+            o.subtotal_cents, o.discount_cents, o.coupon_code, o.total_cents, o.created_at,
             sm.name AS model_name, co.name AS color_name, co.hex_color,
-            sz.code AS size, sz.size_group, oi.quantity, oi.unit_price_cents
+            sz.code AS size, sz.size_group, oi.quantity, oi.unit_price_cents, oi.unit_discount_cents
        FROM campaigns c
        JOIN orders o ON o.campaign_id = c.id
        JOIN order_items oi ON oi.order_id = o.id
@@ -1719,6 +1956,9 @@ async function listCampaignOrders(code) {
         cancellationReason: row.cancellation_reason,
         paymentStatus: row.payment_status,
         deliveryStatus: row.delivery_status,
+        subtotalCents: row.subtotal_cents,
+        discountCents: row.discount_cents,
+        couponCode: row.coupon_code,
         totalCents: row.total_cents,
         createdAt: row.created_at,
         items: [],
@@ -1732,6 +1972,7 @@ async function listCampaignOrders(code) {
       sizeGroup: row.size_group,
       quantity: Number(row.quantity),
       unitPriceCents: Number(row.unit_price_cents),
+      unitDiscountCents: Number(row.unit_discount_cents),
       lineTotalCents: Number(row.quantity) * Number(row.unit_price_cents),
     });
   }
@@ -1782,6 +2023,22 @@ async function changeDeliveryStatus(request, orderNumber) {
  * resposta. Pedido pago não é cancelado direto — o reembolso é registrado antes, senão o
  * dinheiro recebido some do histórico junto com o pedido.
  */
+async function closeOrderPaymentLifecycle(connection, orderId, reason) {
+  const message = String(reason).slice(0, 500);
+  await connection.execute(
+    `UPDATE payment_checkouts
+        SET status = 'expired', locked_at = NULL, last_error = ?
+      WHERE order_id = ? AND status <> 'expired'`,
+    [message, orderId],
+  );
+  await connection.execute(
+    `UPDATE payment_events
+        SET dead_lettered_at = CURRENT_TIMESTAMP(3), locked_at = NULL, processing_error = ?
+      WHERE order_id = ? AND processed_at IS NULL AND dead_lettered_at IS NULL`,
+    [message, orderId],
+  );
+}
+
 async function cancelOrder(request, orderNumber) {
   const staff = await requireStaff(request);
   const body = await readJson(request);
@@ -1795,7 +2052,10 @@ async function cancelOrder(request, orderNumber) {
     );
     if (rows.length === 0) throw new ApiError(404, "ORDER_NOT_FOUND", "Pedido não encontrado.");
     const order = rows[0];
-    if (order.status === "cancelled") return { number: orderNumber, status: "cancelled", unchanged: true };
+    if (order.status === "cancelled") {
+      await closeOrderPaymentLifecycle(connection, order.id, "Pedido cancelado; checkout e reconciliação encerrados.");
+      return { number: orderNumber, status: "cancelled", unchanged: true };
+    }
     if (["paid", "partially_refunded"].includes(order.payment_status)) {
       throw new ApiError(
         409,
@@ -1808,6 +2068,7 @@ async function cancelOrder(request, orderNumber) {
          cancellation_reason = ?, cancelled_by_user_id = ? WHERE id = ?`,
       [reason, staff.id, order.id],
     );
+    await closeOrderPaymentLifecycle(connection, order.id, "Pedido cancelado; checkout e reconciliação encerrados.");
     return { number: orderNumber, status: "cancelled", reason, unchanged: false };
   });
 }
@@ -1891,6 +2152,7 @@ async function registerOrderRefund(request, orderNumber) {
        WHERE id = ?`,
       [`Reembolso integral: ${reason}`.slice(0, 500), staff.id, order.id],
     );
+    await closeOrderPaymentLifecycle(connection, order.id, "Pedido reembolsado; checkout e reconciliação encerrados.");
     return {
       number: orderNumber,
       status: "cancelled",
@@ -2256,6 +2518,16 @@ async function route(request, response) {
     sendJson(response, 201, await uploadVideo(request));
     return;
   }
+  const publicCouponMatch = path.match(/^\/api\/campaigns\/([^/]+)\/coupon$/);
+  if (request.method === "GET" && publicCouponMatch) {
+    sendJson(response, 200, {
+      coupon: await getPublicCampaignCoupon(
+        publicCouponMatch[1].toUpperCase(),
+        requestUrl.searchParams.get("code") ?? "",
+      ),
+    });
+    return;
+  }
   const publicCampaignMatch = path.match(/^\/api\/campaigns\/([^/]+)$/);
   if (request.method === "GET" && publicCampaignMatch) {
     sendJson(response, 200, { campaign: await getCampaign(publicCampaignMatch[1].toUpperCase()) });
@@ -2291,11 +2563,27 @@ async function route(request, response) {
     return;
   }
   if (request.method === "POST" && path === "/api/payments/infinitepay/webhook") {
+    const attemptKey = `payment-event:${clientAddress(request)}`;
+    assertRateLimitAllowed(
+      attemptKey,
+      maxPaymentEventAttempts,
+      paymentEventWindowMs,
+      "Muitos eventos de pagamento recebidos. Tente novamente em alguns minutos.",
+    );
+    registerRateLimitedAttempt(attemptKey, paymentEventWindowMs);
     const queued = await enqueueInfinitePayEvent(await readJson(request), "webhook");
     sendJson(response, 200, { success: true, message: null, ...queued });
     return;
   }
   if (request.method === "POST" && path === "/api/payments/infinitepay/reconcile") {
+    const attemptKey = `payment-event:${clientAddress(request)}`;
+    assertRateLimitAllowed(
+      attemptKey,
+      maxPaymentEventAttempts,
+      paymentEventWindowMs,
+      "Muitos eventos de pagamento recebidos. Tente novamente em alguns minutos.",
+    );
+    registerRateLimitedAttempt(attemptKey, paymentEventWindowMs);
     const queued = await enqueueInfinitePayEvent(await readJson(request), "browser_return");
     sendJson(response, 202, queued);
     return;
@@ -2315,6 +2603,11 @@ async function route(request, response) {
     return;
   }
   const campaignMatch = path.match(/^\/api\/admin\/campaigns\/([^/]+)$/);
+  if (request.method === "GET" && campaignMatch) {
+    await requireStaff(request);
+    sendJson(response, 200, { campaign: await getCampaign(campaignMatch[1].toUpperCase(), { includeCoupon: true }) });
+    return;
+  }
   if (request.method === "PATCH" && campaignMatch) {
     sendJson(response, 200, { campaign: await updateCampaign(request, campaignMatch[1].toUpperCase()) });
     return;
@@ -2380,16 +2673,11 @@ const server = http.createServer((request, response) => {
 
 /**
  * Conferências de inicialização. Nenhuma delas impede a API de subir: elas existem
- * para que um deploy com senha de fábrica, chave curta ou usuário de demonstração
+ * para que um deploy com senha de fábrica ou usuário de demonstração
  * apareça no log em vez de passar despercebido.
  */
 async function reportStartupChecks() {
   const warnings = [];
-  if (config.adminApiTokenEnabled && !config.adminApiToken) {
-    warnings.push("ADMIN_API_TOKEN_ENABLED está ativo, mas a chave de manutenção não foi configurada.");
-  } else if (config.adminApiTokenEnabled && config.adminApiToken.length < 32) {
-    warnings.push("ADMIN_API_TOKEN tem menos de 32 caracteres. Desabilite a chave ou gere uma chave longa.");
-  }
   if (!config.payments.infinitePay.handle) {
     warnings.push("INFINITEPAY_HANDLE não configurada: o checkout ainda não pode identificar a conta da camisaria.");
   }

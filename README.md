@@ -71,8 +71,8 @@ Estão ligadas ao banco as telas do aluno (abrir a campanha pelo código, montar
 O painel exige login com sessão no servidor.
 
 Em produção, a API falha antes de abrir a porta quando faltam configurações críticas. O
-painel aceita apenas contas da Camisaria, a chave administrativa estática fica desabilitada
-por padrão e as artes usam um caminho persistente definido por `UPLOADS_DIR`.
+painel aceita apenas sessões temporárias de contas da Camisaria e as artes usam um caminho
+persistente definido por `UPLOADS_DIR`.
 
 Consulte [docs/backend-mysql.md](docs/backend-mysql.md) para preparar o banco e executar a API, e [docs/deploy.md](docs/deploy.md) para publicar na Hostinger.
 O procedimento de release, backup, health check e rollback fica em [docs/runbook-operacional.md](docs/runbook-operacional.md).

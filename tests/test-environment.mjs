@@ -41,7 +41,10 @@ export function testEnvironment() {
     DB_NAME: testDatabase,
     CORS_ORIGIN: `http://127.0.0.1:${base.TEST_WEB_PORT || "4175"}`,
     PUBLIC_APP_URL: `http://127.0.0.1:${base.TEST_WEB_PORT || "4175"}`,
-    ADMIN_API_TOKEN_ENABLED: "false",
+    // Mesmo que um deploy antigo ainda injete estas variáveis, a chave estática não
+    // pode voltar a funcionar como uma sessão administrativa.
+    ADMIN_API_TOKEN_ENABLED: "true",
+    ADMIN_API_TOKEN: "token-estatico-de-regressao-com-mais-de-trinta-e-dois-caracteres",
     UPLOADS_DIR: path.join(os.tmpdir(), "camisaria-mendes-tests", testDatabase, "uploads"),
     SMTP_HOST: "",
     SMTP_USER: "",

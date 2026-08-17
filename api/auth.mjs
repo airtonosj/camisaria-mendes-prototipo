@@ -4,6 +4,7 @@ import { pool } from "./database.mjs";
 const scryptParameters = { N: 16384, r: 8, p: 1 };
 const keyLength = 64;
 const sessionHours = 12;
+const absoluteSessionDays = 7;
 const resetTokenMinutes = 60;
 
 export const minimumPasswordLength = 8;
@@ -41,23 +42,37 @@ function tokenHash(token) {
 
 export async function createSession(userId) {
   const token = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(Date.now() + sessionHours * 60 * 60 * 1000);
   await pool.execute(
-    "INSERT INTO staff_sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
-    [tokenHash(token), userId, expiresAt],
+    `INSERT INTO staff_sessions (token_hash, user_id, expires_at)
+     VALUES (?, ?, DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ${sessionHours} HOUR))`,
+    [tokenHash(token), userId],
   );
   // Aproveita o login para limpar sessões vencidas, dispensando rotina agendada.
-  await pool.execute("DELETE FROM staff_sessions WHERE expires_at < CURRENT_TIMESTAMP(3)");
-  return { token, expiresAt };
+  await pool.execute(
+    `DELETE FROM staff_sessions
+      WHERE expires_at < CURRENT_TIMESTAMP(3)
+         OR created_at <= DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL ${absoluteSessionDays} DAY)`,
+  );
+  return { token, expiresAt: new Date(Date.now() + sessionHours * 60 * 60 * 1000) };
 }
 
 export async function resolveSession(token) {
   if (!token) return null;
   const [rows] = await pool.execute(
-    `SELECT s.id, s.expires_at, u.id AS user_id, u.name, u.email, u.role, u.must_change_password
+    `SELECT s.id,
+            TIMESTAMPDIFF(MICROSECOND, CURRENT_TIMESTAMP(3), s.expires_at) / 1000 AS idle_remaining_ms,
+            TIMESTAMPDIFF(
+              MICROSECOND,
+              CURRENT_TIMESTAMP(3),
+              DATE_ADD(s.created_at, INTERVAL ${absoluteSessionDays} DAY)
+            ) / 1000 AS absolute_remaining_ms,
+            u.id AS user_id, u.name, u.email, u.role, u.must_change_password
        FROM staff_sessions s
        JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = ? AND s.expires_at > CURRENT_TIMESTAMP(3) AND u.active = TRUE
+      WHERE s.token_hash = ?
+        AND s.expires_at > CURRENT_TIMESTAMP(3)
+        AND s.created_at > DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL ${absoluteSessionDays} DAY)
+        AND u.active = TRUE
       LIMIT 1`,
     [tokenHash(token)],
   );
@@ -70,13 +85,33 @@ export async function resolveSession(token) {
    * requisição, para não escrever no banco a toda chamada de uma tela que atualiza
    * sozinha. Quem parar de usar continua expirando no prazo normal.
    */
-  let expiresAt = session.expires_at;
-  const remainingMs = new Date(expiresAt).getTime() - Date.now();
-  if (remainingMs < (sessionHours * 60 * 60 * 1000) / 2) {
-    expiresAt = new Date(Date.now() + sessionHours * 60 * 60 * 1000);
+  const sessionMs = sessionHours * 60 * 60 * 1000;
+  const absoluteRemainingMs = Number(session.absolute_remaining_ms);
+  const idleRemainingMs = Number(session.idle_remaining_ms);
+  let remainingMs = Math.min(idleRemainingMs, absoluteRemainingMs);
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+    await pool.execute("DELETE FROM staff_sessions WHERE id = ?", [session.id]);
+    return null;
+  }
+  if (remainingMs < sessionMs / 2) {
+    remainingMs = Math.min(sessionMs, absoluteRemainingMs);
     await pool.execute(
-      "UPDATE staff_sessions SET expires_at = ?, last_seen_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
-      [expiresAt, session.id],
+      `UPDATE staff_sessions
+          SET expires_at = LEAST(
+                DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL ${sessionHours} HOUR),
+                DATE_ADD(created_at, INTERVAL ${absoluteSessionDays} DAY)
+              ),
+              last_seen_at = CURRENT_TIMESTAMP(3)
+        WHERE id = ?`,
+      [session.id],
+    );
+  } else if (idleRemainingMs > absoluteRemainingMs) {
+    await pool.execute(
+      `UPDATE staff_sessions
+          SET expires_at = DATE_ADD(created_at, INTERVAL ${absoluteSessionDays} DAY),
+              last_seen_at = CURRENT_TIMESTAMP(3)
+        WHERE id = ?`,
+      [session.id],
     );
   } else {
     await pool.execute("UPDATE staff_sessions SET last_seen_at = CURRENT_TIMESTAMP(3) WHERE id = ?", [session.id]);
@@ -84,7 +119,7 @@ export async function resolveSession(token) {
 
   return {
     sessionId: session.id,
-    expiresAt,
+    expiresAt: new Date(Date.now() + remainingMs),
     user: {
       id: session.user_id,
       name: session.name,

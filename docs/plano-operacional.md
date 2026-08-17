@@ -44,7 +44,7 @@ uma fase por vez e só seguir quando os critérios de saída da fase atual estiv
 - Produção recusa configurações sem HTTPS, SMTP, usuário MySQL restrito ou uploads persistentes.
   O checkout pode e deve permanecer fechado durante a homologação externa.
 - `PAYMENT_PROVIDER` permanece `infinitepay`; a trava de checkout fica falsa até a fase final.
-- A chave estática administrativa fica desabilitada por padrão em produção.
+- Não existe chave administrativa estática; toda operação exige sessão temporária atribuída.
 - Somente `role = 'camisaria'` pode criar sessão e acessar rotas administrativas.
 - `UPLOADS_DIR` define o armazenamento persistente e também participa do health check.
 - Troca de conta, senha, consumo de token e encerramento de sessões são transacionais.

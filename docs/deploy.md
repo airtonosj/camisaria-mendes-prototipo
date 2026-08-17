@@ -55,8 +55,6 @@ API_HOST=127.0.0.1
 API_PORT=3333
 CORS_ORIGIN=https://seudominio.com.br
 PUBLIC_APP_URL=https://seudominio.com.br
-ADMIN_API_TOKEN=<32+ caracteres aleatórios>
-ADMIN_API_TOKEN_ENABLED=false
 
 DB_HOST=127.0.0.1
 DB_NAME=camisaria_mendes
@@ -88,15 +86,14 @@ Gere o token com:
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-A API avisa no boot quando o token é curto, quando a InfiniteTag está vazia, quando o
+A API avisa no boot quando a InfiniteTag está vazia, quando o
 `PUBLIC_APP_URL` aponta para o próprio servidor e quando o usuário de demonstração
 `admin@teste.com` ainda existe no banco. Leia o log da primeira subida.
 
 Em produção essas conferências críticas são bloqueantes: a API não abre a porta se faltar
 HTTPS, SMTP, usuário restrito do banco, diretório persistente de uploads ou se o checkout
-InfinitePay não estiver habilitado. A chave estática de manutenção fica desabilitada por padrão;
-prefira a sessão da Camisaria e só use `ADMIN_API_TOKEN_ENABLED=true` durante uma manutenção
-controlada.
+InfinitePay não estiver habilitado. Painel, scripts e manutenções administrativas devem usar
+uma sessão temporária de uma conta da Camisaria; não existe chave administrativa estática.
 
 ## 4. Instalar e migrar
 

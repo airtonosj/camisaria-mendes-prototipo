@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs/promises";
@@ -35,8 +35,6 @@ function assertInvalidProductionIsRejected() {
       APP_ENV: "production",
       PUBLIC_APP_URL: "http://127.0.0.1:4175",
       CORS_ORIGIN: "http://127.0.0.1:4175",
-      ADMIN_API_TOKEN_ENABLED: "true",
-      ADMIN_API_TOKEN: "curta",
       TRUST_PROXY: "false",
       ADMIN_INITIAL_PASSWORD: "senha-provisoria-a-remover",
       SMTP_HOST: "",
@@ -54,7 +52,7 @@ function assertInvalidProductionIsRejected() {
   });
   assert.equal(result.status, 1, "A API aceitou uma configuração de produção insegura.");
   const output = `${result.stdout}\n${result.stderr}`;
-  for (const expected of ["PUBLIC_APP_URL", "ADMIN_API_TOKEN", "TRUST_PROXY", "ADMIN_INITIAL_PASSWORD", "SMTP_HOST", "DB_USER", "UPLOADS_DIR", "PAYMENT_PROVIDER"]) {
+  for (const expected of ["PUBLIC_APP_URL", "TRUST_PROXY", "ADMIN_INITIAL_PASSWORD", "SMTP_HOST", "DB_USER", "UPLOADS_DIR", "PAYMENT_PROVIDER"]) {
     assert.match(output, new RegExp(expected), `A recusa de produção não mencionou ${expected}.`);
   }
 }
@@ -189,6 +187,196 @@ async function expireCampaignDeadlineForTest(code) {
   }
 }
 
+async function paymentEventsForTest(orderNumber) {
+  const connection = await mysql.createConnection({
+    host: environment.DB_HOST,
+    port: Number.parseInt(environment.DB_PORT || "3306", 10),
+    user: environment.DB_USER,
+    password: environment.DB_PASSWORD || "",
+    database: environment.DB_NAME,
+    charset: "utf8mb4",
+    timezone: "Z",
+  });
+  try {
+    const [rows] = await connection.execute(
+      `SELECT pe.order_id, pe.provider_event_id, pe.payload, pe.attempts,
+              pe.processed_at, pe.dead_lettered_at
+         FROM payment_events pe
+         JOIN orders o ON o.id = pe.order_id
+        WHERE o.order_number = ?
+        ORDER BY pe.id`,
+      [orderNumber],
+    );
+    return rows;
+  } finally {
+    await connection.end();
+  }
+}
+
+async function forcePaymentEventDueForTest(transactionNsu) {
+  const connection = await mysql.createConnection({
+    host: environment.DB_HOST,
+    port: Number.parseInt(environment.DB_PORT || "3306", 10),
+    user: environment.DB_USER,
+    password: environment.DB_PASSWORD || "",
+    database: environment.DB_NAME,
+    charset: "utf8mb4",
+    timezone: "Z",
+  });
+  try {
+    await connection.execute(
+      `UPDATE payment_events SET available_at = CURRENT_TIMESTAMP(3), locked_at = NULL
+        WHERE provider = 'infinitepay' AND provider_event_id = ?`,
+      [transactionNsu],
+    );
+  } finally {
+    await connection.end();
+  }
+}
+
+async function insertFuturePaymentEventForTest(orderNumber, transactionNsu, invoiceSlug, amountCents) {
+  const connection = await mysql.createConnection({
+    host: environment.DB_HOST,
+    port: Number.parseInt(environment.DB_PORT || "3306", 10),
+    user: environment.DB_USER,
+    password: environment.DB_PASSWORD || "",
+    database: environment.DB_NAME,
+    charset: "utf8mb4",
+    timezone: "Z",
+  });
+  try {
+    await connection.execute(
+      `INSERT INTO payment_events
+        (provider, order_id, provider_event_id, event_type, signature_valid, payload, available_at)
+       SELECT 'infinitepay', id, ?, 'payment_approved', FALSE, ?,
+              DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL 1 DAY)
+         FROM orders WHERE order_number = ?`,
+      [
+        transactionNsu,
+        JSON.stringify({ order_nsu: orderNumber, transaction_nsu: transactionNsu, invoice_slug: invoiceSlug, amount: amountCents }),
+        orderNumber,
+      ],
+    );
+  } finally {
+    await connection.end();
+  }
+}
+
+async function paymentLifecycleForTest(orderNumber) {
+  const connection = await mysql.createConnection({
+    host: environment.DB_HOST,
+    port: Number.parseInt(environment.DB_PORT || "3306", 10),
+    user: environment.DB_USER,
+    password: environment.DB_PASSWORD || "",
+    database: environment.DB_NAME,
+    charset: "utf8mb4",
+    timezone: "Z",
+  });
+  try {
+    const [rows] = await connection.execute(
+      `SELECT o.status, o.payment_status, pc.status AS checkout_status,
+              SUM(p.status = 'paid') AS paid_payment_count
+         FROM orders o
+         LEFT JOIN payment_checkouts pc ON pc.order_id = o.id AND pc.provider = 'infinitepay'
+         LEFT JOIN payments p ON p.order_id = o.id
+        WHERE o.order_number = ?
+        GROUP BY o.id, o.status, o.payment_status, pc.status`,
+      [orderNumber],
+    );
+    return rows[0];
+  } finally {
+    await connection.end();
+  }
+}
+
+async function backdateSessionForTest(token) {
+  const connection = await mysql.createConnection({
+    host: environment.DB_HOST,
+    port: Number.parseInt(environment.DB_PORT || "3306", 10),
+    user: environment.DB_USER,
+    password: environment.DB_PASSWORD || "",
+    database: environment.DB_NAME,
+    charset: "utf8mb4",
+    timezone: "Z",
+  });
+  try {
+    await connection.execute(
+      `UPDATE staff_sessions
+          SET created_at = DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 8 DAY),
+              expires_at = DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL 12 HOUR)
+        WHERE token_hash = ?`,
+      [createHash("sha256").update(token).digest("hex")],
+    );
+  } finally {
+    await connection.end();
+  }
+}
+
+async function placeSessionNearAbsoluteLimitForTest(token) {
+  const connection = await mysql.createConnection({
+    host: environment.DB_HOST,
+    port: Number.parseInt(environment.DB_PORT || "3306", 10),
+    user: environment.DB_USER,
+    password: environment.DB_PASSWORD || "",
+    database: environment.DB_NAME,
+    charset: "utf8mb4",
+    timezone: "Z",
+  });
+  try {
+    await connection.execute(
+      `UPDATE staff_sessions
+          SET created_at = DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 167 HOUR),
+              expires_at = DATE_ADD(CURRENT_TIMESTAMP(3), INTERVAL 1 HOUR)
+        WHERE token_hash = ?`,
+      [createHash("sha256").update(token).digest("hex")],
+    );
+  } finally {
+    await connection.end();
+  }
+}
+
+async function forceFinalPaymentAttemptForTest(transactionNsu) {
+  const connection = await mysql.createConnection({
+    host: environment.DB_HOST,
+    port: Number.parseInt(environment.DB_PORT || "3306", 10),
+    user: environment.DB_USER,
+    password: environment.DB_PASSWORD || "",
+    database: environment.DB_NAME,
+    charset: "utf8mb4",
+    timezone: "Z",
+  });
+  try {
+    await connection.execute(
+      `UPDATE payment_events
+          SET attempts = 5, available_at = CURRENT_TIMESTAMP(3), locked_at = NULL
+        WHERE provider = 'infinitepay' AND provider_event_id = ?`,
+      [transactionNsu],
+    );
+  } finally {
+    await connection.end();
+  }
+}
+
+async function waitForDeadLetterForTest(orderNumber, transactionNsu) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const rows = await paymentEventsForTest(orderNumber);
+    const event = rows.find((row) => row.provider_event_id === transactionNsu);
+    if (event?.dead_lettered_at) return event;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error(`Evento ${transactionNsu} não foi encerrado após a tentativa final.`);
+}
+
+async function waitForPaymentEventSettlementForTest(orderNumber, transactionNsu) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const rows = await paymentEventsForTest(orderNumber);
+    const event = rows.find((row) => row.provider_event_id === transactionNsu);
+    if (event?.processed_at || event?.dead_lettered_at) return event;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error(`Evento ${transactionNsu} não alcançou estado terminal.`);
+}
+
 async function request(path, { method = "GET", token, headers = {}, body, expected = 200 } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
@@ -292,7 +480,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "015_campaign_color_videos");
+  assert.equal(health.schema.current, "018_campaign_coupons");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -308,6 +496,11 @@ try {
     expected: 401,
     headers: { "X-Admin-Token": environment.ADMIN_API_TOKEN || "token-local" },
   });
+  await request("/api/admin/campaigns", {
+    expected: 401,
+    token: environment.ADMIN_API_TOKEN,
+  });
+  step("variáveis legadas e X-Admin-Token não concedem acesso administrativo");
   step("login e sessão da camisaria");
 
   await binaryRequest("/api/admin/video-uploads", {
@@ -384,6 +577,15 @@ try {
       { colorName: "Lilás lavanda", url: uploadedVideo.url, posterUrl: null, durationSeconds: 12, bytes: uploadedVideo.bytes },
       { colorName: "Preto", url: uploadedVideoForInactiveColor.url, posterUrl: null, durationSeconds: 8, bytes: uploadedVideoForInactiveColor.bytes },
     ],
+    coupon: {
+      code: "CORES-10",
+      discounts: [
+        { modelCode: "common", discountCents: 1000 },
+        { modelCode: "oversized", discountCents: 1500 },
+      ],
+      expiresAt: "2027-12-20T23:59:59.000Z",
+      usageLimit: 1,
+    },
     models: [
       { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Lilás lavanda", hex: "#8B5CF6" }], sizes: ["P", "M", "EXGG"] },
       { modelCode: "oversized", unitPriceCents: 6990, colors: [{ name: "Preto", hex: "#111315" }], sizes: ["M", "G"] },
@@ -400,7 +602,71 @@ try {
   assert.deepEqual(customCampaign.realPhotos.find((gallery) => gallery.colorName === "Preto").urls, customCampaignPayload.realPhotos[1].urls);
   assert.equal(customCampaign.realVideos.find((video) => video.colorName === "Lilás lavanda").url, uploadedVideo.url);
   assert.ok(customCampaign.sizes.some((size) => size.model.code === "common" && size.code === "EXGG"));
+  assert.equal(Object.hasOwn(customCampaign, "activeCoupon"), false);
   step("campanha aceita e publica cor personalizada com nome e código HEX");
+
+  const adminCustomCampaign = (await request(`/api/admin/campaigns/${customCampaign.code}`, { token })).campaign;
+  assert.equal(adminCustomCampaign.activeCoupon.code, customCampaignPayload.coupon.code);
+  assert.deepEqual(
+    adminCustomCampaign.activeCoupon.discounts.map((discount) => [discount.modelCode, discount.discountCents]),
+    [["common", 1000], ["oversized", 1500]],
+  );
+  const validatedCoupon = (await request(`/api/campaigns/${customCampaign.code}/coupon?code=cores-10`)).coupon;
+  assert.deepEqual(
+    validatedCoupon.discounts.map((discount) => [discount.modelCode, discount.discountCents]),
+    [["common", 1000], ["oversized", 1500]],
+  );
+  const couponCommonVariant = customCampaign.variants.find((candidate) => candidate.model.code === "common");
+  const couponOversizedVariant = customCampaign.variants.find((candidate) => candidate.model.code === "oversized");
+  const couponCommonSize = customCampaign.sizes.find((candidate) => candidate.model.code === "common");
+  const couponOversizedSize = customCampaign.sizes.find((candidate) => candidate.model.code === "oversized");
+  const couponOrderBody = {
+    campaignCode: customCampaign.code,
+    couponCode: "CORES-10",
+    customer: { name: "Cliente com cupom", whatsapp: "5598999992070", email: "cupom@example.com" },
+    items: [
+      { variantId: couponCommonVariant.id, size: couponCommonSize.code, quantity: 1 },
+      { variantId: couponOversizedVariant.id, size: couponOversizedSize.code, quantity: 1 },
+    ],
+  };
+  const discountedOrder = await request("/api/orders", {
+    method: "POST",
+    expected: 201,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: couponOrderBody,
+  });
+  assert.equal(discountedOrder.order.totalCents, 10480);
+  const trackedDiscountedOrder = await request(`/api/orders/${discountedOrder.order.number}?whatsapp=5598999992070`);
+  assert.equal(trackedDiscountedOrder.order.subtotalCents, 12980);
+  assert.equal(trackedDiscountedOrder.order.discountCents, 2500);
+  assert.equal(trackedDiscountedOrder.order.couponCode, "CORES-10");
+  assert.deepEqual(trackedDiscountedOrder.order.items.map((item) => item.unitDiscountCents), [1000, 1500]);
+  await request("/api/orders", {
+    method: "POST",
+    expected: 409,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: { ...couponOrderBody, customer: { ...couponOrderBody.customer, whatsapp: "5598999992071", email: "limite@example.com" } },
+  });
+  await request(`/api/admin/orders/${discountedOrder.order.number}/cancel`, {
+    method: "PATCH",
+    token,
+    body: { reason: "Liberação controlada do limite do cupom" },
+  });
+  const replacementCouponOrder = await request("/api/orders", {
+    method: "POST",
+    expected: 201,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: { ...couponOrderBody, customer: { ...couponOrderBody.customer, whatsapp: "5598999992072", email: "liberado@example.com" } },
+  });
+  assert.equal(replacementCouponOrder.order.totalCents, 10480);
+  await request(`/api/admin/campaigns/${customCampaign.code}`, { method: "PATCH", token, body: { coupon: null } });
+  await request(`/api/campaigns/${customCampaign.code}/coupon?code=CORES-10`, { expected: 404 });
+  const campaignWithoutCoupon = (await request(`/api/admin/campaigns/${customCampaign.code}`, { token })).campaign;
+  assert.equal(campaignWithoutCoupon.activeCoupon, null);
+  const preservedCouponOrder = await request(`/api/orders/${replacementCouponOrder.order.number}?whatsapp=5598999992072`);
+  assert.equal(preservedCouponOrder.order.couponCode, "CORES-10");
+  assert.equal(preservedCouponOrder.order.discountCents, 2500);
+  step("cupom aplica valores distintos por corte, limita pedidos, libera uso cancelado e preserva o histórico após remoção");
 
   const replacementVideo = await binaryRequest("/api/admin/video-uploads", {
     token,
@@ -465,6 +731,7 @@ try {
     artFrontUrl: undefined,
     artRenderMode: undefined,
     artworkConfig: undefined,
+    coupon: null,
     presentationConfig: { mockupEnabled: false, realPhotosEnabled: true },
     models: [{ modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Branco", hex: "#F3F3EF" }], sizes: ["M"] }],
     realPhotos: [{ colorName: "Branco", urls: ["/uploads/55555555-5555-4555-8555-555555555555.jpg"] }],
@@ -821,6 +1088,74 @@ try {
   assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 3);
   step("payment_check com valor divergente não confirma nem inclui o pedido na produção");
 
+  const boundedQueueOrder = await request("/api/orders", {
+    method: "POST",
+    expected: 201,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: {
+      campaignCode: campaign.code,
+      customer: { name: "Cliente Limite da Fila", whatsapp: "5598999991030", email: "fila@example.com" },
+      items: [{ variantId: variant.id, size: allowedSize.code, quantity: 1 }],
+    },
+  });
+  await request(`/api/orders/${boundedQueueOrder.order.number}/checkout`, {
+    method: "POST",
+    body: { whatsapp: "5598999991030" },
+  });
+  const boundedQueueTransactions = [];
+  for (let index = 0; index < 4; index += 1) {
+    const queuedTransaction = randomUUID();
+    boundedQueueTransactions.push(queuedTransaction);
+    await request("/api/payments/infinitepay/webhook", {
+      method: "POST",
+      body: {
+        invoice_slug: `fila-${index}-${randomUUID()}`,
+        transaction_nsu: queuedTransaction,
+        order_nsu: boundedQueueOrder.order.number,
+        items: Array.from({ length: 20 }, () => ({ untrusted: "não deve ser persistido" })),
+      },
+    });
+  }
+  await request("/api/payments/infinitepay/webhook", {
+    method: "POST",
+    expected: 429,
+    body: {
+      invoice_slug: `fila-bloqueada-${randomUUID()}`,
+      transaction_nsu: randomUUID(),
+      order_nsu: boundedQueueOrder.order.number,
+    },
+  });
+  const boundedEvents = await paymentEventsForTest(boundedQueueOrder.order.number);
+  assert.equal(boundedEvents.length, 4);
+  assert.ok(boundedEvents.every((event) => event.order_id));
+  const storedPayload = typeof boundedEvents[0].payload === "string" ? JSON.parse(boundedEvents[0].payload) : boundedEvents[0].payload;
+  assert.equal(Object.hasOwn(storedPayload, "items"), false);
+  await forceFinalPaymentAttemptForTest(boundedQueueTransactions[0]);
+  const deadLetter = await waitForDeadLetterForTest(boundedQueueOrder.order.number, boundedQueueTransactions[0]);
+  assert.equal(Number(deadLetter.attempts), 6);
+  step("eventos públicos não conseguem criar uma fila de reconciliação ilimitada por pedido");
+
+  const orderWithoutCheckout = await request("/api/orders", {
+    method: "POST",
+    expected: 201,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: {
+      campaignCode: campaign.code,
+      customer: { name: "Cliente Sem Checkout", whatsapp: "5598999991031", email: "sem-checkout@example.com" },
+      items: [{ variantId: variant.id, size: allowedSize.code, quantity: 1 }],
+    },
+  });
+  await request("/api/payments/infinitepay/webhook", {
+    method: "POST",
+    expected: 409,
+    body: {
+      invoice_slug: `sem-checkout-${randomUUID()}`,
+      transaction_nsu: randomUUID(),
+      order_nsu: orderWithoutCheckout.order.number,
+    },
+  });
+  step("reconciliação exige um checkout pendente vinculado ao pedido");
+
   const secondCreated = await request("/api/orders", {
     method: "POST",
     expected: 201,
@@ -831,17 +1166,51 @@ try {
       items: [{ variantId: variant.id, size: allowedSize.code, quantity: 1 }],
     },
   });
+  await request(`/api/orders/${secondCreated.order.number}/checkout`, {
+    method: "POST",
+    body: { whatsapp: "5598999991002" },
+  });
+  const cancelledLateTransaction = randomUUID();
+  const cancelledLateInvoice = `cancelado-tardio-${randomUUID()}`;
+  fakeInfinitePay.checks.set(cancelledLateTransaction, {
+    success: true,
+    paid: false,
+    amount: secondCreated.order.totalCents,
+  });
+  await request("/api/payments/infinitepay/webhook", {
+    method: "POST",
+    body: {
+      invoice_slug: cancelledLateInvoice,
+      transaction_nsu: cancelledLateTransaction,
+      order_nsu: secondCreated.order.number,
+      amount: secondCreated.order.totalCents,
+    },
+  });
   await request(`/api/admin/orders/${secondCreated.order.number}/cancel`, {
     method: "PATCH",
     token,
     body: { reason: "Pedido duplicado no smoke test" },
   });
+  fakeInfinitePay.checks.set(cancelledLateTransaction, {
+    success: true,
+    paid: true,
+    amount: secondCreated.order.totalCents,
+    paid_amount: secondCreated.order.totalCents,
+    capture_method: "pix",
+  });
+  await forcePaymentEventDueForTest(cancelledLateTransaction);
+  const cancelledLateEvent = await waitForPaymentEventSettlementForTest(secondCreated.order.number, cancelledLateTransaction);
+  assert.ok(cancelledLateEvent.dead_lettered_at);
   const cancelledTracking = await request(`/api/orders/${secondCreated.order.number}?whatsapp=5598999991002`);
   assert.equal(cancelledTracking.order.status, "cancelled");
+  assert.equal(cancelledTracking.order.paymentStatus, "pending");
   assert.equal(cancelledTracking.order.cancellationReason, "Pedido duplicado no smoke test");
+  const cancelledLifecycle = await paymentLifecycleForTest(secondCreated.order.number);
+  assert.equal(cancelledLifecycle.checkout_status, "expired");
+  assert.equal(Number(cancelledLifecycle.paid_payment_count), 0);
   production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
   assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 3);
-  step("cancelamento exige motivo, continua consultável e não altera produção");
+  step("cancelamento expira checkout e rejeita pagamento tardio sem alterar produção");
 
   for (const targetPhase of ["orders_closed", "production", "ready_for_delivery"]) {
     await request(`/api/admin/campaigns/${campaign.code}/phase`, {
@@ -922,6 +1291,14 @@ try {
     expected: 422,
     body: { amountCents: firstCreated.order.totalCents - 1, providerRefundId: `refund-invalid-${randomUUID()}`, reason: "Valor parcial" },
   });
+  const refundedLateTransaction = randomUUID();
+  const refundedLateInvoice = `reembolso-tardio-${randomUUID()}`;
+  await insertFuturePaymentEventForTest(
+    firstCreated.order.number,
+    refundedLateTransaction,
+    refundedLateInvoice,
+    firstCreated.order.totalCents,
+  );
   const refundReference = `refund-smoke-${randomUUID()}`;
   const refund = await request(`/api/admin/orders/${firstCreated.order.number}/refund`, {
     method: "POST",
@@ -939,9 +1316,39 @@ try {
   assert.equal(refundedTracking.order.status, "cancelled");
   assert.equal(refundedTracking.order.paymentStatus, "refunded");
   assert.match(refundedTracking.order.cancellationReason, /Reembolso integral/);
+  fakeInfinitePay.checks.set(refundedLateTransaction, {
+    success: true,
+    paid: true,
+    amount: firstCreated.order.totalCents,
+    paid_amount: firstCreated.order.totalCents,
+    capture_method: "pix",
+  });
+  await forcePaymentEventDueForTest(refundedLateTransaction);
+  const refundedLateEvent = await waitForPaymentEventSettlementForTest(firstCreated.order.number, refundedLateTransaction);
+  assert.ok(refundedLateEvent.dead_lettered_at);
+  const refundedLifecycle = await paymentLifecycleForTest(firstCreated.order.number);
+  assert.equal(refundedLifecycle.checkout_status, "expired");
+  assert.equal(Number(refundedLifecycle.paid_payment_count), 0);
   production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
   assert.equal(production.rows.length, 0);
-  step("reembolso integral exige referência do provedor, cancela o pedido e o retira da produção");
+  step("reembolso integral expira checkout, encerra eventos tardios e retira o pedido da produção");
+
+  const absoluteSession = await request("/api/auth/login", {
+    method: "POST",
+    body: { email: "admin@teste.com", password: "123456" },
+  });
+  await backdateSessionForTest(absoluteSession.token);
+  await request("/api/auth/session", { token: absoluteSession.token, expected: 401 });
+  await request("/api/admin/campaigns", { token: absoluteSession.token, expected: 401 });
+  const nearAbsoluteSession = await request("/api/auth/login", {
+    method: "POST",
+    body: { email: "admin@teste.com", password: "123456" },
+  });
+  await placeSessionNearAbsoluteLimitForTest(nearAbsoluteSession.token);
+  const cappedSession = await request("/api/auth/session", { token: nearAbsoluteSession.token });
+  assert.ok(new Date(cappedSession.expiresAt).getTime() <= Date.now() + 65 * 60 * 1000);
+  await request("/api/admin/campaigns", { token: nearAbsoluteSession.token });
+  step("sessão administrativa expira definitivamente após sete dias");
 
   const accountUpdate = await request("/api/admin/account", {
     method: "PATCH",

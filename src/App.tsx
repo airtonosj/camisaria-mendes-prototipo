@@ -42,7 +42,7 @@ export function resolveCampaign(code: string | null) {
   return canonicalCode ? privateCampaigns[canonicalCode] : undefined;
 }
 
-export function buildRoute(route?: string, campaign?: string, order?: string, resume?: string) {
+export function buildRoute(route?: string, campaign?: string, order?: string, resume?: string, coupon?: string) {
   const url = new URL("./", window.location.href);
   url.search = "";
   url.hash = "";
@@ -50,6 +50,7 @@ export function buildRoute(route?: string, campaign?: string, order?: string, re
   if (campaign) url.searchParams.set("campanha", campaign);
   if (order) url.searchParams.set("pedido", order);
   if (resume) url.searchParams.set("retomar", resume);
+  if (coupon) url.searchParams.set("cupom", coupon);
   return url.toString();
 }
 
@@ -58,6 +59,7 @@ type CampaignLookup = "loading" | "ready" | "not_found" | "unavailable";
 export default function App() {
   const params = new URLSearchParams(window.location.search);
   const campaignCode = params.get("campanha");
+  const couponCode = params.get("cupom");
   const resumeOrder = params.get("retomar");
   const route = params.get("rota");
   const [campaign, setCampaign] = useState<PrivateCampaign | undefined>(() => resolveCampaign(campaignCode));
@@ -124,7 +126,7 @@ export default function App() {
   }
 
   if (campaignCode && campaign && lookup === "ready") {
-    return <PrivateCampaignPage campaign={campaign} resumePayment={resumeOrder ?? undefined} />;
+    return <PrivateCampaignPage campaign={campaign} resumePayment={resumeOrder ?? undefined} initialCouponCode={couponCode ?? undefined} />;
   }
 
   if (campaignCode && lookup === "loading") {

@@ -43,6 +43,20 @@ type ApiCampaignVariant = {
 export type CampaignRealPhotoConfig = { colorName: string; urls: string[] };
 export type CampaignRealVideoConfig = { colorName: string; url: string; posterUrl?: string | null; durationSeconds?: number | null; bytes: number };
 export type CampaignPresentationConfig = { mockupEnabled: boolean; realPhotosEnabled: boolean };
+export type CampaignCoupon = {
+  code: string;
+  discounts: Array<{ modelCode: string; modelName: string; discountCents: number }>;
+  expiresAt: string | null;
+  usageLimit?: number | null;
+  usedCount?: number;
+  remainingUses?: number | null;
+};
+export type CampaignCouponPayload = {
+  code: string;
+  discounts: Array<{ modelCode: string; discountCents: number }>;
+  expiresAt: string | null;
+  usageLimit: number | null;
+};
 
 type ApiCampaignSize = {
   model: { code: string; name: string };
@@ -73,6 +87,7 @@ export type ApiCampaign = {
   };
   realPhotos?: CampaignRealPhotoConfig[];
   realVideos?: CampaignRealVideoConfig[];
+  activeCoupon?: CampaignCoupon | null;
   variants: ApiCampaignVariant[];
   sizes: ApiCampaignSize[];
 };
@@ -90,6 +105,7 @@ type CreateOrderInput = {
   campaignCode: string;
   customer: { name: string; whatsapp: string; email: string };
   items: Array<{ variantId: number; size: string; quantity: number }>;
+  couponCode?: string;
   idempotencyKey: string;
 };
 
@@ -98,6 +114,9 @@ export type TrackedOrder = {
   status: "pending" | "confirmed" | "production" | "failed" | "ready" | "delivered" | "cancelled";
   cancellationReason: string | null;
   paymentStatus: string;
+  subtotalCents: number;
+  discountCents: number;
+  couponCode: string | null;
   totalCents: number;
   campaign: {
     code: string;
@@ -114,6 +133,7 @@ export type TrackedOrder = {
     sizeGroup: "standard" | "baby_look";
     quantity: number;
     unitPriceCents: number;
+    unitDiscountCents: number;
     lineTotalCents: number;
     artwork: VariantArtwork;
   }>;
@@ -258,6 +278,14 @@ export async function fetchCampaignFromApi(code: string) {
   return mapCampaign(payload.campaign);
 }
 
+export async function validateCampaignCoupon(campaignCode: string, couponCode: string) {
+  const query = new URLSearchParams({ code: couponCode });
+  const payload = await request<{ coupon: CampaignCoupon }>(
+    `/campaigns/${encodeURIComponent(campaignCode)}/coupon?${query.toString()}`,
+  );
+  return payload.coupon;
+}
+
 export async function fetchSettings() {
   return request<ApiSettings>("/settings");
 }
@@ -270,6 +298,7 @@ export async function createOrderInApi(input: CreateOrderInput) {
       campaignCode: input.campaignCode,
       customer: input.customer,
       items: input.items,
+      couponCode: input.couponCode || undefined,
     }),
   });
   return payload.order;
@@ -424,6 +453,7 @@ export type ApiAdminCampaign = {
   orderCount: number;
   paidTotalCents: number;
   canDelete: boolean;
+  activeCoupon: CampaignCoupon | null;
 };
 
 export type ApiCampaignOrder = {
@@ -434,6 +464,9 @@ export type ApiCampaignOrder = {
   paymentStatus: PaymentStatusCode;
   deliveryStatus: DeliveryStatusCode;
   totalCents: number;
+  subtotalCents: number;
+  discountCents: number;
+  couponCode: string | null;
   createdAt: string;
   items: Array<{
     modelName: string;
@@ -442,6 +475,7 @@ export type ApiCampaignOrder = {
     sizeGroup: "standard" | "baby_look";
     quantity: number;
     unitPriceCents: number;
+    unitDiscountCents: number;
     lineTotalCents: number;
   }>;
 };
@@ -489,6 +523,7 @@ export type CreateCampaignPayload = {
   presentationConfig: CampaignPresentationConfig;
   realPhotos?: CampaignRealPhotoConfig[];
   realVideos?: CampaignRealVideoConfig[];
+  coupon?: CampaignCouponPayload | null;
   models: CampaignModelPayload[];
 };
 
@@ -509,6 +544,7 @@ export type UpdateCampaignPayload = {
   presentationConfig?: CampaignPresentationConfig;
   realPhotos?: CampaignRealPhotoConfig[];
   realVideos?: CampaignRealVideoConfig[];
+  coupon?: CampaignCouponPayload | null;
   models?: CampaignModelPayload[];
 };
 
@@ -578,7 +614,7 @@ export async function createCampaignInApi(input: CreateCampaignPayload) {
 
 /** Campanha crua, como a API devolve, para preencher o formulário de edição. */
 export async function fetchCampaignDetail(code: string) {
-  const payload = await request<{ campaign: ApiCampaign }>(`/campaigns/${encodeURIComponent(code)}`);
+  const payload = await staffRequest<{ campaign: ApiCampaign }>(`/admin/campaigns/${encodeURIComponent(code)}`);
   return payload.campaign;
 }
 
