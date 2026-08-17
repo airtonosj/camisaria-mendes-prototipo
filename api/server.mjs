@@ -481,6 +481,21 @@ function normalizeCouponCode(value) {
   return code;
 }
 
+function parseSingleOrderCoupon(body) {
+  const value = body.couponCode;
+  const hasMultipleValues = body.couponCodes !== undefined
+    || Array.isArray(value)
+    || (typeof value === "string" && /[,;+|]/.test(value));
+  if (hasMultipleValues) {
+    throw new ApiError(422, "MULTIPLE_COUPONS_NOT_ALLOWED", "Use somente um cupom por pedido.");
+  }
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string") {
+    throw new ApiError(422, "INVALID_COUPON_CODE", "Informe um único código de cupom válido.");
+  }
+  return normalizeCouponCode(value);
+}
+
 function parseCouponConfig(value) {
   if (value === null) return null;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -493,6 +508,9 @@ function parseCouponConfig(value) {
   const usageLimit = value.usageLimit === null || value.usageLimit === undefined || value.usageLimit === ""
     ? null
     : parsePositiveInteger(value.usageLimit, "coupon.usageLimit", 1_000_000);
+  const minimumQuantity = value.minimumQuantity === null || value.minimumQuantity === undefined || value.minimumQuantity === ""
+    ? 1
+    : parsePositiveInteger(value.minimumQuantity, "coupon.minimumQuantity", 200);
   if (!Array.isArray(value.discounts) || value.discounts.length < 1 || value.discounts.length > 4) {
     throw new ApiError(422, "VALIDATION_ERROR", "Defina o desconto do cupom para cada corte ativo.");
   }
@@ -513,6 +531,7 @@ function parseCouponConfig(value) {
     discounts,
     expiresAt,
     usageLimit,
+    minimumQuantity,
   };
 }
 
@@ -551,6 +570,7 @@ function couponPayload(row, usedCount, discounts) {
     discounts,
     expiresAt: row.expires_at,
     usageLimit: row.usage_limit === null ? null : Number(row.usage_limit),
+    minimumQuantity: Number(row.minimum_quantity ?? 1),
     usedCount,
     remainingUses: row.usage_limit === null ? null : Math.max(0, Number(row.usage_limit) - usedCount),
   };
@@ -558,7 +578,7 @@ function couponPayload(row, usedCount, discounts) {
 
 async function activeCampaignCoupon(executor, campaignId) {
   const [rows] = await executor.execute(
-    `SELECT id, code, expires_at, usage_limit
+    `SELECT id, code, expires_at, usage_limit, minimum_quantity
        FROM campaign_coupons
       WHERE campaign_id = ? AND active = TRUE
       ORDER BY updated_at DESC, id DESC LIMIT 1`,
@@ -575,7 +595,7 @@ async function activeCampaignCoupon(executor, campaignId) {
 async function validateActiveCoupon(executor, campaignId, rawCode, { lock = false } = {}) {
   const code = normalizeCouponCode(rawCode);
   const [rows] = await executor.execute(
-    `SELECT id, code, expires_at, usage_limit
+    `SELECT id, code, expires_at, usage_limit, minimum_quantity
        FROM campaign_coupons
       WHERE campaign_id = ? AND code = ? AND active = TRUE
       LIMIT 1${lock ? " FOR UPDATE" : ""}`,
@@ -628,14 +648,14 @@ async function applyCampaignCoupon(connection, campaignId, value) {
   if (existing.length > 0) {
     couponId = existing[0].id;
     await connection.execute(
-      "UPDATE campaign_coupons SET expires_at = ?, usage_limit = ?, active = TRUE WHERE id = ?",
-      [coupon.expiresAt, coupon.usageLimit, couponId],
+      "UPDATE campaign_coupons SET expires_at = ?, usage_limit = ?, minimum_quantity = ?, active = TRUE WHERE id = ?",
+      [coupon.expiresAt, coupon.usageLimit, coupon.minimumQuantity, couponId],
     );
     await connection.execute("DELETE FROM campaign_coupon_discounts WHERE coupon_id = ?", [couponId]);
   } else {
     const [created] = await connection.execute(
-      "INSERT INTO campaign_coupons (campaign_id, code, expires_at, usage_limit, active) VALUES (?, ?, ?, ?, TRUE)",
-      [campaignId, coupon.code, coupon.expiresAt, coupon.usageLimit],
+      "INSERT INTO campaign_coupons (campaign_id, code, expires_at, usage_limit, minimum_quantity, active) VALUES (?, ?, ?, ?, ?, TRUE)",
+      [campaignId, coupon.code, coupon.expiresAt, coupon.usageLimit, coupon.minimumQuantity],
     );
     couponId = created.insertId;
   }
@@ -893,6 +913,7 @@ async function getPublicCampaignCoupon(campaignCode, rawCouponCode) {
     code: coupon.code,
     discounts: coupon.discounts,
     expiresAt: coupon.expires_at,
+    minimumQuantity: Number(coupon.minimum_quantity ?? 1),
   };
 }
 
@@ -922,13 +943,13 @@ async function listCampaigns() {
       ORDER BY c.created_at DESC`,
   );
   const [couponRows] = await pool.execute(
-    `SELECT cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit,
+    `SELECT cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit, cc.minimum_quantity,
             COUNT(CASE WHEN o.status = 'active' THEN 1 END) AS used_count
        FROM campaign_coupons cc
        LEFT JOIN coupon_redemptions cr ON cr.coupon_id = cc.id
       LEFT JOIN orders o ON o.id = cr.order_id
       WHERE cc.active = TRUE
-      GROUP BY cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit`,
+      GROUP BY cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit, cc.minimum_quantity`,
   );
   const couponsByCampaign = new Map();
   for (const row of couponRows) {
@@ -1717,7 +1738,7 @@ async function createOrder(request) {
   const idempotencyKey = requireText(request.headers["idempotency-key"], "Idempotency-Key", 128);
   const body = await readJson(request);
   const campaignCode = requireText(body.campaignCode, "campaignCode", 40).toUpperCase();
-  const couponCode = body.couponCode ? normalizeCouponCode(body.couponCode) : null;
+  const couponCode = parseSingleOrderCoupon(body);
   const customer = body.customer ?? {};
   const customerName = requireText(customer.name, "customer.name", 160);
   const customerWhatsapp = normalizeWhatsapp(customer.whatsapp);
@@ -1792,10 +1813,18 @@ async function createOrder(request) {
     });
 
     const subtotalCents = items.reduce((total, item) => total + prices.get(item.variantId) * item.quantity, 0);
+    const totalUnits = items.reduce((total, item) => total + item.quantity, 0);
     let coupon = null;
     let discountsByModelId = new Map();
     if (couponCode) {
       coupon = await validateActiveCoupon(connection, campaign.id, couponCode, { lock: true });
+      if (totalUnits < Number(coupon.minimum_quantity ?? 1)) {
+        throw new ApiError(
+          409,
+          "COUPON_MINIMUM_QUANTITY",
+          `Este cupom é válido a partir de ${Number(coupon.minimum_quantity)} peças. Seu pedido tem ${totalUnits}.`,
+        );
+      }
       await ensureCouponFitsCampaignPrices(connection, campaign.id, coupon.discounts);
       discountsByModelId = new Map(coupon.discounts.map((discount) => [discount.modelId, discount.discountCents]));
       if (items.some((item) => (discountsByModelId.get(variantModels.get(item.variantId)) ?? 0) >= prices.get(item.variantId))) {

@@ -48,6 +48,7 @@ export type CampaignCoupon = {
   discounts: Array<{ modelCode: string; modelName: string; discountCents: number }>;
   expiresAt: string | null;
   usageLimit?: number | null;
+  minimumQuantity: number;
   usedCount?: number;
   remainingUses?: number | null;
 };
@@ -56,6 +57,7 @@ export type CampaignCouponPayload = {
   discounts: Array<{ modelCode: string; discountCents: number }>;
   expiresAt: string | null;
   usageLimit: number | null;
+  minimumQuantity: number;
 };
 
 type ApiCampaignSize = {

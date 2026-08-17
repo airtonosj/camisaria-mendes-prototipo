@@ -480,7 +480,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "018_campaign_coupons");
+  assert.equal(health.schema.current, "019_campaign_coupon_minimum_quantity");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -585,6 +585,7 @@ try {
       ],
       expiresAt: "2027-12-20T23:59:59.000Z",
       usageLimit: 1,
+      minimumQuantity: 3,
     },
     models: [
       { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Lilás lavanda", hex: "#8B5CF6" }], sizes: ["P", "M", "EXGG"] },
@@ -607,11 +608,13 @@ try {
 
   const adminCustomCampaign = (await request(`/api/admin/campaigns/${customCampaign.code}`, { token })).campaign;
   assert.equal(adminCustomCampaign.activeCoupon.code, customCampaignPayload.coupon.code);
+  assert.equal(adminCustomCampaign.activeCoupon.minimumQuantity, 3);
   assert.deepEqual(
     adminCustomCampaign.activeCoupon.discounts.map((discount) => [discount.modelCode, discount.discountCents]),
     [["common", 1000], ["oversized", 1500]],
   );
   const validatedCoupon = (await request(`/api/campaigns/${customCampaign.code}/coupon?code=cores-10`)).coupon;
+  assert.equal(validatedCoupon.minimumQuantity, 3);
   assert.deepEqual(
     validatedCoupon.discounts.map((discount) => [discount.modelCode, discount.discountCents]),
     [["common", 1000], ["oversized", 1500]],
@@ -629,23 +632,39 @@ try {
       { variantId: couponOversizedVariant.id, size: couponOversizedSize.code, quantity: 1 },
     ],
   };
+  await request("/api/orders", {
+    method: "POST",
+    expected: 422,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: { ...couponOrderBody, couponCodes: ["CORES-10", "OUTRO-CUPOM"] },
+  });
+  await request("/api/orders", {
+    method: "POST",
+    expected: 409,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: couponOrderBody,
+  });
+  const qualifyingCouponOrderBody = {
+    ...couponOrderBody,
+    items: couponOrderBody.items.map((item, index) => ({ ...item, quantity: index === 0 ? 1 : 2 })),
+  };
   const discountedOrder = await request("/api/orders", {
     method: "POST",
     expected: 201,
     headers: { "Idempotency-Key": randomUUID() },
-    body: couponOrderBody,
+    body: qualifyingCouponOrderBody,
   });
-  assert.equal(discountedOrder.order.totalCents, 10480);
+  assert.equal(discountedOrder.order.totalCents, 15970);
   const trackedDiscountedOrder = await request(`/api/orders/${discountedOrder.order.number}?whatsapp=5598999992070`);
-  assert.equal(trackedDiscountedOrder.order.subtotalCents, 12980);
-  assert.equal(trackedDiscountedOrder.order.discountCents, 2500);
+  assert.equal(trackedDiscountedOrder.order.subtotalCents, 19970);
+  assert.equal(trackedDiscountedOrder.order.discountCents, 4000);
   assert.equal(trackedDiscountedOrder.order.couponCode, "CORES-10");
   assert.deepEqual(trackedDiscountedOrder.order.items.map((item) => item.unitDiscountCents), [1000, 1500]);
   await request("/api/orders", {
     method: "POST",
     expected: 409,
     headers: { "Idempotency-Key": randomUUID() },
-    body: { ...couponOrderBody, customer: { ...couponOrderBody.customer, whatsapp: "5598999992071", email: "limite@example.com" } },
+    body: { ...qualifyingCouponOrderBody, customer: { ...qualifyingCouponOrderBody.customer, whatsapp: "5598999992071", email: "limite@example.com" } },
   });
   await request(`/api/admin/orders/${discountedOrder.order.number}/cancel`, {
     method: "PATCH",
@@ -656,17 +675,17 @@ try {
     method: "POST",
     expected: 201,
     headers: { "Idempotency-Key": randomUUID() },
-    body: { ...couponOrderBody, customer: { ...couponOrderBody.customer, whatsapp: "5598999992072", email: "liberado@example.com" } },
+    body: { ...qualifyingCouponOrderBody, customer: { ...qualifyingCouponOrderBody.customer, whatsapp: "5598999992072", email: "liberado@example.com" } },
   });
-  assert.equal(replacementCouponOrder.order.totalCents, 10480);
+  assert.equal(replacementCouponOrder.order.totalCents, 15970);
   await request(`/api/admin/campaigns/${customCampaign.code}`, { method: "PATCH", token, body: { coupon: null } });
   await request(`/api/campaigns/${customCampaign.code}/coupon?code=CORES-10`, { expected: 404 });
   const campaignWithoutCoupon = (await request(`/api/admin/campaigns/${customCampaign.code}`, { token })).campaign;
   assert.equal(campaignWithoutCoupon.activeCoupon, null);
   const preservedCouponOrder = await request(`/api/orders/${replacementCouponOrder.order.number}?whatsapp=5598999992072`);
   assert.equal(preservedCouponOrder.order.couponCode, "CORES-10");
-  assert.equal(preservedCouponOrder.order.discountCents, 2500);
-  step("cupom aplica valores distintos por corte, limita pedidos, libera uso cancelado e preserva o histórico após remoção");
+  assert.equal(preservedCouponOrder.order.discountCents, 4000);
+  step("cupom não acumula códigos, exige quantidade mínima, aplica valores por corte e preserva o histórico");
 
   const replacementVideo = await binaryRequest("/api/admin/video-uploads", {
     token,

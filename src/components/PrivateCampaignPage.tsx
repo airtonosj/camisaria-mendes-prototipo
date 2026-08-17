@@ -389,11 +389,15 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
   const selectedVideoUrl = selectedMedia?.type === "video" ? selectedMedia.url : null;
   const canShowBack = Boolean(selectedArtwork.back);
   const unitPriceCents = Math.round(campaign.prices[activeModel] * 100);
-  const couponDiscountsByModel = Object.fromEntries(
+  const configuredCouponDiscountsByModel = Object.fromEntries(
     (appliedCoupon?.discounts ?? []).map((discount) => [discount.modelName, discount.discountCents]),
   ) as Partial<Record<ShirtModelName, number>>;
   const cartSubtotal = cart.reduce((total, item) => total + item.unitPriceCents * item.quantity, 0);
   const cartUnits = cart.reduce((total, item) => total + item.quantity, 0);
+  const couponMinimumQuantity = appliedCoupon?.minimumQuantity ?? 1;
+  const couponEligible = !appliedCoupon || cartUnits >= couponMinimumQuantity;
+  const couponMissingUnits = Math.max(0, couponMinimumQuantity - cartUnits);
+  const couponDiscountsByModel = couponEligible ? configuredCouponDiscountsByModel : {};
   const cartDiscount = cart.reduce((total, item) => total + (couponDiscountsByModel[item.modelName] ?? 0) * item.quantity, 0);
   const cartTotal = cartSubtotal - cartDiscount;
 
@@ -534,7 +538,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
       const coupon = await validateCampaignCoupon(campaign.code, normalized);
       setAppliedCoupon(coupon);
       setCouponInput(coupon.code);
-      setCouponMessage("Cupom aplicado. O desconto de cada corte já aparece nos preços.");
+      setCouponMessage("");
       syncCouponInAddress(coupon.code);
     } catch (error) {
       setAppliedCoupon(null);
@@ -686,9 +690,9 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
                   </header>
                   <CartLines items={cart} discountsByModel={couponDiscountsByModel} editable onQuantity={updateCartQuantity} onRemove={(key) => setCart((current) => current.filter((item) => itemKey(item) !== key))} />
                   <footer className="campaign-cart-summary">
-                    {appliedCoupon && <><div className="campaign-discount-row"><span>Subtotal</span><b>{formatCents(cartSubtotal)}</b></div><div className="campaign-discount-row is-saving"><span>Cupom {appliedCoupon.code}</span><b>− {formatCents(cartDiscount)}</b></div></>}
+                    {appliedCoupon && <><div className="campaign-discount-row"><span>Subtotal</span><b>{formatCents(cartSubtotal)}</b></div>{couponEligible ? <div className="campaign-discount-row is-saving"><span>Cupom {appliedCoupon.code}</span><b>− {formatCents(cartDiscount)}</b></div> : <div className="campaign-discount-row"><span>Cupom {appliedCoupon.code} · a partir de {couponMinimumQuantity} peças</span><b>Faltam {couponMissingUnits}</b></div>}</>}
                     <div><span>Total</span><strong>{formatCents(cartTotal)}</strong></div>
-                    <button type="button" onClick={() => goToStep("details")}>Revisar pedido</button>
+                    <button type="button" disabled={Boolean(appliedCoupon && !couponEligible)} onClick={() => goToStep("details")}>Revisar pedido</button>
                   </footer>
                 </section>
               )}
@@ -697,8 +701,8 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
               <h2>1. Escolha o corte</h2>
               <div className="campaign-cut-options" role="radiogroup" aria-label="Corte da camiseta">{availableModels.map((item) => {
                 const originalPrice = Math.round(campaign.prices[item.name] * 100);
-                const modelDiscount = couponDiscountsByModel[item.name] ?? 0;
-                return <label className={activeModel === item.name ? "is-selected" : ""} key={item.name}><input type="radio" name="model" checked={activeModel === item.name} onChange={() => selectModel(item.name)} /><span className="campaign-cut-head"><strong>{item.name === "Comum" ? "Padrão" : item.name}</strong><span className="campaign-cut-check material-symbols-rounded" aria-hidden="true">check</span></span><small>{item.description}</small><span className={`campaign-cut-price${modelDiscount ? " is-discounted" : ""}`}>{modelDiscount > 0 && <del>{formatCents(originalPrice)}</del>}<b>{formatCents(originalPrice - modelDiscount)}</b>{modelDiscount > 0 && <em>com cupom</em>}</span></label>;
+                const modelDiscount = configuredCouponDiscountsByModel[item.name] ?? 0;
+                return <label className={activeModel === item.name ? "is-selected" : ""} key={item.name}><input type="radio" name="model" checked={activeModel === item.name} onChange={() => selectModel(item.name)} /><span className="campaign-cut-head"><strong>{item.name === "Comum" ? "Padrão" : item.name}</strong><span className="campaign-cut-check material-symbols-rounded" aria-hidden="true">check</span></span><small>{item.description}</small><span className={`campaign-cut-price${modelDiscount ? " is-discounted" : ""}`}>{modelDiscount > 0 && <del>{formatCents(originalPrice)}</del>}<b>{formatCents(originalPrice - modelDiscount)}</b>{modelDiscount > 0 && <em>{couponMinimumQuantity > 1 ? `a partir de ${couponMinimumQuantity} peças` : "com cupom"}</em>}</span></label>;
               })}</div>
             </section>
             <section className="campaign-choice-stage campaign-color-stage">
@@ -716,9 +720,9 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
             </section>
             <section className="campaign-choice-stage campaign-quantity-stage"><h2>4. Quantidade</h2><div className="campaign-quantity-picker"><button type="button" aria-label="Diminuir quantidade" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>−</button><output aria-live="polite">{quantity}</output><button type="button" aria-label="Aumentar quantidade" onClick={() => setQuantity((value) => Math.min(20, value + 1))}>+</button></div></section>
             <section className="campaign-choice-stage campaign-coupon-stage" aria-labelledby="campaign-coupon-title">
-              <div className="campaign-stage-heading"><h2 id="campaign-coupon-title">5. Cupom de desconto</h2><span>Opcional</span></div>
-              {appliedCoupon ? <div className="campaign-coupon-applied"><span className="material-symbols-rounded" aria-hidden="true">sell</span><div><strong>{appliedCoupon.code}</strong><small>{appliedCoupon.discounts.map((discount) => `${discount.modelName === "Comum" ? "Padrão" : discount.modelName}: − ${formatCents(discount.discountCents)}`).join(" · ")}{appliedCoupon.expiresAt ? ` · válido até ${new Date(appliedCoupon.expiresAt).toLocaleDateString("pt-BR")}` : ""}</small></div><button type="button" onClick={removeCoupon}>Remover</button></div> : <div className="campaign-coupon-input"><label><span className="sr-only">Código do cupom</span><input value={couponInput} onChange={(event) => { setCouponInput(event.target.value.toUpperCase()); setCouponMessage(""); }} placeholder="Digite seu cupom" autoCapitalize="characters" spellCheck={false} /></label><button type="button" disabled={checkingCoupon} onClick={() => void applyCoupon()}>{checkingCoupon ? "Verificando..." : "Aplicar"}</button></div>}
-              {couponMessage && <p className={`campaign-coupon-message${appliedCoupon ? " is-success" : ""}`} role="status" aria-live="polite">{couponMessage}</p>}
+              <div className="campaign-stage-heading"><h2 id="campaign-coupon-title">5. Cupom de desconto</h2><span>Opcional · 1 por pedido</span></div>
+              {appliedCoupon ? <div className="campaign-coupon-applied"><span className="material-symbols-rounded" aria-hidden="true">sell</span><div><strong>{appliedCoupon.code}</strong><small>A partir de {couponMinimumQuantity} {couponMinimumQuantity === 1 ? "peça" : "peças"} · {appliedCoupon.discounts.map((discount) => `${discount.modelName === "Comum" ? "Padrão" : discount.modelName}: − ${formatCents(discount.discountCents)}`).join(" · ")}{appliedCoupon.expiresAt ? ` · válido até ${new Date(appliedCoupon.expiresAt).toLocaleDateString("pt-BR")}` : ""}</small></div><button type="button" onClick={removeCoupon}>Remover</button></div> : <div className="campaign-coupon-input"><label><span className="sr-only">Código do cupom</span><input value={couponInput} onChange={(event) => { setCouponInput(event.target.value.toUpperCase()); setCouponMessage(""); }} placeholder="Digite seu cupom" autoCapitalize="characters" spellCheck={false} /></label><button type="button" disabled={checkingCoupon} onClick={() => void applyCoupon()}>{checkingCoupon ? "Verificando..." : "Aplicar"}</button></div>}
+              {appliedCoupon ? <p className={`campaign-coupon-message${couponEligible ? " is-success" : " is-pending"}`} role="status" aria-live="polite">{couponEligible ? "Quantidade mínima atingida. O desconto já foi aplicado ao carrinho." : `Adicione mais ${couponMissingUnits} ${couponMissingUnits === 1 ? "peça" : "peças"} para ativar o desconto.`}</p> : couponMessage && <p className="campaign-coupon-message" role="status" aria-live="polite">{couponMessage}</p>}
             </section>
             {cartMessage && <p className={`campaign-order-notice${cartMessage.includes("adicionado") ? "" : " is-error"}`} role="status" aria-live="polite"><span className="material-symbols-rounded" aria-hidden="true">{cartMessage.includes("adicionado") ? "check_circle" : "error"}</span>{cartMessage}</p>}
             <aside className="campaign-order-bar">

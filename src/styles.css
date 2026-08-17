@@ -390,6 +390,7 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-coupon-applied button { min-width: 76px; min-height: 36px; border-color: #436655; color: #a9d8c5; background: transparent; }
 .campaign-coupon-message { margin: -5px 0 0; color: #ffadad; font-size: .58rem; line-height: 1.45; }
 .campaign-coupon-message.is-success { color: #a9d8c5; }
+.campaign-coupon-message.is-pending { color: #f1c978; }
 .campaign-order-notice { grid-column: 2; display: flex; gap: 9px; margin-bottom: 18px; border: 1px solid #315b4a; padding: 12px 14px; color: #a9d8c5; background: #0c1813; font-size: .64rem; line-height: 1.45; }
 .campaign-order-notice span { color: #4bd69d; font-size: 18px; }
 .campaign-order-bar { grid-column: 2; border-top: 1px solid #2b3034; padding-top: 25px; }
@@ -440,6 +441,7 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-cart-summary .campaign-discount-row.is-saving span, .campaign-cart-summary .campaign-discount-row.is-saving b { color: #83d7a9; }
 .campaign-cart-summary > button { min-height: 56px; border: 1px solid #087fca; cursor: pointer; color: #fff; background: #087fca; font-size: .76rem; font-weight: 760; }
 .campaign-cart-summary > button:hover, .campaign-cart-summary > button:focus-visible { background: var(--blue); outline: 2px solid #75caf4; outline-offset: 2px; }
+.campaign-cart-summary > button:disabled { border-color: #44515a; cursor: not-allowed; color: #aab3b8; background: #293239; outline: 0; }
 .campaign-order-notice.is-error { border-color: #703939; color: #ffadad; background: #1a0b0b; }
 .campaign-order-notice.is-error span { color: #ff8e8e; }
 
