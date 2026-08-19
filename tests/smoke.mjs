@@ -492,7 +492,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "019_campaign_coupon_minimum_quantity");
+  assert.equal(health.schema.current, "020_whatsapp_country_code");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -968,6 +968,29 @@ try {
   });
   step("API recusa e-mail inválido antes de registrar o pedido");
 
+  // Digito a mais, digito a menos, DDD que nao existe e celular sem o 9 sao erros de
+  // digitacao. Recusar no pedido, dizendo o que corrigir, evita a descoberta na hora de
+  // pagar -- e a mensagem precisa nomear o problema, nao dizer apenas "numero invalido".
+  for (const [whatsapp, esperado] of [
+    ["98999991001234", "dígitos demais"],
+    ["989999910", "incompleto"],
+    ["10999991001", "Não existe o DDD 10"],
+    ["98899991001", "começa com 9"],
+  ]) {
+    const recusa = await request("/api/orders", {
+      method: "POST",
+      expected: 422,
+      headers: { "Idempotency-Key": randomUUID(), "X-Forwarded-For": "198.51.100.30" },
+      body: { ...firstOrderBody, customer: { ...firstOrderBody.customer, whatsapp } },
+    });
+    assert.equal(recusa.error.code, "VALIDATION_ERROR");
+    assert.ok(
+      recusa.error.message.includes(esperado),
+      `mensagem inesperada para ${whatsapp}: ${recusa.error.message}`,
+    );
+  }
+  step("API recusa WhatsApp com dígitos a mais, a menos, DDD inexistente ou celular sem o 9");
+
   const firstCreated = await request("/api/orders", {
     method: "POST",
     expected: 201,
@@ -987,6 +1010,15 @@ try {
   assert.equal(pendingTracking.order.status, "pending");
   assert.equal(pendingTracking.order.items.length, 2);
   assert.equal(pendingTracking.order.items.reduce((total, item) => total + item.quantity, 0), 3);
+  // O pedido foi feito digitando so o DDD. Acompanhar digitando o codigo do pais, com
+  // pontuacao, precisa encontrar o mesmo pedido -- e outro numero nao pode encontrar nada.
+  const trackingInternacional = await request(
+    `/api/orders/${firstCreated.order.number}?whatsapp=${encodeURIComponent("+55 (98) 99999-1001")}`,
+  );
+  assert.deepEqual(trackingInternacional, pendingTracking);
+  await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991002`, { expected: 404 });
+  step("rastreio encontra o pedido com o WhatsApp em qualquer formato e recusa outro numero");
+
   const campaignOrders = await request(`/api/admin/campaigns/${campaign.code}/orders`, { token });
   const groupedOrder = campaignOrders.orders.find((order) => order.number === firstCreated.order.number);
   assert.equal(groupedOrder.items.length, 2);
@@ -1026,6 +1058,19 @@ try {
   assert.equal(checkoutReplay.checkout.reused, true);
   assert.equal(fakeInfinitePay.links.length, 1);
   step("checkout InfinitePay usa handle, pedido e valor persistidos sem duplicar link");
+
+  // Mesmo cliente, mesmo telefone, formato diferente do que ele digitou ao pedir.
+  const checkoutInternacional = await request(`/api/orders/${firstCreated.order.number}/checkout`, {
+    method: "POST",
+    body: { whatsapp: "+55 (98) 99999-1001" },
+  });
+  assert.equal(checkoutInternacional.checkout.url, checkout.checkout.url);
+  await request(`/api/orders/${firstCreated.order.number}/checkout`, {
+    method: "POST",
+    expected: 404,
+    body: { whatsapp: "98999991002" },
+  });
+  step("checkout aceita o WhatsApp em qualquer formato e recusa outro numero");
 
   const transactionNsu = randomUUID();
   const invoiceSlug = `smoke-${randomUUID()}`;

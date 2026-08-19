@@ -6,6 +6,7 @@ import {
   InfinitePayRequestError,
   normalizeInfinitePayEvent,
 } from "./infinitepay.mjs";
+import { whatsappLookupValues } from "./phone.mjs";
 
 const provider = "infinitepay";
 const staleLockMinutes = 10;
@@ -53,13 +54,14 @@ function integrationReady() {
 
 export async function createCheckoutForOrder(orderNumber, whatsapp) {
   integrationReady();
+  const lookup = whatsappLookupValues(whatsapp);
   const [orders] = await pool.execute(
     `SELECT o.id, o.order_number, o.customer_name, o.customer_whatsapp, o.customer_email,
             o.status, o.payment_status, o.total_cents, c.title AS campaign_title
        FROM orders o
        JOIN campaigns c ON c.id = o.campaign_id
-      WHERE o.order_number = ? AND o.customer_whatsapp = ? LIMIT 1`,
-    [orderNumber, whatsapp],
+      WHERE o.order_number = ? AND o.customer_whatsapp IN (${lookup.map(() => "?").join(", ")}) LIMIT 1`,
+    [orderNumber, ...lookup],
   );
   if (orders.length === 0) {
     throw new PaymentIntegrationError(404, "ORDER_NOT_FOUND", "Pedido não encontrado com os dados informados.");

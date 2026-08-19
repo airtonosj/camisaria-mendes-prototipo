@@ -224,11 +224,15 @@ export function OrderTrackingPage() {
       const matchedOrder = import.meta.env.DEV ? demoOrders[normalizedNumber] : undefined;
       if (!matchedOrder || onlyDigits(phone) !== demoPhone) {
         setOrder(null);
-        const unavailable = lookupError instanceof ApiRequestError && lookupError.code === "API_UNAVAILABLE";
+        // Um WhatsApp com dígitos a mais ou DDD inexistente não é "pedido não encontrado":
+        // a API já diz o que corrigir, e essa frase precisa chegar ao cliente.
+        const apiError = lookupError instanceof ApiRequestError ? lookupError : null;
         setError(
-          unavailable
+          apiError?.code === "API_UNAVAILABLE"
             ? "Não foi possível falar com o servidor agora. Tente novamente em alguns instantes."
-            : "Não encontramos esse pedido. Confira o número e o WhatsApp informado na compra.",
+            : apiError?.status === 422
+              ? apiError.message
+              : "Não encontramos esse pedido. Confira o número e o WhatsApp informado na compra.",
         );
         return;
       }

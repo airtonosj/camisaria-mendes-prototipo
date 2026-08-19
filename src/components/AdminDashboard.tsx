@@ -1,4 +1,5 @@
 import { ChangeEvent, CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { localWhatsapp } from "../phone";
 import {
   assetUrl,
   cancelOrderInApi,
@@ -400,7 +401,7 @@ function usePanelData(): PanelData {
             return {
               number: order.number,
               customer: order.customer.name,
-              whatsapp: order.customer.whatsapp,
+              whatsapp: localWhatsapp(order.customer.whatsapp),
               email: order.customer.email,
               model: first?.modelName ?? "—",
               color: first?.color.name ?? "—",
@@ -1223,7 +1224,7 @@ function Campaigns({ data }: { data: PanelData }) {
       setSubtitle(detail.subtitle ?? "");
       setPickup(detail.pickupInstructions);
       setRepresentative(detail.representativeName);
-      setRepresentativePhone(detail.representativeWhatsapp ?? "");
+      setRepresentativePhone(localWhatsapp(detail.representativeWhatsapp));
       setDeadline(dateInput(detail.deadlineAt));
       setExistingArt({ front: assetUrl(detail.artFrontUrl) ?? "", back: assetUrl(detail.artBackUrl) ?? "" });
       setBaseTransforms({

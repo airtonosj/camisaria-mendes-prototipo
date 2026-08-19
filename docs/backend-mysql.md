@@ -19,6 +19,10 @@ falha de servidor aparece como erro com "tentar novamente".
 - A transição legítima para `paid` agenda, na mesma transação, um e-mail com o código da compra para o comprador.
 - Redirecionamento do navegador não confirma pagamento; webhook e retorno apenas solicitam a validação server-to-server por `payment_check`.
 - `Idempotency-Key` impede que uma tentativa repetida crie dois pedidos.
+- O WhatsApp é gravado e consultado sempre no formato canônico — somente dígitos, com o
+  código do país — para que o cliente encontre o próprio pedido tendo digitado com ou sem
+  o `+55`, no pagamento e no acompanhamento. A regra mora em `api/phone.mjs` e vale também
+  para o telefone enviado à InfinitePay, que recusa com 422 qualquer coisa fora do E.164.
 - O painel autentica com login e usa um token de sessão atribuído a uma conta da camisaria:
   12 horas de inatividade e no máximo 7 dias de vida. Não existe credencial administrativa
   estática ou sem expiração.

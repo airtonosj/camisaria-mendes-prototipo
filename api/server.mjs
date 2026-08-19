@@ -26,6 +26,7 @@ import {
   PaymentIntegrationError,
   startInfinitePayReconciliationWorker,
 } from "./infinitepay-payments.mjs";
+import { parseWhatsapp, whatsappLookupValues } from "./phone.mjs";
 
 const campaignPhases = ["receiving_orders", "orders_closed", "production", "ready_for_delivery", "completed"];
 const campaignSizeCodesByModel = new Map([
@@ -187,10 +188,18 @@ function optionalText(value, maxLength) {
   return text || null;
 }
 
+/**
+ * Toda entrada de WhatsApp passa por aqui, para gravar e para consultar, e sai no
+ * formato canônico de `phone.mjs`. É o que garante que o cliente encontre o próprio
+ * pedido tendo digitado com ou sem o código do país, nas duas telas.
+ *
+ * O motivo da recusa vai junto: "tem dígitos demais" e "não existe o DDD 10" dizem ao
+ * cliente o que corrigir, enquanto um "número inválido" genérico o deixa adivinhando.
+ */
 function normalizeWhatsapp(value, field = "customer.whatsapp") {
-  const digits = requireText(value, field, 30).replace(/\D/g, "");
-  if (digits.length < 10 || digits.length > 15) throw new ApiError(422, "VALIDATION_ERROR", "Informe um WhatsApp válido com DDD.");
-  return digits;
+  const { canonical, error } = parseWhatsapp(requireText(value, field, 30));
+  if (!canonical) throw new ApiError(422, "VALIDATION_ERROR", error);
+  return canonical;
 }
 
 function bearerToken(request) {
@@ -1878,6 +1887,7 @@ function effectiveOrderStatus(order) {
 
 async function trackOrder(requestUrl, orderNumber) {
   const whatsapp = normalizeWhatsapp(requestUrl.searchParams.get("whatsapp"));
+  const lookup = whatsappLookupValues(whatsapp);
   const [rows] = await pool.execute(
     // Sem filtrar por status: um pedido cancelado precisa aparecer como cancelado para o
     // aluno, e não como "pedido não encontrado".
@@ -1891,9 +1901,9 @@ async function trackOrder(requestUrl, orderNumber) {
             c.art_back_x, c.art_back_y, c.art_back_scale, c.art_back_rotation
        FROM orders o
        JOIN campaigns c ON c.id = o.campaign_id
-      WHERE o.order_number = ? AND o.customer_whatsapp = ?
+      WHERE o.order_number = ? AND o.customer_whatsapp IN (${lookup.map(() => "?").join(", ")})
       LIMIT 1`,
-    [orderNumber, whatsapp],
+    [orderNumber, ...lookup],
   );
   if (rows.length === 0) throw new ApiError(404, "ORDER_NOT_FOUND", "Pedido não encontrado com os dados informados.");
   const order = rows[0];

@@ -1,4 +1,5 @@
 import { config } from "./config.mjs";
+import { internationalPhone } from "./phone.mjs";
 
 const trustedCheckoutHosts = new Set([
   "checkout.infinitepay.com.br",
@@ -100,16 +101,16 @@ function assertCheckoutUrl(value) {
 }
 
 /**
- * A InfinitePay espera o telefone em formato internacional. O cadastro guarda somente
- * digitos e o cliente digita DDD + numero sem o codigo do pais: prefixar "+" direto
- * transformaria (98) 98888-7777 em +98 988887777, que e um numero do Ira. Numeros de 10
- * ou 11 digitos sao locais e recebem o 55; de 12 a 15 digitos ja vem com codigo de pais.
+ * O provedor recusa com 422 "not a valid phone number" qualquer coisa fora do E.164:
+ * prefixar "+" nos digitos crus transformava (98) 98888-7777 em +98 988887777, que e um
+ * numero do Ira. A regra de formato mora em phone.mjs, junto com a do resto do sistema.
  */
-function internationalPhone(value) {
-  const digits = String(value ?? "").replace(/[^0-9]/g, "");
-  if (digits.length === 10 || digits.length === 11) return `+55${digits}`;
-  if (digits.length >= 12 && digits.length <= 15) return `+${digits}`;
-  throw new InfinitePayRequestError("INVALID_PROVIDER_PAYLOAD", "O WhatsApp do pedido nao forma um telefone valido.");
+function providerPhone(value) {
+  const phone = internationalPhone(value);
+  if (!phone) {
+    throw new InfinitePayRequestError("INVALID_PROVIDER_PAYLOAD", "O WhatsApp do pedido nao forma um telefone valido.");
+  }
+  return phone;
 }
 
 /**
@@ -138,7 +139,7 @@ export function infinitePayLinkPayload({ orderNumber, items, customer, redirectU
     customer: {
       name: boundedText(customer.name, "customer.name", 160),
       email: boundedText(customer.email, "customer.email", 254),
-      phone_number: internationalPhone(customer.phone),
+      phone_number: providerPhone(customer.phone),
     },
     items: items.map(providerItem),
   };
