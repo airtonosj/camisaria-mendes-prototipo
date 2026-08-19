@@ -125,7 +125,7 @@ export async function createCheckoutForOrder(orderNumber, whatsapp) {
       customer: {
         name: order.customer_name,
         email: order.customer_email,
-        phone: `+${order.customer_whatsapp}`,
+        phone: order.customer_whatsapp,
       },
       items: items.map((item) => ({
         quantity: Number(item.quantity),
@@ -143,9 +143,14 @@ export async function createCheckoutForOrder(orderNumber, whatsapp) {
     );
     return { url: checkout.url, reused: false };
   } catch (error) {
+    // Guarde o motivo tecnico junto do pedido. Sem o codigo e o corpo da recusa, uma
+    // falha de checkout nao deixa rastro depois que o cliente sai da tela.
+    const failure = error instanceof InfinitePayRequestError
+      ? `${error.code} ${JSON.stringify(error.details ?? {})}`
+      : String(error?.message ?? error);
     await pool.execute(
       `UPDATE payment_checkouts SET locked_at = NULL, last_error = ? WHERE order_id = ? AND provider = ?`,
-      [String(error?.message ?? error).slice(0, 500), order.id, provider],
+      [failure.slice(0, 500), order.id, provider],
     );
     if (error instanceof InfinitePayRequestError) {
       throw new PaymentIntegrationError(502, error.code, error.message, error.details);

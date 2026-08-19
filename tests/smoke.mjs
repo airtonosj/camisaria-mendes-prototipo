@@ -100,6 +100,18 @@ async function startFakeInfinitePay() {
     const body = await readRequestJson(request);
     response.setHeader("Content-Type", "application/json");
     if (request.method === "POST" && request.url === "/links") {
+      // O provedor real recusa telefone fora do formato internacional com
+      // 422 "not a valid phone number". O fake precisa recusar igual: foi a ausencia
+      // desta validacao que deixou passar um checkout enviando +DDD sem o codigo do pais.
+      if (!/^[+]55[0-9]{10,11}$/.test(String(body.customer?.phone_number ?? ""))) {
+        response.statusCode = 422;
+        response.end(JSON.stringify({
+          success: false,
+          message: "Invalid checkout link params",
+          errors: { customer: { phone_number: ["not a valid phone number"] } },
+        }));
+        return;
+      }
       fakeInfinitePay.links.push(body);
       response.end(JSON.stringify({
         url: `https://checkout.infinitepay.io/smoke-infinitepay?lenc=${encodeURIComponent(body.order_nsu)}`,
@@ -942,7 +954,7 @@ try {
   const firstKey = randomUUID();
   const firstOrderBody = {
     campaignCode: campaign.code,
-    customer: { name: "Cliente Smoke Pago", whatsapp: "5598999991001", email: "pago@example.com" },
+    customer: { name: "Cliente Smoke Pago", whatsapp: "98999991001", email: "pago@example.com" },
     items: [
       { variantId: variant.id, size: allowedSize.code, quantity: 2 },
       { variantId: secondVariant.id, size: secondAllowedSize.code, quantity: 1 },
@@ -971,7 +983,7 @@ try {
   assert.equal(firstReplay.order.number, firstCreated.order.number);
   step("pedido é persistido e repetição idempotente não duplica");
 
-  const pendingTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
+  const pendingTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
   assert.equal(pendingTracking.order.status, "pending");
   assert.equal(pendingTracking.order.items.length, 2);
   assert.equal(pendingTracking.order.items.reduce((total, item) => total + item.quantity, 0), 3);
@@ -990,24 +1002,26 @@ try {
     expected: 404,
     body: { status: "paid", note: "Confirmação do smoke test" },
   });
-  const stillPending = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
+  const stillPending = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
   assert.equal(stillPending.order.status, "pending");
   step("painel e API não oferecem confirmação manual de pagamento");
 
   const checkout = await request(`/api/orders/${firstCreated.order.number}/checkout`, {
     method: "POST",
-    body: { whatsapp: "5598999991001" },
+    body: { whatsapp: "98999991001" },
   });
   assert.match(checkout.checkout.url, /^https:\/\/checkout\.infinitepay\.io\//);
   assert.equal(fakeInfinitePay.links.length, 1);
   assert.equal(fakeInfinitePay.links[0].handle, "smoke-infinitepay");
   assert.equal(fakeInfinitePay.links[0].order_nsu, firstCreated.order.number);
+  // O cliente digita DDD + numero; o provedor exige o codigo do pais.
+  assert.equal(fakeInfinitePay.links[0].customer.phone_number, "+5598999991001");
   assert.equal(fakeInfinitePay.links[0].items.length, 2);
   assert.equal(fakeInfinitePay.links[0].items.reduce((sum, item) => sum + item.price * item.quantity, 0), firstCreated.order.totalCents);
   assert.match(fakeInfinitePay.links[0].webhook_url, /\/api\/payments\/infinitepay\/webhook$/);
   const checkoutReplay = await request(`/api/orders/${firstCreated.order.number}/checkout`, {
     method: "POST",
-    body: { whatsapp: "5598999991001" },
+    body: { whatsapp: "98999991001" },
   });
   assert.equal(checkoutReplay.checkout.reused, true);
   assert.equal(fakeInfinitePay.links.length, 1);
@@ -1045,7 +1059,7 @@ try {
     body: { ...providerEvent, slug: providerEvent.invoice_slug, invoice_slug: undefined },
   });
   assert.equal(browserReconciliation.duplicate, true);
-  await waitForOrderStatus(firstCreated.order.number, "5598999991001", "confirmed");
+  await waitForOrderStatus(firstCreated.order.number, "98999991001", "confirmed");
   assert.equal(fakeInfinitePay.checkRequests.length, 1);
   assert.equal(fakeInfinitePay.checkRequests[0].order_nsu, firstCreated.order.number);
   assert.equal(fakeInfinitePay.checkRequests[0].transaction_nsu, transactionNsu);
@@ -1238,7 +1252,7 @@ try {
       body: { targetPhase },
     });
   }
-  let phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
+  let phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
   assert.equal(phaseTracking.order.status, "ready");
   await request(`/api/admin/campaigns/${campaign.code}/phase`, {
     method: "PATCH",
@@ -1251,14 +1265,14 @@ try {
     token,
     body: { targetPhase: "production", reason: "Validando retorno controlado" },
   });
-  phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
+  phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
   assert.equal(phaseTracking.order.status, "production");
   await request(`/api/admin/campaigns/${campaign.code}/phase`, {
     method: "PATCH",
     token,
     body: { targetPhase: "orders_closed", reason: "Validando retorno ao fechamento" },
   });
-  phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
+  phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
   assert.equal(phaseTracking.order.status, "confirmed");
   await expireCampaignDeadlineForTest(campaign.code);
   await request(`/api/admin/campaigns/${campaign.code}/phase`, {
@@ -1292,7 +1306,7 @@ try {
     token,
     body: { status: "delivered", note: "Entrega do smoke test" },
   });
-  const deliveredTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
+  const deliveredTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
   assert.equal(deliveredTracking.order.status, "delivered");
   const delivery = await request(`/api/admin/reports/delivery?campaign=${campaign.code}`, { token });
   assert.equal(delivery.rows.every((row) => row.orderNumber === firstCreated.order.number), true);
@@ -1331,7 +1345,7 @@ try {
     },
   });
   assert.equal(refund.refund.paymentStatus, "refunded");
-  const refundedTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=5598999991001`);
+  const refundedTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
   assert.equal(refundedTracking.order.status, "cancelled");
   assert.equal(refundedTracking.order.paymentStatus, "refunded");
   assert.match(refundedTracking.order.cancellationReason, /Reembolso integral/);

@@ -58,6 +58,13 @@ async function postJson(path, payload, { fetchImpl = fetch } = {}) {
     throw new InfinitePayRequestError("INFINITEPAY_INVALID_RESPONSE", "A InfinitePay devolveu uma resposta inválida.");
   }
   if (!response.ok) {
+    // O corpo da recusa e a unica pista do motivo. Registre apenas a resposta do
+    // provedor, nunca o payload enviado: ele carrega nome, e-mail e telefone do cliente.
+    console.error("[InfinitePay] Solicitacao recusada.", {
+      path,
+      status: response.status,
+      response: text.slice(0, 500),
+    });
     throw new InfinitePayRequestError(
       "INFINITEPAY_REJECTED",
       "A InfinitePay recusou a solicitacao. O pedido continua salvo.",
@@ -92,23 +99,53 @@ function assertCheckoutUrl(value) {
   return url.toString();
 }
 
-export async function createInfinitePayLink({ orderNumber, items, customer, redirectUrl, webhookUrl }, options) {
-  const payload = {
+/**
+ * A InfinitePay espera o telefone em formato internacional. O cadastro guarda somente
+ * digitos e o cliente digita DDD + numero sem o codigo do pais: prefixar "+" direto
+ * transformaria (98) 98888-7777 em +98 988887777, que e um numero do Ira. Numeros de 10
+ * ou 11 digitos sao locais e recebem o 55; de 12 a 15 digitos ja vem com codigo de pais.
+ */
+function internationalPhone(value) {
+  const digits = String(value ?? "").replace(/[^0-9]/g, "");
+  if (digits.length === 10 || digits.length === 11) return `+55${digits}`;
+  if (digits.length >= 12 && digits.length <= 15) return `+${digits}`;
+  throw new InfinitePayRequestError("INVALID_PROVIDER_PAYLOAD", "O WhatsApp do pedido nao forma um telefone valido.");
+}
+
+/**
+ * Item invalido - preco zerado por um cupom maior que a peca, por exemplo - volta do
+ * provedor como uma recusa generica. Falhar aqui nomeia o campo que esta errado.
+ */
+function providerItem(item, index) {
+  const quantity = Number(item.quantity);
+  const price = Number(item.unitPriceCents);
+  if (!Number.isSafeInteger(quantity) || quantity < 1) {
+    throw new InfinitePayRequestError("INVALID_PROVIDER_PAYLOAD", `Quantidade invalida no item ${index + 1} do pedido.`);
+  }
+  if (!Number.isSafeInteger(price) || price < 1) {
+    throw new InfinitePayRequestError("INVALID_PROVIDER_PAYLOAD", `Valor invalido no item ${index + 1} do pedido.`);
+  }
+  return { quantity, price, description: boundedText(item.description, `items[${index}].description`, 120) };
+}
+
+/** Exportado para o diagnostico poder imprimir o payload exato sem chamar o provedor. */
+export function infinitePayLinkPayload({ orderNumber, items, customer, redirectUrl, webhookUrl }) {
+  return {
     handle: config.payments.infinitePay.handle,
     redirect_url: redirectUrl,
     webhook_url: webhookUrl,
     order_nsu: orderNumber,
     customer: {
-      name: customer.name,
-      email: customer.email,
-      phone_number: customer.phone,
+      name: boundedText(customer.name, "customer.name", 160),
+      email: boundedText(customer.email, "customer.email", 254),
+      phone_number: internationalPhone(customer.phone),
     },
-    items: items.map((item) => ({
-      quantity: item.quantity,
-      price: item.unitPriceCents,
-      description: item.description,
-    })),
+    items: items.map(providerItem),
   };
+}
+
+export async function createInfinitePayLink(input, options) {
+  const payload = infinitePayLinkPayload(input);
   const response = await postJson("/links", payload, options);
   return { url: assertCheckoutUrl(response.url), payload, response };
 }

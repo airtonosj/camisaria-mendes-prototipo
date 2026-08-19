@@ -29,7 +29,8 @@
     "ops:email:test": "node ops/test-email.mjs",
     "ops:storage:create": "node ops/verify-storage.mjs create",
     "ops:storage:check": "node ops/verify-storage.mjs check",
-    "ops:verify-build": "node ops/verify-build.mjs"
+    "ops:verify-build": "node ops/verify-build.mjs",
+    "ops:infinitepay:diagnose": "node ops/infinitepay-diagnose.mjs"
   },
   "dependencies": {
     "mysql2": "^3.14.4",
