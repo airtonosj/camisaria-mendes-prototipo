@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs/promises";
@@ -7,8 +7,14 @@ import http from "node:http";
 import mysql from "mysql2/promise";
 import { resetTestDatabase } from "./reset-test-database.mjs";
 import { projectDirectory, testEnvironment } from "./test-environment.mjs";
+import { createLicenseCommand } from "../api/license-token.mjs";
 
 const environment = testEnvironment();
+const { privateKey: licensePrivateKeyObject, publicKey: licensePublicKeyObject } = generateKeyPairSync("ed25519");
+const licensePrivateKey = licensePrivateKeyObject.export({ format: "pem", type: "pkcs8" });
+environment.LICENSE_CONTROL_ENABLED = "true";
+environment.LICENSE_INSTALLATION_ID = "cliente-smoke-001";
+environment.LICENSE_PUBLIC_KEY_BASE64 = licensePublicKeyObject.export({ format: "der", type: "spki" }).toString("base64");
 const baseUrl = `http://${environment.API_HOST}:${environment.API_PORT}`;
 
 function runNode(script, args = []) {
@@ -492,8 +498,9 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "022_payment_capture_method");
+  assert.equal(health.schema.current, "023_license_control");
   assert.equal(health.storage.ready, true);
+  assert.equal(health.license.status, "active");
   step("health check valida conexão e versão do schema");
 
   const login = await request("/api/auth/login", {
@@ -1442,6 +1449,93 @@ try {
   production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
   assert.equal(production.rows.length, 0);
   step("reembolso integral expira checkout, encerra eventos tardios e retira o pedido da produção");
+
+  const controlPage = await fetch(`${baseUrl}/controle-licenca`, { signal: AbortSignal.timeout(5000) });
+  assert.equal(controlPage.status, 200);
+  assert.match(controlPage.headers.get("x-robots-tag") ?? "", /noindex/);
+  const initialLicense = await request("/api/license/control");
+  assert.equal(initialLicense.license.status, "active");
+
+  const suspensionCommand = createLicenseCommand({
+    privateKey: licensePrivateKey,
+    installationId: environment.LICENSE_INSTALLATION_ID,
+    action: "suspend",
+    reason: "Suspensão contratual do smoke test.",
+  });
+  const suspended = await request("/api/license/control", {
+    method: "POST",
+    body: { token: suspensionCommand },
+  });
+  assert.equal(suspended.license.status, "suspended");
+  await request("/api/license/control", {
+    method: "POST",
+    expected: 409,
+    body: { token: suspensionCommand },
+  });
+
+  const suspendedPage = await fetch(`${baseUrl}/`, { signal: AbortSignal.timeout(5000) });
+  assert.equal(suspendedPage.status, 503);
+  assert.match(await suspendedPage.text(), /temporariamente suspenso/i);
+  assert.equal((await request("/api/health")).license.status, "suspended");
+  await request("/api/admin/campaigns", { token });
+  await request("/api/orders", {
+    method: "POST",
+    token,
+    expected: 423,
+    headers: { "Idempotency-Key": randomUUID() },
+    body: {},
+  });
+  await request("/api/admin/campaigns", {
+    method: "POST",
+    token,
+    expected: 423,
+    body: {},
+  });
+  await request("/api/payments/infinitepay/webhook", {
+    method: "POST",
+    expected: 409,
+    body: {
+      invoice_slug: `licenca-webhook-${randomUUID()}`,
+      transaction_nsu: randomUUID(),
+      order_nsu: orderWithoutCheckout.order.number,
+    },
+  });
+
+  const wrongInstallationCommand = createLicenseCommand({
+    privateKey: licensePrivateKey,
+    installationId: "outro-cliente-001",
+    action: "activate",
+  });
+  await request("/api/license/control", {
+    method: "POST",
+    expected: 403,
+    body: { token: wrongInstallationCommand },
+  });
+  const expiredCommand = createLicenseCommand({
+    privateKey: licensePrivateKey,
+    installationId: environment.LICENSE_INSTALLATION_ID,
+    action: "activate",
+    issuedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+    lifetimeMs: 60_000,
+  });
+  await request("/api/license/control", {
+    method: "POST",
+    expected: 410,
+    body: { token: expiredCommand },
+  });
+
+  const activationCommand = createLicenseCommand({
+    privateKey: licensePrivateKey,
+    installationId: environment.LICENSE_INSTALLATION_ID,
+    action: "activate",
+  });
+  const activeAgain = await request("/api/license/control", {
+    method: "POST",
+    body: { token: activationCommand },
+  });
+  assert.equal(activeAgain.license.status, "active");
+  assert.equal((await request("/api/health")).license.status, "active");
+  step("licença suspende por comando assinado, preserva consultas/webhook e reativa sem apagar dados");
 
   const absoluteSession = await request("/api/auth/login", {
     method: "POST",

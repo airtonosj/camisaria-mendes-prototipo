@@ -10,3 +10,6 @@ npm-debug.log*
 uploads/
 backups/
 tmp/
+license-keys/
+license-private.pem
+*.license-private.pem

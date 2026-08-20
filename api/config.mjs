@@ -66,6 +66,13 @@ export const config = {
   // reverso controlado pelo operador, como acontece no Web App gerenciado da Hostinger.
   trustProxy: booleanFromEnv("TRUST_PROXY", false),
   initialAdminPasswordConfigured: Boolean(process.env.ADMIN_INITIAL_PASSWORD),
+  license: {
+    // Opt-in: a produção atual continua inalterada até uma instalação de cliente
+    // receber identidade e chave pública próprias.
+    controlEnabled: booleanFromEnv("LICENSE_CONTROL_ENABLED", false),
+    installationId: textFromEnv("LICENSE_INSTALLATION_ID"),
+    publicKeyBase64: textFromEnv("LICENSE_PUBLIC_KEY_BASE64"),
+  },
   // Endereço público do site. Entra nos links de redefinição de senha, que precisam
   // apontar para o navegador do usuário e não para o host interno da API.
   publicAppUrl: (textFromEnv("PUBLIC_APP_URL") || "http://127.0.0.1:4173").replace(/\/+$/, ""),

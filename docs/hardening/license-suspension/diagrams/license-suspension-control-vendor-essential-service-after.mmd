@@ -1,0 +1,12 @@
+flowchart LR
+  U[Usuários] --> A[Aplicação na host do cliente]
+  C[Cliente com root] --> A
+  A --> D[(Dados locais)]
+  A -->|capacidade indispensável| S[Serviço do fornecedor]
+  B[Cobrança] --> E{Entitlement}
+  E --> S
+  S -->|ativo| A
+  S -->|restrito| R[Resposta de suspensão]
+
+  classDef changed stroke:#176b3a,stroke-width:3px
+  class S,E,R changed

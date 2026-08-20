@@ -1,0 +1,126 @@
+{
+  "documentType": "codex-security.hardening-analysis",
+  "schemaVersion": "1.0",
+  "analysisId": "hardening_20260820_license_suspension",
+  "sourceEvidence": {
+    "kind": "source_tree",
+    "label": "Camisaria Mendes licensing and contractual suspension evidence",
+    "collectionSha256": "aa814b79225746e5bdc6c3fe29fd2d1e6717833e21bdec06b4b8d215be3bf10f",
+    "artifactCount": 8,
+    "targetRevision": "5469b728f6c21bde7e082cef3f826931eab3420c",
+    "sourceDrift": "none"
+  },
+  "assessment": {
+    "outcome": "opportunities_identified",
+    "summary": "Replace a hidden shutdown path with a disclosed entitlement state machine, signed leases, grace periods, and non-destructive restriction."
+  },
+  "constraints": {
+    "profile": "balanced",
+    "changeHorizons": ["incremental", "medium_term", "foundational"],
+    "nonNegotiables": [
+      "No hidden URL, master credential, remote shell, or destructive action.",
+      "No deletion or mutation of customer business history during suspension.",
+      "Administrative login, backup, export, and offboarding remain possible.",
+      "Contractual notice and cure periods are authoritative over technical defaults."
+    ],
+    "assumptions": [
+      "The customer controls the production host.",
+      "Source-code delivery and root access have not yet been confirmed.",
+      "Legal validity depends on the final contract and must be reviewed by counsel.",
+      "Latency, uptime, and grace-period budgets have not been supplied."
+    ]
+  },
+  "opportunities": [
+    {
+      "opportunityId": "license-suspension-control",
+      "title": "Introduce explicit contractual entitlement enforcement",
+      "summary": "Represent payment status as a signed, auditable, reversible product entitlement instead of a hidden backdoor.",
+      "diagnosis": "The customer-controlled deployment has no licensing boundary; any purely local shutdown mechanism is both privileged and removable by the host owner.",
+      "evidence": [
+        { "claimType": "observed", "sourceKind": "source", "evidenceId": "E1", "path": "api/server.mjs", "claim": "The Node router owns all business operations but has no entitlement gate." },
+        { "claimType": "observed", "sourceKind": "document", "evidenceId": "E5", "path": "docs/deploy-hostinger-business.md", "claim": "The application code and configuration run on the deployment host." },
+        { "claimType": "inferred", "sourceKind": "source", "evidenceId": "E5", "path": "docs/deploy-hostinger-business.md", "claim": "An administrator with control of the host can patch or replace a local license check." }
+      ],
+      "desiredInvariants": [
+        "Only vendor-signed entitlement states can enable paid functionality.",
+        "Vendor-service unavailability never causes immediate suspension.",
+        "Suspension blocks new business operations but preserves history, admin access, backups, exports, and offboarding.",
+        "Every billing transition, notice, lease, restriction, and reactivation is auditable.",
+        "The installation sends no customer personal data that is unnecessary for licensing.",
+        "The product accurately documents when client root access can bypass enforcement."
+      ],
+      "proposalPath": "proposals/license-suspension-control.md",
+      "options": [
+        {
+          "optionId": "contract-only",
+          "title": "Contract-only enforcement",
+          "kind": "baseline",
+          "summary": "Rely on notices and contractual remedies without a remote technical shutdown.",
+          "diagramPaths": { "before": "diagrams/license-suspension-control-before.mmd", "after": "diagrams/license-suspension-control-contract-only-after.mmd" },
+          "evidenceCoverage": [
+            { "evidenceId": "E5", "effect": "unaffected", "tacticalFixRequired": false, "rationale": "The customer continues to control the entire installation." }
+          ],
+          "tradeoffs": [
+            { "dimension": "security", "direction": "improves", "confidence": "high", "basis": "source-derived", "assessment": "No privileged remote channel is introduced, but there is no technical enforcement.", "validationPlan": "Review access boundaries and confirm no vendor credential remains in the installation." },
+            { "dimension": "performance", "direction": "neutral", "confidence": "high", "basis": "source-derived", "assessment": "No request-time dependency is added.", "validationPlan": "Retain current API latency baseline." },
+            { "dimension": "memory", "direction": "neutral", "confidence": "high", "basis": "source-derived", "assessment": "No runtime component is added.", "validationPlan": "No additional measurement beyond the existing baseline is required." },
+            { "dimension": "reliability", "direction": "improves", "confidence": "high", "basis": "source-derived", "assessment": "No vendor licensing outage can affect the client system.", "validationPlan": "Confirm the installation operates without vendor connectivity." },
+            { "dimension": "operability", "direction": "neutral", "confidence": "medium", "basis": "hypothetical", "assessment": "Billing collection remains a contractual/manual process.", "validationPlan": "Exercise notice, cure, and termination procedures with counsel and operations." },
+            { "dimension": "migration", "direction": "neutral", "confidence": "high", "basis": "source-derived", "assessment": "No product migration is needed.", "validationPlan": "Align invoice, contract, and offboarding documentation." }
+          ],
+          "residualRisks": ["The customer can continue using the installation while in default."],
+          "implementationReadiness": { "affectedComponents": ["contract", "billing process"], "workPackages": ["Define notices, cure, termination, and collection workflow."], "acceptanceCriteria": ["No undisclosed vendor access remains in the product."], "migrationNotes": [], "rollback": "Not applicable to product code." }
+        },
+        {
+          "optionId": "signed-license-lease",
+          "title": "Signed license leases with graceful restriction",
+          "kind": "incremental",
+          "summary": "A vendor service issues short-lived signed entitlements; the client installation enforces a documented state machine.",
+          "diagramPaths": { "before": "diagrams/license-suspension-control-before.mmd", "after": "diagrams/license-suspension-control-signed-license-lease-after.mmd" },
+          "evidenceCoverage": [
+            { "evidenceId": "E1", "effect": "addresses", "tacticalFixRequired": true, "rationale": "A server-side gate can consistently restrict business writes." },
+            { "evidenceId": "E5", "effect": "mitigates", "tacticalFixRequired": true, "rationale": "Signed leases resist simple configuration edits but remain patchable by a host owner with source access." }
+          ],
+          "tradeoffs": [
+            { "dimension": "security", "direction": "improves", "confidence": "medium", "basis": "source-derived", "assessment": "The private signing key stays with the vendor; customer-hosted code contains only a public key. Root/source access can still remove the check.", "validationPlan": "Test forged, replayed, expired, downgraded, and revoked leases plus deliberate local tampering." },
+            { "dimension": "performance", "direction": "regresses", "confidence": "low", "basis": "hypothetical", "assessment": "Background refresh adds infrequent network work; request paths read a bounded local state.", "validationPlan": "Measure refresh latency and API p95 with cached entitlement checks." },
+            { "dimension": "memory", "direction": "neutral", "confidence": "high", "basis": "source-derived", "assessment": "Only a small signed lease and state cache are retained.", "validationPlan": "Compare process RSS under the smoke workload." },
+            { "dimension": "reliability", "direction": "regresses", "confidence": "medium", "basis": "source-derived", "assessment": "The license service is a new dependency, bounded by cached leases and a contractual grace period.", "validationPlan": "Simulate service loss, DNS failure, clock skew, restart, and grace expiry." },
+            { "dimension": "operability", "direction": "regresses", "confidence": "high", "basis": "source-derived", "assessment": "Billing integration, signing-key protection, tenant audit, notifications, and reactivation become vendor responsibilities.", "validationPlan": "Run activation, overdue, suspension, reactivation, key rotation, and disaster-recovery drills." },
+            { "dimension": "migration", "direction": "regresses", "confidence": "medium", "basis": "source-derived", "assessment": "Backend routing, admin UI, deployment configuration, contract, and billing workflow all change.", "validationPlan": "Roll out in observe-only mode before enabling restriction for any customer." }
+          ],
+          "residualRisks": ["A customer with root and source can patch out the enforcement.", "Compromise of the vendor signing/control plane can affect multiple customers."],
+          "implementationReadiness": { "affectedComponents": ["vendor license service", "api/server.mjs", "api/config.mjs", "database/migrations", "admin UI", "billing integration", "contract", "runbook"], "workPackages": ["Define entitlement states.", "Build signed lease issuer and verifier.", "Add server-side restriction policy.", "Add notice, audit, grace, and reactivation flows."], "acceptanceCriteria": ["Vendor outage does not immediately restrict service.", "Suspension is read-only and non-destructive.", "Forged or stale leases do not enable paid operations."], "migrationNotes": ["Start with observe-only telemetry and active leases."], "rollback": "Issue long-lived active leases and disable restriction while retaining audit records." }
+        },
+        {
+          "optionId": "vendor-essential-service",
+          "title": "Vendor-hosted essential service",
+          "kind": "structural",
+          "summary": "Keep an indispensable business capability under vendor control while the rest runs on the client host.",
+          "diagramPaths": { "before": "diagrams/license-suspension-control-before.mmd", "after": "diagrams/license-suspension-control-vendor-essential-service-after.mmd" },
+          "evidenceCoverage": [
+            { "evidenceId": "E5", "effect": "addresses", "tacticalFixRequired": true, "rationale": "The client cannot fully restore the contracted capability by only patching the local host, though it could reimplement the remote service." }
+          ],
+          "tradeoffs": [
+            { "dimension": "security", "direction": "improves", "confidence": "high", "basis": "source-derived", "assessment": "Enforcement authority is outside the client host, but vendor APIs and tenant isolation become high-value targets.", "validationPlan": "Threat-model tenant isolation, authorization, abuse, outage containment, and API replay." },
+            { "dimension": "performance", "direction": "regresses", "confidence": "medium", "basis": "source-derived", "assessment": "Critical operations gain a network hop and serialization.", "validationPlan": "Benchmark the selected operation from the client region with explicit p95/p99 targets." },
+            { "dimension": "memory", "direction": "neutral", "confidence": "low", "basis": "hypothetical", "assessment": "Client memory may stay similar; the vendor service adds independent capacity needs.", "validationPlan": "Capacity-test the vendor service and compare client RSS." },
+            { "dimension": "reliability", "direction": "regresses", "confidence": "high", "basis": "source-derived", "assessment": "Product availability now depends on vendor uptime and network connectivity.", "validationPlan": "Define SLOs and test timeouts, retries, partial degradation, and regional outage." },
+            { "dimension": "operability", "direction": "regresses", "confidence": "high", "basis": "source-derived", "assessment": "The vendor operates production infrastructure, on-call, billing, security, backup, and incident response.", "validationPlan": "Complete an operational readiness review before contracting the dependency." },
+            { "dimension": "migration", "direction": "regresses", "confidence": "high", "basis": "source-derived", "assessment": "A business capability must be extracted behind a versioned remote API.", "validationPlan": "Dual-run the local and remote paths before cutover and maintain a rollback protocol." }
+          ],
+          "residualRisks": ["Vendor outage affects every licensed customer.", "The architecture is no longer fully self-hosted.", "A determined client can reimplement the missing service."],
+          "implementationReadiness": { "affectedComponents": ["domain architecture", "vendor API", "client API adapter", "tenant isolation", "billing", "SLA", "contract"], "workPackages": ["Choose the externalized capability.", "Define API and SLO.", "Build tenant-isolated service.", "Migrate through dual-run."], "acceptanceCriteria": ["Local patching alone cannot restore the contracted capability.", "Vendor outage behavior matches the SLA.", "No customer business data beyond the agreed scope leaves the client host."], "migrationNotes": ["Requires explicit SaaS disclosure and data-flow review."], "rollback": "Re-enable the local capability during the agreed rollback window." }
+        }
+      ],
+      "recommendedOptionId": "signed-license-lease",
+      "recommendation": "The user selected the minimal offline variant of signed enforcement: short-lived one-time suspend/activate commands verified locally with an Ed25519 public key."
+    }
+  ],
+  "openQuestions": [
+    "Will the customer receive repository/source access in addition to root access?",
+    "Is the transaction a perpetual sale/assignment or a recurring software license?",
+    "Which operations remain available during restriction?",
+    "What notice, cure, reactivation, export, and offboarding obligations will the contract establish?"
+  ]
+}

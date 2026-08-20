@@ -19,7 +19,7 @@
     "user:reset": "node api/reset-password.mjs",
     "db:test:reset": "node tests/reset-test-database.mjs",
     "test:smoke": "node tests/smoke.mjs",
-    "test": "npm run typecheck && npm run test:smoke",
+    "test": "npm run typecheck && npm run test:license && npm run test:smoke",
     "build": "tsc -b && vite build && node ops/verify-build.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
@@ -30,7 +30,10 @@
     "ops:storage:create": "node ops/verify-storage.mjs create",
     "ops:storage:check": "node ops/verify-storage.mjs check",
     "ops:verify-build": "node ops/verify-build.mjs",
-    "ops:infinitepay:diagnose": "node ops/infinitepay-diagnose.mjs"
+    "ops:infinitepay:diagnose": "node ops/infinitepay-diagnose.mjs",
+    "license:keygen": "node ops/license-keygen.mjs",
+    "license:token": "node ops/license-token.mjs",
+    "test:license": "node tests/license-token.mjs"
   },
   "dependencies": {
     "mysql2": "^3.14.4",
