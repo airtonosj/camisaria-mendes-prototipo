@@ -152,6 +152,7 @@ type PanelOrder = {
   paymentMethod?: string | null;
   deliveryStatus: DeliveryStatusCode;
   totalCents: number;
+  createdAt?: string;
   /** Ausente nos dados de demonstração, que só têm pedidos ativos. */
   status?: "active" | "cancelled";
   cancellationReason?: string | null;
@@ -289,6 +290,19 @@ function formatCents(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function formatOrderDateTime(value: string | undefined, compact = false) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const date = parsed.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    ...(compact ? {} : { year: "numeric" as const }),
+  });
+  const time = parsed.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return compact ? `${date} · ${time}` : `${date} às ${time}`;
+}
+
 function formatDeadline(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "Prazo definido pela camisaria";
@@ -414,6 +428,7 @@ function usePanelData(): PanelData {
               paymentMethod: order.paymentMethod,
               deliveryStatus: order.deliveryStatus,
               totalCents: order.totalCents,
+              createdAt: order.createdAt,
               status: order.status,
               cancellationReason: order.cancellationReason,
               items: order.items.map((item) => ({ model: item.modelName, color: item.color.name, colorHex: item.color.hex, size: item.size as SizeCode, quantity: item.quantity, unitPriceCents: item.unitPriceCents })),
@@ -2853,7 +2868,7 @@ function Orders({ data }: { data: PanelData }) {
               <div className="campaign-orders-head"><span>Pedido</span><span>Cliente</span><span>Corte</span><span>Cor</span><span>Tam.</span><span>Qtd.</span><span>Pagamento</span><span>Entrega</span><span>Ação</span></div>
               {filteredOrders.map((order) => (
                 <div className="campaign-orders-row" key={order.number}>
-                  <button className="campaign-order-number" type="button" title={`Ver detalhes do pedido ${order.number}`} onClick={() => setViewingOrderNumber(order.number)}><strong>#{order.number}</strong><small className={order.status === "cancelled" ? "is-cancelled" : ""}>{order.status === "cancelled" ? "Cancelado" : "Ver detalhes"}</small></button><span>{order.customer}</span><span>{panelOrderItems(order).length === 1 ? order.model : `${panelOrderItems(order).length} combinações`}</span>
+                  <button className="campaign-order-number" type="button" title={`Ver detalhes do pedido ${order.number}${order.createdAt ? `, feito em ${formatOrderDateTime(order.createdAt)}` : ""}`} onClick={() => setViewingOrderNumber(order.number)}><strong>#{order.number}</strong><small className={order.status === "cancelled" ? "is-cancelled" : ""}>{order.status === "cancelled" ? "Cancelado" : "Ver detalhes"}{order.createdAt && ` · ${formatOrderDateTime(order.createdAt, true)}`}</small></button><span>{order.customer}</span><span>{panelOrderItems(order).length === 1 ? order.model : `${panelOrderItems(order).length} combinações`}</span>
                   <span className="campaign-order-color">{panelOrderItems(order).length === 1 ? <><i style={{ backgroundColor: order.colorHex }} />{order.color}</> : <small className="campaign-order-items-summary">{panelOrderItems(order).map((item) => `${item.color} ${item.size}`).join(" · ")}</small>}</span>
                   <span>{panelOrderItems(order).length === 1 ? order.size : "Vários"}</span><span>{order.quantity}</span>
                   <span className={`order-payment order-payment--${order.paymentStatus}`}>
@@ -2883,7 +2898,7 @@ function Orders({ data }: { data: PanelData }) {
                 <button className="order-detail-backdrop" type="button" aria-label="Fechar detalhes do pedido" onClick={() => setViewingOrderNumber("")} />
                 <section className="order-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="order-detail-title">
                   <header>
-                    <div><span>Detalhes do pedido</span><h3 id="order-detail-title">#{viewingOrder.number}</h3></div>
+                    <div><span>Detalhes do pedido</span><h3 id="order-detail-title">#{viewingOrder.number}</h3>{viewingOrder.createdAt && <time dateTime={viewingOrder.createdAt}>Pedido feito em {formatOrderDateTime(viewingOrder.createdAt)}</time>}</div>
                     <button type="button" aria-label="Fechar detalhes" onClick={() => setViewingOrderNumber("")}><span className="material-symbols-rounded" aria-hidden="true">close</span></button>
                   </header>
                   <div className="order-detail-summary">

@@ -1637,7 +1637,7 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-order-color, .order-delivery { display: flex; align-items: center; gap: 6px; }
 .order-payment { display: flex; align-items: flex-start; flex-direction: column; gap: 2px; }
 .order-payment > span { display: flex; align-items: center; gap: 6px; }
-.order-payment > small { color: #737c80; font-size: .43rem; font-weight: 700; line-height: 1.25; }
+.order-payment > small { color: #737c80; font-size: .5rem; font-weight: 700; line-height: 1.25; }
 .campaign-order-color i { width: 9px; height: 9px; flex: 0 0 auto; border: 1px solid #c7ccca; border-radius: 50%; }
 .order-payment i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #16a163; }
 .order-payment--pending i { background: #e6a514; }
@@ -1688,6 +1688,7 @@ main > section[id] { scroll-margin-top: 78px; }
 .order-detail-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; border-bottom: 1px solid #e0e4e2; padding-bottom: 19px; }
 .order-detail-dialog > header span:first-child { color: #087fca; font-size: .52rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .order-detail-dialog > header h3 { margin: 6px 0 0; color: #171b1e; font-size: 1.55rem; letter-spacing: -.045em; }
+.order-detail-dialog > header time { display: block; margin-top: 5px; color: #737c80; font-size: .54rem; font-weight: 700; }
 .order-detail-dialog > header > button { width: 36px; height: 36px; display: grid; place-content: center; border: 1px solid #d9dddb; cursor: pointer; color: #626b70; background: #fff; }
 .order-detail-dialog > header > button:hover, .order-detail-dialog > header > button:focus-visible { border-color: #087fca; color: #087fca; outline: 0; }
 .order-detail-summary { display: grid; grid-template-columns: 1.2fr .9fr .75fr .85fr; gap: 10px; margin-top: 18px; }
