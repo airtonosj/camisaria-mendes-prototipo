@@ -1634,7 +1634,10 @@ main > section[id] { scroll-margin-top: 78px; }
 .campaign-order-number:hover strong, .campaign-order-number:focus-visible strong { color: #045a91; text-decoration: underline; text-underline-offset: 2px; }
 .campaign-order-number:focus-visible { outline: 2px solid #0799e3; outline-offset: 3px; }
 .campaign-order-number small:first-of-type:not(:only-child), .campaign-order-number small.is-cancelled { color: #b42318; }
-.campaign-order-color, .order-payment, .order-delivery { display: flex; align-items: center; gap: 6px; }
+.campaign-order-color, .order-delivery { display: flex; align-items: center; gap: 6px; }
+.order-payment { display: flex; align-items: flex-start; flex-direction: column; gap: 2px; }
+.order-payment > span { display: flex; align-items: center; gap: 6px; }
+.order-payment > small { color: #737c80; font-size: .43rem; font-weight: 700; line-height: 1.25; }
 .campaign-order-color i { width: 9px; height: 9px; flex: 0 0 auto; border: 1px solid #c7ccca; border-radius: 50%; }
 .order-payment i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #16a163; }
 .order-payment--pending i { background: #e6a514; }

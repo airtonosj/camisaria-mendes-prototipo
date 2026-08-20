@@ -1926,6 +1926,9 @@ async function trackOrder(requestUrl, orderNumber) {
     // aluno, e não como "pedido não encontrado".
     `SELECT o.id, o.order_number, o.customer_name, o.status, o.cancellation_reason,
             o.payment_status, o.delivery_status,
+            (SELECT p.capture_method FROM payments p
+              WHERE p.order_id = o.id AND p.status IN ('paid', 'refunded', 'partially_refunded')
+              ORDER BY p.confirmed_at DESC, p.id DESC LIMIT 1) AS payment_method,
             o.subtotal_cents, o.discount_cents, o.coupon_code, o.total_cents,
             o.created_at, o.paid_at, o.delivered_at,
             c.code AS campaign_code, c.title AS campaign_title, c.phase AS campaign_phase,
@@ -1963,6 +1966,7 @@ async function trackOrder(requestUrl, orderNumber) {
     status: effectiveOrderStatus(order),
     cancellationReason: order.cancellation_reason,
     paymentStatus: order.payment_status,
+    paymentMethod: order.payment_method,
     deliveryStatus: order.delivery_status,
     subtotalCents: order.subtotal_cents,
     discountCents: order.discount_cents,
@@ -2005,6 +2009,9 @@ async function listCampaignOrders(code) {
   const [rows] = await pool.execute(
     `SELECT o.order_number, o.customer_name, o.customer_whatsapp, o.customer_email,
             o.status, o.cancellation_reason, o.payment_status, o.delivery_status,
+            (SELECT p.capture_method FROM payments p
+              WHERE p.order_id = o.id AND p.status IN ('paid', 'refunded', 'partially_refunded')
+              ORDER BY p.confirmed_at DESC, p.id DESC LIMIT 1) AS payment_method,
             o.subtotal_cents, o.discount_cents, o.coupon_code, o.total_cents, o.created_at,
             sm.name AS model_name, co.name AS color_name, co.hex_color,
             sz.code AS size, sz.size_group, oi.quantity, oi.unit_price_cents, oi.unit_discount_cents, oi.discounted_quantity
@@ -2029,6 +2036,7 @@ async function listCampaignOrders(code) {
         status: row.status,
         cancellationReason: row.cancellation_reason,
         paymentStatus: row.payment_status,
+        paymentMethod: row.payment_method,
         deliveryStatus: row.delivery_status,
         subtotalCents: row.subtotal_cents,
         discountCents: row.discount_cents,

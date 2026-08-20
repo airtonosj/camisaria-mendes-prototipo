@@ -118,6 +118,7 @@ export type TrackedOrder = {
   status: "pending" | "confirmed" | "production" | "failed" | "ready" | "delivered" | "cancelled";
   cancellationReason: string | null;
   paymentStatus: string;
+  paymentMethod: string | null;
   subtotalCents: number;
   discountCents: number;
   couponCode: string | null;
@@ -467,6 +468,7 @@ export type ApiCampaignOrder = {
   status: "active" | "cancelled";
   cancellationReason: string | null;
   paymentStatus: PaymentStatusCode;
+  paymentMethod: string | null;
   deliveryStatus: DeliveryStatusCode;
   totalCents: number;
   subtotalCents: number;

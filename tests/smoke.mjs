@@ -492,7 +492,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "021_campaign_coupon_maximum_discount_quantity");
+  assert.equal(health.schema.current, "022_payment_capture_method");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -1130,10 +1130,17 @@ try {
   });
   assert.equal(browserReconciliation.duplicate, true);
   await waitForOrderStatus(firstCreated.order.number, "98999991001", "confirmed");
+  const paidTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
+  assert.equal(paidTracking.order.paymentMethod, "pix");
+  const paidCampaignOrders = await request(`/api/admin/campaigns/${campaign.code}/orders`, { token });
+  assert.equal(
+    paidCampaignOrders.orders.find((order) => order.number === firstCreated.order.number)?.paymentMethod,
+    "pix",
+  );
   assert.equal(fakeInfinitePay.checkRequests.length, 1);
   assert.equal(fakeInfinitePay.checkRequests[0].order_nsu, firstCreated.order.number);
   assert.equal(fakeInfinitePay.checkRequests[0].transaction_nsu, transactionNsu);
-  step("webhook e retorno do navegador reconciliam por payment_check de forma idempotente");
+  step("webhook e retorno reconciliam por payment_check e exibem a forma confirmada no pedido");
 
   const confirmationEmail = await deliverQueuedPaymentEmailForTest(firstCreated.order.number);
   assert.equal(confirmationEmail.to, "pago@example.com");

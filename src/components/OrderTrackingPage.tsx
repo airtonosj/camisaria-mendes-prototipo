@@ -5,6 +5,7 @@ import { shirtModels } from "../data";
 import type { CampaignArtMode, VariantArtwork } from "../data";
 import { Brand } from "./Brand";
 import { ShirtMockupPreview } from "./ShirtMockupPreview";
+import { paymentMethodLabel } from "../payment";
 
 type DemoOrderStatus = "pending" | "confirmed" | "production" | "failed" | "ready" | "delivered" | "cancelled";
 
@@ -187,9 +188,9 @@ export function OrderTrackingPage() {
         statusLabel: copy[2],
         statusIcon: copy[3],
         paymentLabel: persisted.paymentStatus === "paid"
-          ? "Pagamento confirmado"
+          ? `${paymentMethodLabel(persisted.paymentMethod)} · Pagamento confirmado`
           : persisted.paymentStatus === "refunded" || persisted.paymentStatus === "partially_refunded"
-            ? "Pagamento reembolsado"
+            ? `${paymentMethodLabel(persisted.paymentMethod)} · Pagamento reembolsado`
             : persisted.paymentStatus === "failed"
               ? "Pagamento não confirmado"
               : "Aguardando confirmação",

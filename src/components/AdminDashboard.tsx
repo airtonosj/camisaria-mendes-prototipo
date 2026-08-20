@@ -21,6 +21,7 @@ import {
   uploadCampaignArt,
   uploadCampaignVideo,
 } from "../api";
+import { paymentMethodLabel } from "../payment";
 import type {
   ApiDeliveryRow,
   ApiProductionRow,
@@ -148,6 +149,7 @@ type PanelOrder = {
   size: SizeCode;
   quantity: number;
   paymentStatus: PaymentStatusCode;
+  paymentMethod?: string | null;
   deliveryStatus: DeliveryStatusCode;
   totalCents: number;
   /** Ausente nos dados de demonstração, que só têm pedidos ativos. */
@@ -409,6 +411,7 @@ function usePanelData(): PanelData {
               size: (first?.size ?? "M") as SizeCode,
               quantity: order.items.reduce((total, item) => total + item.quantity, 0),
               paymentStatus: order.paymentStatus,
+              paymentMethod: order.paymentMethod,
               deliveryStatus: order.deliveryStatus,
               totalCents: order.totalCents,
               status: order.status,
@@ -2854,7 +2857,8 @@ function Orders({ data }: { data: PanelData }) {
                   <span className="campaign-order-color">{panelOrderItems(order).length === 1 ? <><i style={{ backgroundColor: order.colorHex }} />{order.color}</> : <small className="campaign-order-items-summary">{panelOrderItems(order).map((item) => `${item.color} ${item.size}`).join(" · ")}</small>}</span>
                   <span>{panelOrderItems(order).length === 1 ? order.size : "Vários"}</span><span>{order.quantity}</span>
                   <span className={`order-payment order-payment--${order.paymentStatus}`}>
-                    <i />{paymentLabels[order.paymentStatus]}
+                    <span><i />{paymentLabels[order.paymentStatus]}</span>
+                    {order.paymentStatus !== "pending" && <small>{paymentMethodLabel(order.paymentMethod)}</small>}
                   </span>
                   {order.status === "cancelled" ? (
                     <span className="order-delivery order-delivery--cancelled" title={order.cancellationReason ?? undefined}><span className="material-symbols-rounded" aria-hidden="true">cancel</span>Cancelado</span>
@@ -2884,7 +2888,7 @@ function Orders({ data }: { data: PanelData }) {
                   </header>
                   <div className="order-detail-summary">
                     <article><span>Cliente</span><strong>{viewingOrder.customer}</strong><small>{viewingOrder.whatsapp}</small>{viewingOrder.email && <small>{viewingOrder.email}</small>}</article>
-                    <article><span>Pagamento</span><strong className={`order-payment order-payment--${viewingOrder.paymentStatus}`}><i />{paymentLabels[viewingOrder.paymentStatus]}</strong><small>{viewingOrder.status === "cancelled" ? "Pedido cancelado" : deliveryLabels[effectiveDelivery(viewingOrder, selected.phase)]}</small></article>
+                    <article><span>Pagamento</span><strong className={`order-payment order-payment--${viewingOrder.paymentStatus}`}><span><i />{paymentLabels[viewingOrder.paymentStatus]}</span></strong><small>{viewingOrder.paymentStatus === "pending" ? "Forma definida no checkout" : `Forma: ${paymentMethodLabel(viewingOrder.paymentMethod)}`}</small><small>{viewingOrder.status === "cancelled" ? "Pedido cancelado" : deliveryLabels[effectiveDelivery(viewingOrder, selected.phase)]}</small></article>
                     <article><span>Resumo</span><strong>{viewingOrder.quantity} {viewingOrder.quantity === 1 ? "peça" : "peças"}</strong><small>{panelOrderItems(viewingOrder).length} {panelOrderItems(viewingOrder).length === 1 ? "combinação" : "combinações"}</small></article>
                     <article><span>Total do pedido</span><strong>{formatCents(viewingOrder.totalCents)}</strong><small>Valor único da compra</small></article>
                   </div>

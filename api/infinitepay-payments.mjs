@@ -271,6 +271,14 @@ function queueCondition() {
     AND (locked_at IS NULL OR locked_at < DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL ${staleLockMinutes} MINUTE))`;
 }
 
+function verifiedCaptureMethod(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 && normalized.length <= 40 && /^[a-z0-9_-]+$/.test(normalized)
+    ? normalized
+    : null;
+}
+
 async function pruneExpiredDeadLetters() {
   const now = Date.now();
   if (now - lastDeadLetterCleanupAt < deadLetterCleanupIntervalMs) return;
@@ -343,13 +351,17 @@ export async function processInfinitePayEvents({ limit = 10 } = {}) {
           throw new Error("A transação InfinitePay já pertence a outro pedido.");
         }
         const rawResponse = JSON.stringify({ event: payload, payment_check: checked });
+        // A forma exibida vem exclusivamente do payment_check server-to-server. O
+        // capture_method recebido pelo navegador/webhook nunca é usado como prova.
+        const captureMethod = verifiedCaptureMethod(checked.capture_method);
         await connection.execute(
           `INSERT INTO payments
-            (order_id, provider, provider_order_id, provider_transaction_id, status, amount_cents, raw_response, confirmed_at)
-           VALUES (?, ?, ?, ?, 'paid', ?, ?, CURRENT_TIMESTAMP(3))
+            (order_id, provider, provider_order_id, provider_transaction_id, status, amount_cents, capture_method, raw_response, confirmed_at)
+           VALUES (?, ?, ?, ?, 'paid', ?, ?, ?, CURRENT_TIMESTAMP(3))
            ON DUPLICATE KEY UPDATE status = 'paid', amount_cents = VALUES(amount_cents),
-             raw_response = VALUES(raw_response), confirmed_at = COALESCE(confirmed_at, CURRENT_TIMESTAMP(3))`,
-          [order.id, provider, event.invoiceSlug, event.transactionNsu, checkedAmount, rawResponse],
+             capture_method = COALESCE(VALUES(capture_method), capture_method), raw_response = VALUES(raw_response),
+             confirmed_at = COALESCE(confirmed_at, CURRENT_TIMESTAMP(3))`,
+          [order.id, provider, event.invoiceSlug, event.transactionNsu, checkedAmount, captureMethod, rawResponse],
         );
         const [orderUpdate] = await connection.execute(
           `UPDATE orders SET payment_status = 'paid', paid_at = COALESCE(paid_at, CURRENT_TIMESTAMP(3))
