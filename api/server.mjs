@@ -520,6 +520,14 @@ function parseCouponConfig(value) {
   const minimumQuantity = value.minimumQuantity === null || value.minimumQuantity === undefined || value.minimumQuantity === ""
     ? 1
     : parsePositiveInteger(value.minimumQuantity, "coupon.minimumQuantity", 200);
+  const maximumDiscountQuantity = value.maximumDiscountQuantity === null
+    || value.maximumDiscountQuantity === undefined
+    || value.maximumDiscountQuantity === ""
+    ? null
+    : parsePositiveInteger(value.maximumDiscountQuantity, "coupon.maximumDiscountQuantity", 200);
+  if (maximumDiscountQuantity !== null && maximumDiscountQuantity < minimumQuantity) {
+    throw new ApiError(422, "VALIDATION_ERROR", "A quantidade máxima com desconto não pode ser menor que a quantidade mínima do cupom.");
+  }
   if (!Array.isArray(value.discounts) || value.discounts.length < 1 || value.discounts.length > 4) {
     throw new ApiError(422, "VALIDATION_ERROR", "Defina o desconto do cupom para cada corte ativo.");
   }
@@ -541,6 +549,7 @@ function parseCouponConfig(value) {
     expiresAt,
     usageLimit,
     minimumQuantity,
+    maximumDiscountQuantity,
   };
 }
 
@@ -580,6 +589,7 @@ function couponPayload(row, usedCount, discounts) {
     expiresAt: row.expires_at,
     usageLimit: row.usage_limit === null ? null : Number(row.usage_limit),
     minimumQuantity: Number(row.minimum_quantity ?? 1),
+    maximumDiscountQuantity: row.maximum_discount_quantity === null ? null : Number(row.maximum_discount_quantity),
     usedCount,
     remainingUses: row.usage_limit === null ? null : Math.max(0, Number(row.usage_limit) - usedCount),
   };
@@ -587,7 +597,7 @@ function couponPayload(row, usedCount, discounts) {
 
 async function activeCampaignCoupon(executor, campaignId) {
   const [rows] = await executor.execute(
-    `SELECT id, code, expires_at, usage_limit, minimum_quantity
+    `SELECT id, code, expires_at, usage_limit, minimum_quantity, maximum_discount_quantity
        FROM campaign_coupons
       WHERE campaign_id = ? AND active = TRUE
       ORDER BY updated_at DESC, id DESC LIMIT 1`,
@@ -604,7 +614,7 @@ async function activeCampaignCoupon(executor, campaignId) {
 async function validateActiveCoupon(executor, campaignId, rawCode, { lock = false } = {}) {
   const code = normalizeCouponCode(rawCode);
   const [rows] = await executor.execute(
-    `SELECT id, code, expires_at, usage_limit, minimum_quantity
+    `SELECT id, code, expires_at, usage_limit, minimum_quantity, maximum_discount_quantity
        FROM campaign_coupons
       WHERE campaign_id = ? AND code = ? AND active = TRUE
       LIMIT 1${lock ? " FOR UPDATE" : ""}`,
@@ -657,14 +667,14 @@ async function applyCampaignCoupon(connection, campaignId, value) {
   if (existing.length > 0) {
     couponId = existing[0].id;
     await connection.execute(
-      "UPDATE campaign_coupons SET expires_at = ?, usage_limit = ?, minimum_quantity = ?, active = TRUE WHERE id = ?",
-      [coupon.expiresAt, coupon.usageLimit, coupon.minimumQuantity, couponId],
+      "UPDATE campaign_coupons SET expires_at = ?, usage_limit = ?, minimum_quantity = ?, maximum_discount_quantity = ?, active = TRUE WHERE id = ?",
+      [coupon.expiresAt, coupon.usageLimit, coupon.minimumQuantity, coupon.maximumDiscountQuantity, couponId],
     );
     await connection.execute("DELETE FROM campaign_coupon_discounts WHERE coupon_id = ?", [couponId]);
   } else {
     const [created] = await connection.execute(
-      "INSERT INTO campaign_coupons (campaign_id, code, expires_at, usage_limit, minimum_quantity, active) VALUES (?, ?, ?, ?, ?, TRUE)",
-      [campaignId, coupon.code, coupon.expiresAt, coupon.usageLimit, coupon.minimumQuantity],
+      "INSERT INTO campaign_coupons (campaign_id, code, expires_at, usage_limit, minimum_quantity, maximum_discount_quantity, active) VALUES (?, ?, ?, ?, ?, ?, TRUE)",
+      [campaignId, coupon.code, coupon.expiresAt, coupon.usageLimit, coupon.minimumQuantity, coupon.maximumDiscountQuantity],
     );
     couponId = created.insertId;
   }
@@ -923,6 +933,7 @@ async function getPublicCampaignCoupon(campaignCode, rawCouponCode) {
     discounts: coupon.discounts,
     expiresAt: coupon.expires_at,
     minimumQuantity: Number(coupon.minimum_quantity ?? 1),
+    maximumDiscountQuantity: coupon.maximum_discount_quantity === null ? null : Number(coupon.maximum_discount_quantity),
   };
 }
 
@@ -952,13 +963,13 @@ async function listCampaigns() {
       ORDER BY c.created_at DESC`,
   );
   const [couponRows] = await pool.execute(
-    `SELECT cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit, cc.minimum_quantity,
+    `SELECT cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit, cc.minimum_quantity, cc.maximum_discount_quantity,
             COUNT(CASE WHEN o.status = 'active' THEN 1 END) AS used_count
        FROM campaign_coupons cc
        LEFT JOIN coupon_redemptions cr ON cr.coupon_id = cc.id
       LEFT JOIN orders o ON o.id = cr.order_id
       WHERE cc.active = TRUE
-      GROUP BY cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit, cc.minimum_quantity`,
+      GROUP BY cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit, cc.minimum_quantity, cc.maximum_discount_quantity`,
   );
   const couponsByCampaign = new Map();
   for (const row of couponRows) {
@@ -1840,11 +1851,32 @@ async function createOrder(request) {
         throw new ApiError(409, "COUPON_UNAVAILABLE", "Este cupom não pode ser aplicado a uma das peças escolhidas.");
       }
     }
-    const pricedItems = items.map((item) => ({
+    const pricedItems = items.map((item, requestIndex) => ({
       ...item,
+      requestIndex,
       unitDiscountCents: discountsByModelId.get(variantModels.get(item.variantId)) ?? 0,
+      discountedQuantity: 0,
     }));
-    const discountCents = pricedItems.reduce((total, item) => total + item.unitDiscountCents * item.quantity, 0);
+    let remainingDiscountQuantity = coupon
+      ? Math.min(totalUnits, Number(coupon.maximum_discount_quantity ?? totalUnits))
+      : 0;
+    for (const item of [...pricedItems].sort((left, right) => (
+      right.unitDiscountCents - left.unitDiscountCents
+      || left.variantId - right.variantId
+      || left.size.localeCompare(right.size)
+    ))) {
+      if (remainingDiscountQuantity === 0 || item.unitDiscountCents === 0) break;
+      item.discountedQuantity = Math.min(item.quantity, remainingDiscountQuantity);
+      remainingDiscountQuantity -= item.discountedQuantity;
+    }
+    for (const item of pricedItems) {
+      if (item.discountedQuantity === 0) item.unitDiscountCents = 0;
+    }
+    pricedItems.sort((left, right) => left.requestIndex - right.requestIndex);
+    const discountCents = pricedItems.reduce(
+      (total, item) => total + item.unitDiscountCents * item.discountedQuantity,
+      0,
+    );
     const totalCents = subtotalCents - discountCents;
     const orderNumber = publicOrderNumber();
 
@@ -1858,9 +1890,10 @@ async function createOrder(request) {
     );
     for (const item of pricedItems) {
       await connection.execute(
-        `INSERT INTO order_items (order_id, campaign_variant_id, size_id, quantity, unit_price_cents, unit_discount_cents)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [orderResult.insertId, item.variantId, item.sizeId, item.quantity, prices.get(item.variantId), item.unitDiscountCents],
+        `INSERT INTO order_items
+          (order_id, campaign_variant_id, size_id, quantity, unit_price_cents, unit_discount_cents, discounted_quantity)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [orderResult.insertId, item.variantId, item.sizeId, item.quantity, prices.get(item.variantId), item.unitDiscountCents, item.discountedQuantity],
       );
     }
     if (coupon) {
@@ -1909,7 +1942,8 @@ async function trackOrder(requestUrl, orderNumber) {
   const order = rows[0];
   const [items] = await pool.execute(
     `SELECT cv.id AS variant_id, sm.name AS model_name, co.name AS color_name, co.hex_color, sz.code AS size,
-            sz.size_group, oi.quantity, oi.unit_price_cents, oi.unit_discount_cents, oi.line_total_cents,
+            sz.size_group, oi.quantity, oi.unit_price_cents, oi.unit_discount_cents, oi.discounted_quantity,
+            (oi.quantity * oi.unit_price_cents - oi.discounted_quantity * oi.unit_discount_cents) AS line_total_cents,
             cva.artwork_mode, cva.front_source, cva.front_url, cva.front_transform_override,
             cva.front_x, cva.front_y, cva.front_scale, cva.front_rotation,
             cva.back_source, cva.back_url, cva.back_transform_override,
@@ -1956,6 +1990,7 @@ async function trackOrder(requestUrl, orderNumber) {
       quantity: item.quantity,
       unitPriceCents: item.unit_price_cents,
       unitDiscountCents: item.unit_discount_cents,
+      discountedQuantity: item.discounted_quantity,
       lineTotalCents: item.line_total_cents,
       artwork: resolveVariantArtwork(order, item),
     })),
@@ -1972,7 +2007,7 @@ async function listCampaignOrders(code) {
             o.status, o.cancellation_reason, o.payment_status, o.delivery_status,
             o.subtotal_cents, o.discount_cents, o.coupon_code, o.total_cents, o.created_at,
             sm.name AS model_name, co.name AS color_name, co.hex_color,
-            sz.code AS size, sz.size_group, oi.quantity, oi.unit_price_cents, oi.unit_discount_cents
+            sz.code AS size, sz.size_group, oi.quantity, oi.unit_price_cents, oi.unit_discount_cents, oi.discounted_quantity
        FROM campaigns c
        JOIN orders o ON o.campaign_id = c.id
        JOIN order_items oi ON oi.order_id = o.id
@@ -2012,7 +2047,9 @@ async function listCampaignOrders(code) {
       quantity: Number(row.quantity),
       unitPriceCents: Number(row.unit_price_cents),
       unitDiscountCents: Number(row.unit_discount_cents),
-      lineTotalCents: Number(row.quantity) * Number(row.unit_price_cents),
+      discountedQuantity: Number(row.discounted_quantity),
+      lineTotalCents: Number(row.quantity) * Number(row.unit_price_cents)
+        - Number(row.discounted_quantity) * Number(row.unit_discount_cents),
     });
   }
   return [...orders.values()];

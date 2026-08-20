@@ -492,7 +492,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "020_whatsapp_country_code");
+  assert.equal(health.schema.current, "021_campaign_coupon_maximum_discount_quantity");
   assert.equal(health.storage.ready, true);
   step("health check valida conexão e versão do schema");
 
@@ -598,6 +598,7 @@ try {
       expiresAt: "2027-12-20T23:59:59.000Z",
       usageLimit: 1,
       minimumQuantity: 3,
+      maximumDiscountQuantity: 4,
     },
     models: [
       { modelCode: "common", unitPriceCents: 5990, colors: [{ name: "Lilás lavanda", hex: "#8B5CF6" }], sizes: ["P", "M", "EXGG"] },
@@ -621,12 +622,14 @@ try {
   const adminCustomCampaign = (await request(`/api/admin/campaigns/${customCampaign.code}`, { token })).campaign;
   assert.equal(adminCustomCampaign.activeCoupon.code, customCampaignPayload.coupon.code);
   assert.equal(adminCustomCampaign.activeCoupon.minimumQuantity, 3);
+  assert.equal(adminCustomCampaign.activeCoupon.maximumDiscountQuantity, 4);
   assert.deepEqual(
     adminCustomCampaign.activeCoupon.discounts.map((discount) => [discount.modelCode, discount.discountCents]),
     [["common", 1000], ["oversized", 1500]],
   );
   const validatedCoupon = (await request(`/api/campaigns/${customCampaign.code}/coupon?code=cores-10`)).coupon;
   assert.equal(validatedCoupon.minimumQuantity, 3);
+  assert.equal(validatedCoupon.maximumDiscountQuantity, 4);
   assert.deepEqual(
     validatedCoupon.discounts.map((discount) => [discount.modelCode, discount.discountCents]),
     [["common", 1000], ["oversized", 1500]],
@@ -672,6 +675,7 @@ try {
   assert.equal(trackedDiscountedOrder.order.discountCents, 4000);
   assert.equal(trackedDiscountedOrder.order.couponCode, "CORES-10");
   assert.deepEqual(trackedDiscountedOrder.order.items.map((item) => item.unitDiscountCents), [1000, 1500]);
+  assert.deepEqual(trackedDiscountedOrder.order.items.map((item) => item.discountedQuantity), [1, 2]);
   await request("/api/orders", {
     method: "POST",
     expected: 409,
@@ -683,21 +687,42 @@ try {
     token,
     body: { reason: "Liberação controlada do limite do cupom" },
   });
+  const cappedCouponOrderBody = {
+    ...qualifyingCouponOrderBody,
+    customer: { ...qualifyingCouponOrderBody.customer, whatsapp: "5598999992072", email: "liberado@example.com" },
+    items: qualifyingCouponOrderBody.items.map((item, index) => ({ ...item, quantity: index === 0 ? 1 : 5 })),
+  };
   const replacementCouponOrder = await request("/api/orders", {
     method: "POST",
     expected: 201,
     headers: { "Idempotency-Key": randomUUID() },
-    body: { ...qualifyingCouponOrderBody, customer: { ...qualifyingCouponOrderBody.customer, whatsapp: "5598999992072", email: "liberado@example.com" } },
+    body: cappedCouponOrderBody,
   });
-  assert.equal(replacementCouponOrder.order.totalCents, 15970);
+  assert.equal(replacementCouponOrder.order.totalCents, 34940);
+  const trackedCappedCouponOrder = await request(`/api/orders/${replacementCouponOrder.order.number}?whatsapp=5598999992072`);
+  assert.equal(trackedCappedCouponOrder.order.subtotalCents, 40940);
+  assert.equal(trackedCappedCouponOrder.order.discountCents, 6000);
+  assert.deepEqual(trackedCappedCouponOrder.order.items.map((item) => item.unitDiscountCents), [0, 1500]);
+  assert.deepEqual(trackedCappedCouponOrder.order.items.map((item) => item.discountedQuantity), [0, 4]);
+  assert.deepEqual(trackedCappedCouponOrder.order.items.map((item) => item.lineTotalCents), [5990, 28950]);
+  await request(`/api/orders/${replacementCouponOrder.order.number}/checkout`, {
+    method: "POST",
+    body: { whatsapp: "5598999992072" },
+  });
+  const cappedCheckoutLink = fakeInfinitePay.links.at(-1);
+  assert.equal(cappedCheckoutLink.items.length, 3);
+  assert.deepEqual(cappedCheckoutLink.items.map((item) => [item.quantity, item.price]), [[1, 5990], [4, 5490], [1, 6990]]);
+  assert.equal(cappedCheckoutLink.items.reduce((sum, item) => sum + item.price * item.quantity, 0), replacementCouponOrder.order.totalCents);
+  fakeInfinitePay.links.length = 0;
   await request(`/api/admin/campaigns/${customCampaign.code}`, { method: "PATCH", token, body: { coupon: null } });
   await request(`/api/campaigns/${customCampaign.code}/coupon?code=CORES-10`, { expected: 404 });
   const campaignWithoutCoupon = (await request(`/api/admin/campaigns/${customCampaign.code}`, { token })).campaign;
   assert.equal(campaignWithoutCoupon.activeCoupon, null);
   const preservedCouponOrder = await request(`/api/orders/${replacementCouponOrder.order.number}?whatsapp=5598999992072`);
   assert.equal(preservedCouponOrder.order.couponCode, "CORES-10");
-  assert.equal(preservedCouponOrder.order.discountCents, 4000);
-  step("cupom não acumula códigos, exige quantidade mínima, aplica valores por corte e preserva o histórico");
+  assert.equal(preservedCouponOrder.order.discountCents, 6000);
+  assert.deepEqual(preservedCouponOrder.order.items.map((item) => item.discountedQuantity), [0, 4]);
+  step("cupom não acumula códigos, exige quantidade mínima, limita peças descontadas por corte e preserva o histórico");
 
   const replacementVideo = await binaryRequest("/api/admin/video-uploads", {
     token,

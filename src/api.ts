@@ -49,6 +49,7 @@ export type CampaignCoupon = {
   expiresAt: string | null;
   usageLimit?: number | null;
   minimumQuantity: number;
+  maximumDiscountQuantity: number | null;
   usedCount?: number;
   remainingUses?: number | null;
 };
@@ -58,6 +59,7 @@ export type CampaignCouponPayload = {
   expiresAt: string | null;
   usageLimit: number | null;
   minimumQuantity: number;
+  maximumDiscountQuantity: number | null;
 };
 
 type ApiCampaignSize = {
@@ -136,6 +138,7 @@ export type TrackedOrder = {
     quantity: number;
     unitPriceCents: number;
     unitDiscountCents: number;
+    discountedQuantity: number;
     lineTotalCents: number;
     artwork: VariantArtwork;
   }>;
@@ -478,6 +481,7 @@ export type ApiCampaignOrder = {
     quantity: number;
     unitPriceCents: number;
     unitDiscountCents: number;
+    discountedQuantity: number;
     lineTotalCents: number;
   }>;
 };

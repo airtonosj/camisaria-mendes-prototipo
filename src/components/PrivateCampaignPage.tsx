@@ -99,6 +99,36 @@ function itemKey(item: Pick<CartItem, "variantId" | "size">) {
   return `${item.variantId}:${item.size}`;
 }
 
+function allocateCartCouponDiscount(
+  items: CartItem[],
+  discountsByModel: Partial<Record<ShirtModelName, number>>,
+  maximumDiscountQuantity: number | null,
+) {
+  const discountedQuantitiesByItem: Record<string, number> = {};
+  let remaining = Math.min(
+    items.reduce((total, item) => total + item.quantity, 0),
+    maximumDiscountQuantity ?? Number.MAX_SAFE_INTEGER,
+  );
+  let discountCents = 0;
+  for (const item of [...items].sort((left, right) => (
+    (discountsByModel[right.modelName] ?? 0) - (discountsByModel[left.modelName] ?? 0)
+    || left.variantId - right.variantId
+    || left.size.localeCompare(right.size)
+  ))) {
+    const unitDiscountCents = discountsByModel[item.modelName] ?? 0;
+    if (remaining === 0 || unitDiscountCents === 0) break;
+    const discountedQuantity = Math.min(item.quantity, remaining);
+    discountedQuantitiesByItem[itemKey(item)] = discountedQuantity;
+    discountCents += discountedQuantity * unitDiscountCents;
+    remaining -= discountedQuantity;
+  }
+  return {
+    discountedQuantitiesByItem,
+    discountedUnits: Object.values(discountedQuantitiesByItem).reduce((total, quantity) => total + quantity, 0),
+    discountCents,
+  };
+}
+
 function artworkForVariant(campaign: PrivateCampaign, variantId: number): VariantArtwork {
   return campaign.variantArtworks?.[variantId] ?? {
     front: campaign.art.front ? { url: campaign.art.front, transform: campaign.art.frontTransform ?? { x: 0, y: 0, scale: 1, rotation: 0 } } : null,
@@ -247,9 +277,10 @@ function ArtThumbs({ campaign, label, items }: { campaign: PrivateCampaign; labe
   );
 }
 
-function CartLines({ items, discountsByModel = {}, editable = false, onQuantity, onRemove }: {
+function CartLines({ items, discountsByModel = {}, discountedQuantitiesByItem = {}, editable = false, onQuantity, onRemove }: {
   items: CartItem[];
   discountsByModel?: Partial<Record<ShirtModelName, number>>;
+  discountedQuantitiesByItem?: Record<string, number>;
   editable?: boolean;
   onQuantity?: (key: string, quantity: number) => void;
   onRemove?: (key: string) => void;
@@ -259,14 +290,19 @@ function CartLines({ items, discountsByModel = {}, editable = false, onQuantity,
       {items.map((item) => {
         const key = itemKey(item);
         const unitDiscountCents = discountsByModel[item.modelName] ?? 0;
+        const discountedQuantity = discountedQuantitiesByItem[key] ?? 0;
+        const regularQuantity = item.quantity - discountedQuantity;
         const discountedUnitPrice = item.unitPriceCents - unitDiscountCents;
+        const lineTotalCents = item.unitPriceCents * item.quantity - unitDiscountCents * discountedQuantity;
         return (
           <article className="campaign-cart-line" key={key}>
             <i className="campaign-cart-color" style={{ backgroundColor: item.color.hex }} />
             <div className="campaign-cart-copy">
               <strong>{item.modelName} · {item.color.name} · {item.size}</strong>
-              <small className={unitDiscountCents ? "campaign-cart-price is-discounted" : "campaign-cart-price"}>
-                {unitDiscountCents ? <><del>{formatCents(item.unitPriceCents)}</del><strong>{formatCents(discountedUnitPrice)} por unidade</strong></> : <>{formatCents(item.unitPriceCents)} por unidade</>}
+              <small className={discountedQuantity ? "campaign-cart-price is-discounted" : "campaign-cart-price"}>
+                {discountedQuantity === item.quantity && unitDiscountCents ? <><del>{formatCents(item.unitPriceCents)}</del><strong>{formatCents(discountedUnitPrice)} por unidade</strong></>
+                  : discountedQuantity > 0 ? <><strong>{discountedQuantity}× {formatCents(discountedUnitPrice)} com desconto</strong><span>{regularQuantity}× {formatCents(item.unitPriceCents)} sem desconto</span></>
+                    : <>{formatCents(item.unitPriceCents)} por unidade</>}
               </small>
             </div>
             {editable ? (
@@ -276,7 +312,7 @@ function CartLines({ items, discountsByModel = {}, editable = false, onQuantity,
                 <button type="button" aria-label="Aumentar quantidade" onClick={() => onQuantity?.(key, item.quantity + 1)}>+</button>
               </div>
             ) : <span className="campaign-cart-quantity">{item.quantity}×</span>}
-            <b>{formatCents(discountedUnitPrice * item.quantity)}</b>
+            <b>{formatCents(lineTotalCents)}</b>
             {editable && <button className="campaign-cart-remove" type="button" onClick={() => onRemove?.(key)}>Remover</button>}
           </article>
         );
@@ -395,10 +431,12 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
   const cartSubtotal = cart.reduce((total, item) => total + item.unitPriceCents * item.quantity, 0);
   const cartUnits = cart.reduce((total, item) => total + item.quantity, 0);
   const couponMinimumQuantity = appliedCoupon?.minimumQuantity ?? 1;
+  const couponMaximumDiscountQuantity = appliedCoupon?.maximumDiscountQuantity ?? null;
   const couponEligible = !appliedCoupon || cartUnits >= couponMinimumQuantity;
   const couponMissingUnits = Math.max(0, couponMinimumQuantity - cartUnits);
   const couponDiscountsByModel = couponEligible ? configuredCouponDiscountsByModel : {};
-  const cartDiscount = cart.reduce((total, item) => total + (couponDiscountsByModel[item.modelName] ?? 0) * item.quantity, 0);
+  const couponAllocation = allocateCartCouponDiscount(cart, couponDiscountsByModel, couponMaximumDiscountQuantity);
+  const cartDiscount = couponAllocation.discountCents;
   const cartTotal = cartSubtotal - cartDiscount;
 
   useEffect(() => {
@@ -688,9 +726,9 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
                     <div><h2 id="cart-preview-title">Seu carrinho</h2><span>{cartUnits} {cartUnits === 1 ? "peça" : "peças"}</span></div>
                     <button type="button" onClick={() => setCart([])}>Limpar</button>
                   </header>
-                  <CartLines items={cart} discountsByModel={couponDiscountsByModel} editable onQuantity={updateCartQuantity} onRemove={(key) => setCart((current) => current.filter((item) => itemKey(item) !== key))} />
+                  <CartLines items={cart} discountsByModel={couponDiscountsByModel} discountedQuantitiesByItem={couponAllocation.discountedQuantitiesByItem} editable onQuantity={updateCartQuantity} onRemove={(key) => setCart((current) => current.filter((item) => itemKey(item) !== key))} />
                   <footer className="campaign-cart-summary">
-                    {appliedCoupon && <><div className="campaign-discount-row"><span>Subtotal</span><b>{formatCents(cartSubtotal)}</b></div>{couponEligible ? <div className="campaign-discount-row is-saving"><span>Cupom {appliedCoupon.code}</span><b>− {formatCents(cartDiscount)}</b></div> : <div className="campaign-discount-row"><span>Cupom {appliedCoupon.code} · a partir de {couponMinimumQuantity} peças</span><b>Faltam {couponMissingUnits}</b></div>}</>}
+                    {appliedCoupon && <><div className="campaign-discount-row"><span>Subtotal</span><b>{formatCents(cartSubtotal)}</b></div>{couponEligible ? <div className="campaign-discount-row is-saving"><span>Cupom {appliedCoupon.code}{couponMaximumDiscountQuantity ? ` · ${couponAllocation.discountedUnits} peças com desconto` : ""}</span><b>− {formatCents(cartDiscount)}</b></div> : <div className="campaign-discount-row"><span>Cupom {appliedCoupon.code} · a partir de {couponMinimumQuantity} peças</span><b>Faltam {couponMissingUnits}</b></div>}</>}
                     <div><span>Total</span><strong>{formatCents(cartTotal)}</strong></div>
                     <button type="button" disabled={Boolean(appliedCoupon && !couponEligible)} onClick={() => goToStep("details")}>Revisar pedido</button>
                   </footer>
@@ -702,7 +740,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
               <div className="campaign-cut-options" role="radiogroup" aria-label="Corte da camiseta">{availableModels.map((item) => {
                 const originalPrice = Math.round(campaign.prices[item.name] * 100);
                 const modelDiscount = configuredCouponDiscountsByModel[item.name] ?? 0;
-                return <label className={activeModel === item.name ? "is-selected" : ""} key={item.name}><input type="radio" name="model" checked={activeModel === item.name} onChange={() => selectModel(item.name)} /><span className="campaign-cut-head"><strong>{item.name === "Comum" ? "Padrão" : item.name}</strong><span className="campaign-cut-check material-symbols-rounded" aria-hidden="true">check</span></span><small>{item.description}</small><span className={`campaign-cut-price${modelDiscount ? " is-discounted" : ""}`}>{modelDiscount > 0 && <del>{formatCents(originalPrice)}</del>}<b>{formatCents(originalPrice - modelDiscount)}</b>{modelDiscount > 0 && <em>{couponMinimumQuantity > 1 ? `a partir de ${couponMinimumQuantity} peças` : "com cupom"}</em>}</span></label>;
+                return <label className={activeModel === item.name ? "is-selected" : ""} key={item.name}><input type="radio" name="model" checked={activeModel === item.name} onChange={() => selectModel(item.name)} /><span className="campaign-cut-head"><strong>{item.name === "Comum" ? "Padrão" : item.name}</strong><span className="campaign-cut-check material-symbols-rounded" aria-hidden="true">check</span></span><small>{item.description}</small><span className={`campaign-cut-price${modelDiscount ? " is-discounted" : ""}`}>{modelDiscount > 0 && <del>{formatCents(originalPrice)}</del>}<b>{formatCents(originalPrice - modelDiscount)}</b>{modelDiscount > 0 && <em>{couponMinimumQuantity > 1 ? `a partir de ${couponMinimumQuantity} peças${couponMaximumDiscountQuantity ? ` · até ${couponMaximumDiscountQuantity} unidades` : ""}` : "com cupom"}</em>}</span></label>;
               })}</div>
             </section>
             <section className="campaign-choice-stage campaign-color-stage">
@@ -721,8 +759,8 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
             <section className="campaign-choice-stage campaign-quantity-stage"><h2>4. Quantidade</h2><div className="campaign-quantity-picker"><button type="button" aria-label="Diminuir quantidade" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>−</button><output aria-live="polite">{quantity}</output><button type="button" aria-label="Aumentar quantidade" onClick={() => setQuantity((value) => Math.min(20, value + 1))}>+</button></div></section>
             <section className="campaign-choice-stage campaign-coupon-stage" aria-labelledby="campaign-coupon-title">
               <div className="campaign-stage-heading"><h2 id="campaign-coupon-title">5. Cupom de desconto</h2><span>Opcional · 1 por pedido</span></div>
-              {appliedCoupon ? <div className="campaign-coupon-applied"><span className="material-symbols-rounded" aria-hidden="true">sell</span><div><strong>{appliedCoupon.code}</strong><small>A partir de {couponMinimumQuantity} {couponMinimumQuantity === 1 ? "peça" : "peças"} · {appliedCoupon.discounts.map((discount) => `${discount.modelName === "Comum" ? "Padrão" : discount.modelName}: − ${formatCents(discount.discountCents)}`).join(" · ")}{appliedCoupon.expiresAt ? ` · válido até ${new Date(appliedCoupon.expiresAt).toLocaleDateString("pt-BR")}` : ""}</small></div><button type="button" onClick={removeCoupon}>Remover</button></div> : <div className="campaign-coupon-input"><label><span className="sr-only">Código do cupom</span><input value={couponInput} onChange={(event) => { setCouponInput(event.target.value.toUpperCase()); setCouponMessage(""); }} placeholder="Digite seu cupom" autoCapitalize="characters" spellCheck={false} /></label><button type="button" disabled={checkingCoupon} onClick={() => void applyCoupon()}>{checkingCoupon ? "Verificando..." : "Aplicar"}</button></div>}
-              {appliedCoupon ? <p className={`campaign-coupon-message${couponEligible ? " is-success" : " is-pending"}`} role="status" aria-live="polite">{couponEligible ? "Quantidade mínima atingida. O desconto já foi aplicado ao carrinho." : `Adicione mais ${couponMissingUnits} ${couponMissingUnits === 1 ? "peça" : "peças"} para ativar o desconto.`}</p> : couponMessage && <p className="campaign-coupon-message" role="status" aria-live="polite">{couponMessage}</p>}
+              {appliedCoupon ? <div className="campaign-coupon-applied"><span className="material-symbols-rounded" aria-hidden="true">sell</span><div><strong>{appliedCoupon.code}</strong><small>A partir de {couponMinimumQuantity} {couponMinimumQuantity === 1 ? "peça" : "peças"}{couponMaximumDiscountQuantity ? ` · desconto em até ${couponMaximumDiscountQuantity} peças` : ""} · {appliedCoupon.discounts.map((discount) => `${discount.modelName === "Comum" ? "Padrão" : discount.modelName}: − ${formatCents(discount.discountCents)}`).join(" · ")}{appliedCoupon.expiresAt ? ` · válido até ${new Date(appliedCoupon.expiresAt).toLocaleDateString("pt-BR")}` : ""}</small></div><button type="button" onClick={removeCoupon}>Remover</button></div> : <div className="campaign-coupon-input"><label><span className="sr-only">Código do cupom</span><input value={couponInput} onChange={(event) => { setCouponInput(event.target.value.toUpperCase()); setCouponMessage(""); }} placeholder="Digite seu cupom" autoCapitalize="characters" spellCheck={false} /></label><button type="button" disabled={checkingCoupon} onClick={() => void applyCoupon()}>{checkingCoupon ? "Verificando..." : "Aplicar"}</button></div>}
+              {appliedCoupon ? <p className={`campaign-coupon-message${couponEligible ? " is-success" : " is-pending"}`} role="status" aria-live="polite">{couponEligible ? couponMaximumDiscountQuantity && cartUnits > couponMaximumDiscountQuantity ? `Desconto aplicado em ${couponAllocation.discountedUnits} das ${cartUnits} peças. As excedentes permanecem com o preço normal.` : "Quantidade mínima atingida. O desconto já foi aplicado ao carrinho." : `Adicione mais ${couponMissingUnits} ${couponMissingUnits === 1 ? "peça" : "peças"} para ativar o desconto.`}</p> : couponMessage && <p className="campaign-coupon-message" role="status" aria-live="polite">{couponMessage}</p>}
             </section>
             {cartMessage && <p className={`campaign-order-notice${cartMessage.includes("adicionado") ? "" : " is-error"}`} role="status" aria-live="polite"><span className="material-symbols-rounded" aria-hidden="true">{cartMessage.includes("adicionado") ? "check_circle" : "error"}</span>{cartMessage}</p>}
             <aside className="campaign-order-bar">
@@ -734,7 +772,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
         <main className="campaign-checkout">
           <section className="campaign-checkout-heading"><h1>Revise e identifique</h1><div className="campaign-progress-copy"><strong>2 de 3</strong><span>·</span><span>Seus dados</span></div><div className="campaign-progress campaign-progress--details" aria-hidden="true"><span /></div></section>
           <form className="campaign-customer-form" onSubmit={submitCustomerDetails}>
-            <section className="checkout-order-review" aria-labelledby="order-review-title"><h2 id="order-review-title">Seu pedido</h2><div className="checkout-product-row"><ArtThumbs campaign={campaign} label={`Camisa da campanha ${campaign.title}`} items={cart} /><div className="checkout-product-copy"><CartLines items={cart} discountsByModel={couponDiscountsByModel} /><div className="checkout-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span><span>Retirada com <b>{campaign.representative}</b></span></div>{appliedCoupon && <div className="checkout-discount"><span>Cupom {appliedCoupon.code}</span><strong>− {formatCents(cartDiscount)}</strong></div>}<div className="checkout-total"><span>{cartUnits} {cartUnits === 1 ? "peça" : "peças"} · Total</span><strong>{formatCents(cartTotal)}</strong></div></div></div><button className="checkout-edit" type="button" onClick={() => goToStep("model")}>Editar carrinho</button></section>
+            <section className="checkout-order-review" aria-labelledby="order-review-title"><h2 id="order-review-title">Seu pedido</h2><div className="checkout-product-row"><ArtThumbs campaign={campaign} label={`Camisa da campanha ${campaign.title}`} items={cart} /><div className="checkout-product-copy"><CartLines items={cart} discountsByModel={couponDiscountsByModel} discountedQuantitiesByItem={couponAllocation.discountedQuantitiesByItem} /><div className="checkout-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span><span>Retirada com <b>{campaign.representative}</b></span></div>{appliedCoupon && <div className="checkout-discount"><span>Cupom {appliedCoupon.code}{couponMaximumDiscountQuantity ? ` · ${couponAllocation.discountedUnits} peças` : ""}</span><strong>− {formatCents(cartDiscount)}</strong></div>}<div className="checkout-total"><span>{cartUnits} {cartUnits === 1 ? "peça" : "peças"} · Total</span><strong>{formatCents(cartTotal)}</strong></div></div></div><button className="checkout-edit" type="button" onClick={() => goToStep("model")}>Editar carrinho</button></section>
             <section className="checkout-customer-fields" aria-labelledby="customer-fields-title"><h2 id="customer-fields-title">Quem vai retirar?</h2><label><span className="sr-only">Nome completo</span><input name="name" type="text" placeholder="Nome completo" autoComplete="name" minLength={3} value={customerName} onChange={(event) => setCustomerName(event.target.value)} required /></label><label><span className="sr-only">WhatsApp</span><input name="phone" type="tel" placeholder="WhatsApp" autoComplete="tel" inputMode="tel" minLength={10} value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} required /></label><label><span className="sr-only">E-mail</span><input name="email" type="email" placeholder="E-mail para confirmação" autoComplete="email" value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} required /></label><p className="checkout-privacy"><span className="material-symbols-rounded" aria-hidden="true">lock</span><span>Seus dados serão usados para processar e acompanhar o pedido. <a href={buildRoute("politica-privacidade")} target="_blank">Leia a política de privacidade.</a></span></p></section>
             <button className="checkout-payment-button" type="submit">Ir para pagamento<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
           </form>
@@ -746,7 +784,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
           <form className="payment-form" onSubmit={submitPayment}>
             {resumePayment && <p className="payment-resume-note"><span className="material-symbols-rounded" aria-hidden="true">replay</span>Retomando o pagamento do pedido <strong>#{resumePayment}</strong>.</p>}
             <div className="payment-provider-choice"><span className="material-symbols-rounded" aria-hidden="true">verified_user</span><div><h2>Checkout InfinitePay</h2><p>Você escolherá Pix ou cartão no ambiente seguro da InfinitePay.</p></div></div>
-            {!resumePayment && <dl className="payment-breakdown"><div><dt>{cartUnits} {cartUnits === 1 ? "peça" : "peças"}</dt><dd>{formatCents(cartSubtotal)}</dd></div>{appliedCoupon && <div className="payment-breakdown-discount"><dt>Cupom {appliedCoupon.code}</dt><dd>− {formatCents(cartDiscount)}</dd></div>}<div><dt>Taxa</dt><dd>R$ 0,00</dd></div><div className="payment-breakdown-total"><dt>Total</dt><dd>{formatCents(cartTotal)}</dd></div></dl>}
+            {!resumePayment && <dl className="payment-breakdown"><div><dt>{cartUnits} {cartUnits === 1 ? "peça" : "peças"}</dt><dd>{formatCents(cartSubtotal)}</dd></div>{appliedCoupon && <div className="payment-breakdown-discount"><dt>Cupom {appliedCoupon.code}{couponMaximumDiscountQuantity ? ` · ${couponAllocation.discountedUnits} peças` : ""}</dt><dd>− {formatCents(cartDiscount)}</dd></div>}<div><dt>Taxa</dt><dd>R$ 0,00</dd></div><div className="payment-breakdown-total"><dt>Total</dt><dd>{formatCents(cartTotal)}</dd></div></dl>}
             <p className="payment-security"><span className="material-symbols-rounded" aria-hidden="true">lock</span>Os dados do cartão e o Pix não passam pelo site da camisaria. A forma realmente utilizada será registrada após a confirmação da InfinitePay.</p>
             {paymentError && <p className="form-error" role="alert">{paymentError}</p>}
             <button className="payment-submit" type="submit" disabled={submittingOrder}>{submittingOrder ? "Abrindo checkout..." : "Ir para pagamento seguro"}<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
@@ -757,7 +795,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
           <section className="received-hero"><span className="received-hero-icon material-symbols-rounded" aria-hidden="true">schedule</span><p className="received-eyebrow">Pedido recebido</p><h1>Aguardando a confirmação do pagamento.</h1><p className="received-intro">Seu pedido está guardado como pendente. Ele será liberado somente depois que a InfinitePay confirmar o pagamento.</p><span className="received-status"><span className="material-symbols-rounded" aria-hidden="true">hourglass_top</span>Aguardando confirmação</span></section>
           {simulated && <p className="received-simulation" role="status"><span className="material-symbols-rounded" aria-hidden="true">science</span>Pedido simulado em desenvolvimento. Nada foi gravado no banco e este número não existe.</p>}
           <section className="received-payment-panel"><header><span className="material-symbols-rounded" aria-hidden="true">verified_user</span><div><h2>Pagamento seguro pela InfinitePay</h2><p>Pix ou cartão serão vinculados ao número do pedido e confirmados automaticamente.</p></div></header><dl className="received-payment-summary"><div><dt>Forma de pagamento</dt><dd>Escolhida na InfinitePay</dd></div><div><dt>Valor</dt><dd>{formatCents(cartTotal)}</dd></div><div><dt>Pedido</dt><dd>#{orderNumber}</dd></div></dl></section>
-          <div className="received-content"><section className="received-order-card"><header><div><small>Número do pedido</small><h2>#{orderNumber}</h2></div><button type="button" onClick={copyOrderNumber}><span className="material-symbols-rounded" aria-hidden="true">content_copy</span>Copiar</button></header><div className="received-product-row"><ArtThumbs campaign={campaign} label={`Camisa da campanha ${campaign.title}`} items={cart} /><div className="received-product-copy"><CartLines items={cart} /><dl><div><dt>Total</dt><dd>{formatCents(cartTotal)}</dd></div></dl></div></div><p className="received-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span>Retirada com <strong>{campaign.representative}</strong></p></section><aside className="received-next-steps"><h2>Próximos passos</h2><ol><li className="is-complete"><span className="material-symbols-rounded" aria-hidden="true">check</span><div><strong>Pedido criado</strong><small>Seus dados e suas peças foram registrados.</small></div></li><li className="is-current"><span className="material-symbols-rounded" aria-hidden="true">payments</span><div><strong>Pagamento na InfinitePay</strong><small>Conclua pelo checkout seguro do provedor.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">verified</span><div><strong>Confirmação automática</strong><small>A InfinitePay atualiza o pedido pela integração.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">inventory_2</span><div><strong>Envio para produção</strong><small>Acontece somente depois da confirmação.</small></div></li></ol></aside></div>
+          <div className="received-content"><section className="received-order-card"><header><div><small>Número do pedido</small><h2>#{orderNumber}</h2></div><button type="button" onClick={copyOrderNumber}><span className="material-symbols-rounded" aria-hidden="true">content_copy</span>Copiar</button></header><div className="received-product-row"><ArtThumbs campaign={campaign} label={`Camisa da campanha ${campaign.title}`} items={cart} /><div className="received-product-copy"><CartLines items={cart} discountsByModel={couponDiscountsByModel} discountedQuantitiesByItem={couponAllocation.discountedQuantitiesByItem} /><dl><div><dt>Total</dt><dd>{formatCents(cartTotal)}</dd></div></dl></div></div><p className="received-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span>Retirada com <strong>{campaign.representative}</strong></p></section><aside className="received-next-steps"><h2>Próximos passos</h2><ol><li className="is-complete"><span className="material-symbols-rounded" aria-hidden="true">check</span><div><strong>Pedido criado</strong><small>Seus dados e suas peças foram registrados.</small></div></li><li className="is-current"><span className="material-symbols-rounded" aria-hidden="true">payments</span><div><strong>Pagamento na InfinitePay</strong><small>Conclua pelo checkout seguro do provedor.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">verified</span><div><strong>Confirmação automática</strong><small>A InfinitePay atualiza o pedido pela integração.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">inventory_2</span><div><strong>Envio para produção</strong><small>Acontece somente depois da confirmação.</small></div></li></ol></aside></div>
           <div className="received-actions"><button className="received-copy-action" type="button" onClick={copyOrderNumber}>Copiar número do pedido<span className="material-symbols-rounded" aria-hidden="true">content_copy</span></button><a className="received-back-action" href={buildRoute("acompanhar-pedido", undefined, orderNumber)}>Acompanhar pedido</a><p className="received-copy-status" role="status" aria-live="polite">{orderCopied ? "Número do pedido copiado." : "Guarde este número para acompanhar seu pedido."}</p></div>
         </main>
       )}

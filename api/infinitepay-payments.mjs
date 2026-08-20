@@ -86,7 +86,7 @@ export async function createCheckoutForOrder(orderNumber, whatsapp) {
   }
 
   const [items] = await pool.execute(
-    `SELECT oi.quantity, oi.unit_price_cents, oi.unit_discount_cents,
+    `SELECT oi.quantity, oi.unit_price_cents, oi.unit_discount_cents, oi.discounted_quantity,
             sm.name AS model_name, co.name AS color_name, sz.code AS size_code
        FROM order_items oi
        JOIN campaign_variants cv ON cv.id = oi.campaign_variant_id
@@ -97,7 +97,9 @@ export async function createCheckoutForOrder(orderNumber, whatsapp) {
     [order.id],
   );
   const computedTotal = items.reduce(
-    (total, item) => total + Number(item.quantity) * (Number(item.unit_price_cents) - Number(item.unit_discount_cents)),
+    (total, item) => total
+      + Number(item.quantity) * Number(item.unit_price_cents)
+      - Number(item.discounted_quantity) * Number(item.unit_discount_cents),
     0,
   );
   if (items.length === 0 || computedTotal !== Number(order.total_cents)) {
@@ -129,11 +131,24 @@ export async function createCheckoutForOrder(orderNumber, whatsapp) {
         email: order.customer_email,
         phone: order.customer_whatsapp,
       },
-      items: items.map((item) => ({
-        quantity: Number(item.quantity),
-        unitPriceCents: Number(item.unit_price_cents) - Number(item.unit_discount_cents),
-        description: `${item.model_name} - ${item.color_name} - ${item.size_code}`.slice(0, 120),
-      })),
+      items: items.flatMap((item) => {
+        const quantity = Number(item.quantity);
+        const discountedQuantity = Number(item.discounted_quantity);
+        const regularQuantity = quantity - discountedQuantity;
+        const description = `${item.model_name} - ${item.color_name} - ${item.size_code}`;
+        return [
+          ...(discountedQuantity > 0 ? [{
+            quantity: discountedQuantity,
+            unitPriceCents: Number(item.unit_price_cents) - Number(item.unit_discount_cents),
+            description: `${description} (com desconto)`.slice(0, 120),
+          }] : []),
+          ...(regularQuantity > 0 ? [{
+            quantity: regularQuantity,
+            unitPriceCents: Number(item.unit_price_cents),
+            description: description.slice(0, 120),
+          }] : []),
+        ];
+      }),
       redirectUrl: publicUrl({ rota: "acompanhar-pedido", pedido: order.order_number }),
       webhookUrl: webhookUrl(),
     });
