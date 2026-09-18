@@ -1801,6 +1801,7 @@ main > section[id] { scroll-margin-top: 78px; }
 .delivery-report-row > span { min-width: 0; display: grid; gap: 4px; }
 .delivery-report-row > span > strong { overflow: hidden; color: #242a2d; font-size: .58rem; text-overflow: ellipsis; white-space: nowrap; }
 .delivery-report-row > span > small { overflow: hidden; color: #838b8f; font-size: .5rem; text-overflow: ellipsis; white-space: nowrap; }
+.delivery-report-row > span > small.delivery-report-phone { overflow: visible; overflow-wrap: anywhere; white-space: normal; }
 .delivery-report-status { justify-self: start; border-radius: 2px; padding: 6px 8px; font-size: .51rem; font-style: normal; font-weight: 720; white-space: nowrap; }
 .delivery-report-status--delivered { color: #167c56; background: #e6f5ee; }
 .delivery-report-status--ready { color: #087fca; background: #e7f5fc; }
