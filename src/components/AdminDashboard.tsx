@@ -1,5 +1,5 @@
 import { ChangeEvent, CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { localWhatsapp } from "../phone";
+import { formattedWhatsapp, localWhatsapp } from "../phone";
 import {
   assetUrl,
   cancelOrderInApi,
@@ -3057,7 +3057,7 @@ function Reports({ data }: { data: PanelData }) {
     downloadCsv(
       "relatorio-entrega-representante.csv",
       ["Campanha", "Pedido", "Aluno", "Telefone", "Corte", "Cor", "Tamanho", "Quantidade", "Entrega"],
-      filteredDelivery.map((row) => [row.campaignTitle, row.orderNumber, row.customerName, row.customerWhatsapp || "Não informado", row.modelName, row.colorName, row.size, row.quantity, deliveryLabels[row.deliveryStatus]]),
+      filteredDelivery.map((row) => [row.campaignTitle, row.orderNumber, row.customerName, formattedWhatsapp(row.customerWhatsapp), row.modelName, row.colorName, row.size, row.quantity, deliveryLabels[row.deliveryStatus]]),
     );
     setFeedback("Checklist de entrega exportado em CSV.");
   }
@@ -3161,7 +3161,7 @@ function Reports({ data }: { data: PanelData }) {
                 return (
                   <article className="delivery-report-row" key={`${row.orderNumber}-${row.size}-${row.colorName}`}>
                     <span data-label="Campanha"><strong>{row.campaignTitle}</strong><small>{row.representativeName}</small></span>
-                    <span data-label="Pedido / aluno"><strong>{row.orderNumber}</strong><small>{row.customerName}</small><small className="delivery-report-phone">Telefone: {row.customerWhatsapp || "Não informado"}</small></span>
+                    <span data-label="Pedido / aluno"><strong>{row.orderNumber}</strong><small>{row.customerName}</small><small className="delivery-report-phone">Telefone: {formattedWhatsapp(row.customerWhatsapp)}</small></span>
                     <span data-label="Camisa"><strong>{row.modelName} · {row.colorName}</strong><small>Tamanho {row.size}</small></span>
                     <span data-label="Qtd."><strong>{row.quantity}</strong></span>
                     <span data-label="Entrega"><em className={`delivery-report-status delivery-report-status--${deliveryTone(row.deliveryStatus)}`}>{deliveryLabels[row.deliveryStatus]}</em></span>

@@ -8,3 +8,10 @@ export function localWhatsapp(value: string | null | undefined): string {
   if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) return digits.slice(2);
   return digits;
 }
+
+export function formattedWhatsapp(value: string | null | undefined): string {
+  const digits = localWhatsapp(value);
+  if (digits.length === 11) return digits.replace(/^(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3");
+  if (digits.length === 10) return digits.replace(/^(\d{2})(\d{4})(\d{4})$/, "($1) $2-$3");
+  return digits || "Não informado";
+}
