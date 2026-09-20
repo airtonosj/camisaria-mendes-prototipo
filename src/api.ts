@@ -445,6 +445,19 @@ export type CampaignPhaseCode =
 export type PaymentStatusCode = "pending" | "paid" | "failed" | "refunded" | "partially_refunded";
 export type DeliveryStatusCode = "waiting_campaign" | "ready" | "delivered" | "issue";
 
+export type CampaignCouponStats = {
+  id: number;
+  code: string;
+  active: boolean;
+  usedCount: number;
+  paidCount: number;
+  pendingCount: number;
+  cancelledCount: number;
+  refundedCount: number;
+  failedCount: number;
+  usageLimit: number | null;
+};
+
 export type ApiAdminCampaign = {
   code: string;
   title: string;
@@ -460,6 +473,7 @@ export type ApiAdminCampaign = {
   paidTotalCents: number;
   canDelete: boolean;
   activeCoupon: CampaignCoupon | null;
+  couponHistory: CampaignCouponStats[];
 };
 
 export type ApiCampaignOrder = {

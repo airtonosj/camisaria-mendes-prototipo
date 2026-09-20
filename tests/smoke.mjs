@@ -415,6 +415,29 @@ async function request(path, { method = "GET", token, headers = {}, body, expect
   return payload;
 }
 
+async function assertCouponPaymentCountsForTest(orderNumber, campaignCode, token) {
+  const connection = await mysql.createConnection({
+    host: environment.DB_HOST, port: Number(environment.DB_PORT || 3306),
+    user: environment.DB_USER, password: environment.DB_PASSWORD || '', database: environment.DB_NAME,
+  });
+  try {
+    for (const [status, field] of [['paid', 'paidCount'], ['failed', 'failedCount'], ['refunded', 'refundedCount'], ['partially_refunded', 'refundedCount']]) {
+      await connection.execute('UPDATE orders SET payment_status = ? WHERE order_number = ?', [status, orderNumber]);
+      const stats = (await request('/api/admin/campaigns', { token })).campaigns
+        .find(campaign => campaign.code === campaignCode).couponHistory.find(coupon => coupon.code === 'CORES-10');
+      for (const counter of ['paidCount', 'pendingCount', 'failedCount', 'refundedCount']) {
+        assert.equal(stats[counter], counter === field ? 1 : 0, `${status}: ${counter}`);
+      }
+    }
+  } finally {
+    await connection.execute("UPDATE orders SET payment_status = 'pending' WHERE order_number = ?", [orderNumber]);
+    // O gatilho de pagamento cria a notificação mesmo nesta transição artificial.
+    // Remover somente a notificação desta fixture mantém o teste de e-mail isolado.
+    await connection.execute('DELETE n FROM order_email_notifications n JOIN orders o ON o.id = n.order_id WHERE o.order_number = ?', [orderNumber]);
+    await connection.end();
+  }
+}
+
 async function binaryRequest(path, { method = "POST", token, headers = {}, body, expected = 201 } = {}) {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
@@ -683,6 +706,23 @@ try {
   assert.equal(trackedDiscountedOrder.order.couponCode, "CORES-10");
   assert.deepEqual(trackedDiscountedOrder.order.items.map((item) => item.unitDiscountCents), [1000, 1500]);
   assert.deepEqual(trackedDiscountedOrder.order.items.map((item) => item.discountedQuantity), [1, 2]);
+  const couponPendingStats = (await request('/api/admin/campaigns', { token })).campaigns
+    .find(campaign => campaign.code === customCampaign.code).couponHistory.find(coupon => coupon.code === 'CORES-10');
+  assert.equal(couponPendingStats.pendingCount, 1, 'Um pedido com vários itens conta apenas uma vez');
+  assert.equal(couponPendingStats.paidCount, 0);
+  assert.equal(couponPendingStats.cancelledCount, 0);
+  for (const customer of [
+    { ...couponOrderBody.customer, email: 'nome@dominio' },
+    { ...couponOrderBody.customer, email: 'nome..erro@dominio.com' },
+    { ...couponOrderBody.customer, whatsapp: 'abc5598999992070' },
+    { ...couponOrderBody.customer, whatsapp: '20999992070' },
+  ]) {
+    const invalidContact = await request('/api/orders', {
+      method: 'POST', expected: 422, headers: { 'Idempotency-Key': randomUUID() },
+      body: { ...qualifyingCouponOrderBody, customer },
+    });
+    assert.equal(invalidContact.error.code, 'VALIDATION_ERROR');
+  }
   await request("/api/orders", {
     method: "POST",
     expected: 409,
@@ -725,6 +765,16 @@ try {
   await request(`/api/campaigns/${customCampaign.code}/coupon?code=CORES-10`, { expected: 404 });
   const campaignWithoutCoupon = (await request(`/api/admin/campaigns/${customCampaign.code}`, { token })).campaign;
   assert.equal(campaignWithoutCoupon.activeCoupon, null);
+  const couponHistoryCampaigns = (await request('/api/admin/campaigns', { token })).campaigns;
+  const historicalCoupon = couponHistoryCampaigns.find(campaign => campaign.code === customCampaign.code).couponHistory
+    .find(coupon => coupon.code === 'CORES-10');
+  assert.equal(historicalCoupon.active, false);
+  assert.equal(historicalCoupon.usedCount, 1);
+  assert.equal(historicalCoupon.pendingCount, 1);
+  assert.equal(historicalCoupon.cancelledCount, 1);
+  await assertCouponPaymentCountsForTest(replacementCouponOrder.order.number, customCampaign.code, token);
+  assert.ok(couponHistoryCampaigns.filter(campaign => campaign.code !== customCampaign.code)
+    .every(campaign => campaign.couponHistory.every(coupon => coupon.id !== historicalCoupon.id)));
   const preservedCouponOrder = await request(`/api/orders/${replacementCouponOrder.order.number}?whatsapp=5598999992072`);
   assert.equal(preservedCouponOrder.order.couponCode, "CORES-10");
   assert.equal(preservedCouponOrder.order.discountCents, 6000);

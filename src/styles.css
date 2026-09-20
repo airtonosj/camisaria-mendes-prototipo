@@ -2605,3 +2605,22 @@ main > section[id] { scroll-margin-top: 78px; }
   .campaign-wizard-actions > div { display: grid; grid-template-columns: 1fr 1fr; }
   .campaign-wizard-actions > div > button:only-child { grid-column: 1 / -1; }
 }
+.contact-field-error { display: block; color: #a12c2c; font-size: .78rem; line-height: 1.45; margin-top: 5px; }
+input[aria-invalid="true"] { border-color: #b83b3b; }
+.campaign-qr-options { display: grid; gap: 20px; min-width: 0; }
+.campaign-share-content .campaign-qr-option { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid #dce1de; border-radius: 12px; }
+.campaign-share-content .campaign-qr-option figcaption { margin: 0; }
+.campaign-share-content .campaign-qr-option figcaption strong { font-size: .9rem; }
+.campaign-share-content .campaign-qr-option figcaption span { font-size: .75rem; }
+.campaign-share-content .campaign-qr-option img { width: 100%; height: auto; max-width: 240px; align-self: center; border: 0; padding: 0; }
+.campaign-share-content .campaign-qr-option a { font-size: .8rem; justify-content: center; text-align: center; }
+.campaign-coupon-usage { border-top: 1px solid #e1e5e3; padding: 24px; }
+.campaign-coupon-usage h3 { margin: 0 0 8px; font-size: 1rem; }
+.campaign-coupon-usage > p { font-size: .8rem; color: #65716b; }
+.coupon-usage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; margin-top: 16px; }
+.coupon-usage-grid article { padding: 18px; border: 1px solid #dce1de; border-radius: 10px; }
+.coupon-usage-grid article header { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+.coupon-usage-grid article header span, .coupon-usage-grid small { font-size: .75rem; color: #65716b; }
+.coupon-usage-grid dl { margin: 14px 0; display: grid; gap: 8px; }
+.coupon-usage-grid dl div { display: flex; justify-content: space-between; gap: 10px; font-size: .85rem; }
+.coupon-usage-grid dd { margin: 0; font-weight: 700; }

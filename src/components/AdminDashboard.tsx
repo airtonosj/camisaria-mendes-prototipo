@@ -1,5 +1,9 @@
 import { ChangeEvent, CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formattedWhatsapp, localWhatsapp } from "../phone";
+import { ContactInput } from './ContactInput';
+import { CampaignQrCode } from './CampaignQrCode';
+import { CampaignCouponUsage } from './CampaignCouponUsage';
+import { parseWhatsapp } from '../../shared/contact.mjs';
 import {
   assetUrl,
   cancelOrderInApi,
@@ -28,6 +32,7 @@ import type {
   CampaignPhaseCode,
   CampaignArtworkConfig,
   CampaignCoupon,
+  CampaignCouponStats,
   CampaignRealPhotoConfig,
   CampaignRealVideoConfig,
   DeliveryStatusCode,
@@ -136,6 +141,7 @@ type PanelCampaign = {
   paidTotalCents: number;
   canDelete: boolean;
   activeCoupon?: CampaignCoupon | null;
+  couponHistory?: CampaignCouponStats[];
 };
 
 type PanelOrder = {
@@ -386,6 +392,7 @@ function usePanelData(): PanelData {
             paidTotalCents: campaign.paidTotalCents,
             canDelete: campaign.canDelete,
             activeCoupon: campaign.activeCoupon,
+            couponHistory: campaign.couponHistory,
           })),
         );
         setMode("live");
@@ -1007,7 +1014,7 @@ function Campaigns({ data }: { data: PanelData }) {
   const summarySizeCount = selectedCampaignModels.reduce((total, model) => total + modelSizes[model.name].length, 0);
   const informationComplete = campaignName.trim().length >= 5
     && representative.trim().length >= 3
-    && representativePhone.replace(/\D/g, "").length >= 10
+    && !parseWhatsapp(representativePhone).error
     && Boolean(deadline)
     && Boolean(pickup.trim());
   const couponComplete = !couponEnabled || (
@@ -1878,8 +1885,8 @@ function Campaigns({ data }: { data: PanelData }) {
       focusCampaignPanel();
       return false;
     }
-    if (representativePhone.replace(/\D/g, "").length < 10) {
-      setFormError("Informe um WhatsApp válido para o representante.");
+    if (parseWhatsapp(representativePhone).error) {
+      setFormError(parseWhatsapp(representativePhone).error!);
       setFormStep("information");
       focusCampaignPanel();
       return false;
@@ -2225,7 +2232,7 @@ function Campaigns({ data }: { data: PanelData }) {
                   <div className="campaign-information-grid">
                     <label className="campaign-field campaign-field--wide"><span>Nome da campanha</span><input value={campaignName} onChange={(event) => setCampaignName(event.target.value)} placeholder="Engenharia Civil — Turma 2026" minLength={5} required /></label>
                     <label className="campaign-field"><span>Representante da turma</span><input value={representative} onChange={(event) => setRepresentative(event.target.value)} placeholder="Nome do representante" minLength={3} required /></label>
-                    <label className="campaign-field"><span>WhatsApp do representante</span><input type="tel" inputMode="tel" value={representativePhone} onChange={(event) => setRepresentativePhone(event.target.value)} placeholder="(98) 98888-1234" minLength={10} required /></label>
+                    <label className="campaign-field"><span>WhatsApp do representante</span><ContactInput kind="phone" value={representativePhone} onChange={setRepresentativePhone} placeholder="(98) 98888-1234" /></label>
                     <label className="campaign-field"><span>Prazo final dos pedidos</span><input type="date" value={deadline} onChange={(event) => setDeadline(event.target.value)} required /></label>
                     <label className="campaign-field"><span>Instruções de retirada</span><input value={pickup} onChange={(event) => setPickup(event.target.value)} maxLength={255} required /></label>
                   </div>
@@ -2488,7 +2495,7 @@ function Campaigns({ data }: { data: PanelData }) {
 
       {!creating && notice && <p className="campaign-notice" role="status"><span className="material-symbols-rounded" aria-hidden="true">check_circle</span>{notice}</p>}
 
-      {!creating && shared && <CampaignSharePanel campaign={shared} onClose={() => setShared(null)} />}
+      {!creating && shared && <CampaignSharePanel campaign={campaigns.find(campaign => campaign.code === shared.code) ?? shared} onClose={() => setShared(null)} />}
 
       {!creating && <section className="campaign-management" aria-label="Campanhas cadastradas">
         <div className="campaign-management-toolbar">
@@ -2544,8 +2551,6 @@ function CampaignSharePanel({ campaign, onClose }: { campaign: PanelCampaign; on
   const [copied, setCopied] = useState<"" | "code" | "link" | "coupon" | "couponLink">("");
   const campaignLink = buildRoute(undefined, campaign.code);
   const couponLink = campaign.activeCoupon ? buildRoute(undefined, campaign.code, undefined, undefined, campaign.activeCoupon.code) : "";
-  const qrTarget = couponLink || campaignLink;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(qrTarget)}`;
 
   async function copy(value: string, type: "code" | "link" | "coupon" | "couponLink") {
     try {
@@ -2572,8 +2577,12 @@ function CampaignSharePanel({ campaign, onClose }: { campaign: PanelCampaign; on
           <a href={campaignLink} target="_blank" rel="noreferrer">Abrir página da campanha<span className="material-symbols-rounded" aria-hidden="true">open_in_new</span></a>
           <p role="status" aria-live="polite">{copied === "code" ? "Código copiado." : copied === "link" ? "Link privado copiado." : copied === "coupon" ? "Cupom copiado." : copied === "couponLink" ? "Link com cupom copiado." : "O acesso não aparece na página pública."}</p>
         </div>
-        <figure><img src={qrUrl} alt={`QR Code de acesso à campanha ${campaign.title}`} /><figcaption><strong>{campaign.activeCoupon ? "QR Code com cupom" : "QR Code da campanha"}</strong><span>{campaign.activeCoupon ? `Ao abrir, o desconto ficará pronto e será aplicado a partir de ${campaign.activeCoupon.minimumQuantity} peças${campaign.activeCoupon.maximumDiscountQuantity ? `, em até ${campaign.activeCoupon.maximumDiscountQuantity} unidades` : ""}.` : "O representante pode colocar este código nos materiais da turma."}</span></figcaption></figure>
+        <div className="campaign-qr-options">
+          <CampaignQrCode url={campaignLink} campaignCode={campaign.code} />
+          {campaign.activeCoupon && <CampaignQrCode url={couponLink} campaignCode={campaign.code} couponCode={campaign.activeCoupon.code} />}
+        </div>
       </div>
+      <CampaignCouponUsage coupons={campaign.couponHistory ?? []} />
     </section>
   );
 }
@@ -2986,6 +2995,8 @@ function Reports({ data }: { data: PanelData }) {
   const [busy, setBusy] = useState(false);
   const [liveProduction, setLiveProduction] = useState<ApiProductionRow[]>([]);
   const [liveDelivery, setLiveDelivery] = useState<ApiDeliveryRow[]>([]);
+  const [deliveryScope, setDeliveryScope] = useState<string | null>(null);
+  const [generatingLabels, setGeneratingLabels] = useState(false);
   const [loadCount, setLoadCount] = useState(0);
 
   const scoped = useMemo(
@@ -3002,11 +3013,13 @@ function Reports({ data }: { data: PanelData }) {
     if (mode !== "live") return;
     let active = true;
     const filter = campaignCode === "all" ? undefined : campaignCode;
+    setDeliveryScope(null);
     Promise.all([fetchProductionReport(filter), fetchDeliveryReport(filter)])
       .then(([production, delivery]) => {
         if (!active) return;
         setLiveProduction(production);
         setLiveDelivery(delivery);
+        setDeliveryScope(campaignCode);
         setFeedback("Relatórios sincronizados com os pagamentos confirmados.");
       })
       .catch((reportError) => {
@@ -3071,6 +3084,20 @@ function Reports({ data }: { data: PanelData }) {
     printProductionReport(`${productionFilename}.pdf`);
   }
 
+  async function generateDeliveryLabels() {
+    if (mode === 'live' && deliveryScope !== campaignCode) return;
+    setGeneratingLabels(true);
+    try {
+      const { createDeliveryLabelsPdf, selectedDeliveryOrders } = await import('../deliveryLabels');
+      const rows = selectedDeliveryOrders(deliveryRows, filteredDelivery);
+      const pdf = await createDeliveryLabelsPdf(rows);
+      pdf.save(`etiquetas-A5-${campaignCode === 'all' ? 'todas-campanhas' : campaignCode}.pdf`);
+      setFeedback('PDF A5 baixado. Imprima em papel A5, escala 100%, sem ajustar à página.');
+    } catch (error) {
+      setFeedback(errorMessage(error, 'Não foi possível gerar as etiquetas. Tente novamente.'));
+    } finally { setGeneratingLabels(false); }
+  }
+
   async function markDelivered(orderNumber: string) {
     if (mode !== "live") {
       setFeedback("Sem sessão no servidor, a entrega não pode ser registrada.");
@@ -3095,6 +3122,7 @@ function Reports({ data }: { data: PanelData }) {
       <section className="reports-intro">
         <div><span className="kicker">Operação</span><h2>Relatórios da camisaria</h2><p>Produção consolidada para a oficina e checklist nominal para o representante da turma.</p></div>
         <div className="reports-intro-actions">
+          {report === 'delivery' && <button className="outline-action" type="button" onClick={generateDeliveryLabels} disabled={generatingLabels || !filteredDelivery.length || mode === 'live' && deliveryScope !== campaignCode}>{generatingLabels ? 'Gerando etiquetas…' : 'Etiquetas A5 — PDF'}<span className="material-symbols-rounded" aria-hidden="true">picture_as_pdf</span></button>}
           <button className="outline-action" type="button" onClick={() => { setFeedback("Atualizando dados confirmados..."); setLoadCount((value) => value + 1); reload(); }}>Atualizar dados<span className="material-symbols-rounded" aria-hidden="true">refresh</span></button>
           <button className="outline-action" type="button" onClick={report === "production" ? generateProductionPdf : () => window.print()}>{report === "production" ? "Gerar PDF" : "Imprimir"}<span className="material-symbols-rounded" aria-hidden="true">{report === "production" ? "picture_as_pdf" : "print"}</span></button>
           <button className="primary-action" type="button" onClick={exportCurrentReport}>{report === "production" ? "Exportar Excel" : "Exportar CSV"}<span className="material-symbols-rounded" aria-hidden="true">download</span></button>

@@ -4,6 +4,7 @@ import { buildRoute } from "../App";
 import { shirtModels } from "../data";
 import type { CampaignArtMode, VariantArtwork } from "../data";
 import { Brand } from "./Brand";
+import { ContactInput } from './ContactInput';
 import { ShirtMockupPreview } from "./ShirtMockupPreview";
 import { paymentMethodLabel } from "../payment";
 
@@ -353,18 +354,7 @@ export function OrderTrackingPage() {
             />
 
             <label htmlFor="tracking-phone">WhatsApp usado na compra</label>
-            <input
-              id="tracking-phone"
-              name="phone"
-              type="tel"
-              inputMode="tel"
-              placeholder="(98) 99999-0000"
-              value={phone}
-              onChange={(event) => { setPhone(event.target.value); setError(""); }}
-              autoComplete="tel"
-              minLength={10}
-              required
-            />
+            <ContactInput id="tracking-phone" name="phone" kind="phone" placeholder="(98) 99999-0000" value={phone} onChange={value => { setPhone(value); setError(''); }} />
 
             {error && <p className="tracking-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{error}</p>}
             <button type="submit" disabled={searching}>{searching ? "Consultando..." : "Consultar pedido"}<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>

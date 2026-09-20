@@ -27,6 +27,7 @@ import {
   startInfinitePayReconciliationWorker,
 } from "./infinitepay-payments.mjs";
 import { parseWhatsapp, whatsappLookupValues } from "./phone.mjs";
+import { normalizeCustomerEmail } from "../shared/contact.mjs";
 import {
   applyLicenseCommand,
   getLicenseState,
@@ -1016,17 +1017,33 @@ async function listCampaigns() {
       ORDER BY c.created_at DESC`,
   );
   const [couponRows] = await pool.execute(
-    `SELECT cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit, cc.minimum_quantity, cc.maximum_discount_quantity,
-            COUNT(CASE WHEN o.status = 'active' THEN 1 END) AS used_count
+    `SELECT cc.id, cc.campaign_id, cc.code, cc.active, cc.expires_at, cc.usage_limit, cc.minimum_quantity, cc.maximum_discount_quantity,
+            COUNT(CASE WHEN o.status = 'active' THEN 1 END) AS used_count,
+            COUNT(CASE WHEN o.status = 'active' AND o.payment_status = 'paid' THEN 1 END) AS paid_count,
+            COUNT(CASE WHEN o.status = 'active' AND o.payment_status = 'pending' THEN 1 END) AS pending_count,
+            COUNT(CASE WHEN o.status = 'cancelled' THEN 1 END) AS cancelled_count,
+            COUNT(CASE WHEN o.status = 'active' AND o.payment_status IN ('refunded', 'partially_refunded') THEN 1 END) AS refunded_count,
+            COUNT(CASE WHEN o.status = 'active' AND o.payment_status = 'failed' THEN 1 END) AS failed_count
        FROM campaign_coupons cc
        LEFT JOIN coupon_redemptions cr ON cr.coupon_id = cc.id
       LEFT JOIN orders o ON o.id = cr.order_id
-      WHERE cc.active = TRUE
-      GROUP BY cc.id, cc.campaign_id, cc.code, cc.expires_at, cc.usage_limit, cc.minimum_quantity, cc.maximum_discount_quantity`,
+      GROUP BY cc.id, cc.campaign_id, cc.code, cc.active, cc.expires_at, cc.usage_limit, cc.minimum_quantity, cc.maximum_discount_quantity
+      ORDER BY cc.id DESC`,
   );
   const couponsByCampaign = new Map();
+  const couponHistoryByCampaign = new Map();
   for (const row of couponRows) {
-    couponsByCampaign.set(
+    const campaignId = Number(row.campaign_id);
+    const history = couponHistoryByCampaign.get(campaignId) ?? [];
+    history.push({
+      id: Number(row.id), code: row.code, active: Boolean(row.active),
+      usedCount: Number(row.used_count), paidCount: Number(row.paid_count),
+      pendingCount: Number(row.pending_count), cancelledCount: Number(row.cancelled_count),
+      refundedCount: Number(row.refunded_count), failedCount: Number(row.failed_count),
+      usageLimit: row.usage_limit === null ? null : Number(row.usage_limit),
+    });
+    couponHistoryByCampaign.set(campaignId, history);
+    if (row.active) couponsByCampaign.set(
       Number(row.campaign_id),
       couponPayload(row, Number(row.used_count), await couponDiscounts(pool, row.id)),
     );
@@ -1047,6 +1064,7 @@ async function listCampaigns() {
     paidTotalCents: Number(row.paid_total_cents),
     canDelete: Boolean(row.can_delete),
     activeCoupon: couponsByCampaign.get(Number(row.id)) ?? null,
+    couponHistory: couponHistoryByCampaign.get(Number(row.id)) ?? [],
   }));
 }
 
@@ -1816,7 +1834,7 @@ async function createOrder(request) {
   const customerName = requireText(customer.name, "customer.name", 160);
   const customerWhatsapp = normalizeWhatsapp(customer.whatsapp);
   const suppliedCustomerEmail = requireText(customer.email, "customer.email", 254);
-  const customerEmail = normalizeEmail(suppliedCustomerEmail);
+  const customerEmail = normalizeCustomerEmail(suppliedCustomerEmail);
   if (!customerEmail) {
     throw new ApiError(422, "VALIDATION_ERROR", "Informe um e-mail válido para receber a confirmação da compra.");
   }
