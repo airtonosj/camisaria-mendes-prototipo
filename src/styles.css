@@ -2608,6 +2608,14 @@ main > section[id] { scroll-margin-top: 78px; }
 .contact-field-error { display: block; color: #a12c2c; font-size: .78rem; line-height: 1.45; margin-top: 5px; }
 input[aria-invalid="true"] { border-color: #b83b3b; }
 .campaign-qr-options { display: grid; gap: 20px; min-width: 0; }
+.campaign-qr-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 52px; padding: 12px; border: 1px solid #dce1de; border-radius: 12px; background: #fff; color: #282d30; cursor: pointer; text-align: left; }
+.campaign-qr-switch strong { display: block; font-size: .85rem; }
+.campaign-qr-switch small { display: block; margin-top: 4px; font-size: .72rem; color: #65716b; }
+.campaign-qr-switch-track { display: block; flex: 0 0 42px; width: 42px; height: 24px; padding: 3px; border-radius: 20px; background: #737d80; }
+.campaign-qr-switch-track > span { display: block; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
+.campaign-qr-switch[aria-checked="true"] .campaign-qr-switch-track { background: #0077b5; }
+.campaign-qr-switch[aria-checked="true"] .campaign-qr-switch-track > span { transform: translateX(18px); }
+.campaign-qr-switch:focus-visible { outline: 3px solid #0077b5; outline-offset: 3px; }
 .campaign-share-content .campaign-qr-option { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid #dce1de; border-radius: 12px; }
 .campaign-share-content .campaign-qr-option figcaption { margin: 0; }
 .campaign-share-content .campaign-qr-option figcaption strong { font-size: .9rem; }

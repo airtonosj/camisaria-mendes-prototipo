@@ -2495,7 +2495,7 @@ function Campaigns({ data }: { data: PanelData }) {
 
       {!creating && notice && <p className="campaign-notice" role="status"><span className="material-symbols-rounded" aria-hidden="true">check_circle</span>{notice}</p>}
 
-      {!creating && shared && <CampaignSharePanel campaign={campaigns.find(campaign => campaign.code === shared.code) ?? shared} onClose={() => setShared(null)} />}
+      {!creating && shared && <CampaignSharePanel key={shared.code} campaign={campaigns.find(campaign => campaign.code === shared.code) ?? shared} onClose={() => setShared(null)} />}
 
       {!creating && <section className="campaign-management" aria-label="Campanhas cadastradas">
         <div className="campaign-management-toolbar">
@@ -2549,8 +2549,10 @@ function Campaigns({ data }: { data: PanelData }) {
 
 function CampaignSharePanel({ campaign, onClose }: { campaign: PanelCampaign; onClose: () => void }) {
   const [copied, setCopied] = useState<"" | "code" | "link" | "coupon" | "couponLink">("");
+  const [qrWithDiscount, setQrWithDiscount] = useState(false);
   const campaignLink = buildRoute(undefined, campaign.code);
   const couponLink = campaign.activeCoupon ? buildRoute(undefined, campaign.code, undefined, undefined, campaign.activeCoupon.code) : "";
+  const selectedCoupon = qrWithDiscount ? campaign.activeCoupon : null;
 
   async function copy(value: string, type: "code" | "link" | "coupon" | "couponLink") {
     try {
@@ -2578,8 +2580,11 @@ function CampaignSharePanel({ campaign, onClose }: { campaign: PanelCampaign; on
           <p role="status" aria-live="polite">{copied === "code" ? "Código copiado." : copied === "link" ? "Link privado copiado." : copied === "coupon" ? "Cupom copiado." : copied === "couponLink" ? "Link com cupom copiado." : "O acesso não aparece na página pública."}</p>
         </div>
         <div className="campaign-qr-options">
-          <CampaignQrCode url={campaignLink} campaignCode={campaign.code} />
-          {campaign.activeCoupon && <CampaignQrCode url={couponLink} campaignCode={campaign.code} couponCode={campaign.activeCoupon.code} />}
+          {campaign.activeCoupon && <button className="campaign-qr-switch" type="button" role="switch" aria-checked={Boolean(selectedCoupon)} aria-label="QR code com desconto" onClick={() => setQrWithDiscount(value => !value)}>
+            <span><strong>Com desconto</strong><small>{selectedCoupon ? 'Cupom incluído no QR code' : 'QR code sem cupom'}</small></span>
+            <span className="campaign-qr-switch-track" aria-hidden="true"><span /></span>
+          </button>}
+          <CampaignQrCode url={selectedCoupon ? couponLink : campaignLink} campaignCode={campaign.code} couponCode={selectedCoupon?.code} />
         </div>
       </div>
       <CampaignCouponUsage coupons={campaign.couponHistory ?? []} />
