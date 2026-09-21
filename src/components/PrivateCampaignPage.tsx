@@ -598,7 +598,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
 
   function submitCustomerDetails(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (parseWhatsapp(customerPhone).error || !normalizeCustomerEmail(customerEmail)) {
+    if (!customerName.trim() || customerName.trim().length > 160 || parseWhatsapp(customerPhone).error || !normalizeCustomerEmail(customerEmail)) {
       event.currentTarget.reportValidity();
       return;
     }
@@ -624,6 +624,10 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
         window.location.assign(checkout.url);
         return;
       }
+      if (!customerName.trim() || customerName.trim().length > 160) {
+        goToStep("details");
+        return;
+      }
       if (!cart.length) throw new Error("Seu carrinho está vazio.");
       if (cart.some((item) => item.variantId < 1)) {
         if (import.meta.env.DEV) {
@@ -636,7 +640,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
       }
       const created = await createOrderInApi({
         campaignCode: campaign.code,
-        customer: { name: customerName, whatsapp: customerPhone, email: customerEmail },
+        customer: { name: customerName.trim(), whatsapp: customerPhone, email: customerEmail },
         items: cart.map(({ variantId, size: itemSize, quantity: itemQuantity }) => ({ variantId, size: itemSize, quantity: itemQuantity })),
         couponCode: appliedCoupon?.code,
         idempotencyKey: currentIdempotencyKey(),
@@ -779,7 +783,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
           <section className="campaign-checkout-heading"><h1>Revise e identifique</h1><div className="campaign-progress-copy"><strong>2 de 3</strong><span>·</span><span>Seus dados</span></div><div className="campaign-progress campaign-progress--details" aria-hidden="true"><span /></div></section>
           <form className="campaign-customer-form" onSubmit={submitCustomerDetails}>
             <section className="checkout-order-review" aria-labelledby="order-review-title"><h2 id="order-review-title">Seu pedido</h2><div className="checkout-product-row"><ArtThumbs campaign={campaign} label={`Camisa da campanha ${campaign.title}`} items={cart} /><div className="checkout-product-copy"><CartLines items={cart} discountsByModel={couponDiscountsByModel} discountedQuantitiesByItem={couponAllocation.discountedQuantitiesByItem} /><div className="checkout-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span><span>Retirada com <b>{campaign.representative}</b></span></div>{appliedCoupon && <div className="checkout-discount"><span>Cupom {appliedCoupon.code}{couponMaximumDiscountQuantity ? ` · ${couponAllocation.discountedUnits} peças` : ""}</span><strong>− {formatCents(cartDiscount)}</strong></div>}<div className="checkout-total"><span>{cartUnits} {cartUnits === 1 ? "peça" : "peças"} · Total</span><strong>{formatCents(cartTotal)}</strong></div></div></div><button className="checkout-edit" type="button" onClick={() => goToStep("model")}>Editar carrinho</button></section>
-            <section className="checkout-customer-fields" aria-labelledby="customer-fields-title"><h2 id="customer-fields-title">Quem vai retirar?</h2><label><span className="sr-only">Nome completo</span><ContactInput kind="phone" name="phone" placeholder="WhatsApp com DDD" value={customerPhone} onChange={setCustomerPhone} /></label><label><span className="sr-only">E-mail</span><ContactInput kind="email" name="email" placeholder="E-mail para confirmação" value={customerEmail} onChange={setCustomerEmail} /></label><p className="checkout-privacy"><span className="material-symbols-rounded" aria-hidden="true">lock</span><span>Seus dados serão usados para processar e acompanhar o pedido. <a href={buildRoute("politica-privacidade")} target="_blank">Leia a política de privacidade.</a></span></p></section>
+            <section className="checkout-customer-fields" aria-labelledby="customer-fields-title"><h2 id="customer-fields-title">Quem vai retirar?</h2><label><span className="sr-only">Nome completo</span><input type="text" name="name" autoComplete="name" placeholder="Nome completo" value={customerName} onChange={(event) => setCustomerName(event.target.value)} required maxLength={160} pattern={".*\\S.*"} title="Informe seu nome completo." /></label><label><span className="sr-only">WhatsApp com DDD</span><ContactInput kind="phone" name="phone" placeholder="WhatsApp com DDD" value={customerPhone} onChange={setCustomerPhone} /></label><label><span className="sr-only">E-mail</span><ContactInput kind="email" name="email" placeholder="E-mail para confirmação" value={customerEmail} onChange={setCustomerEmail} /></label><p className="checkout-privacy"><span className="material-symbols-rounded" aria-hidden="true">lock</span><span>Seus dados serão usados para processar e acompanhar o pedido. <a href={buildRoute("politica-privacidade")} target="_blank">Leia a política de privacidade.</a></span></p></section>
             <button className="checkout-payment-button" type="submit">Ir para pagamento<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
           </form>
         </main>
