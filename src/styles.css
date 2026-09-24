@@ -2679,7 +2679,8 @@ input[aria-invalid="true"] { border-color: #b83b3b; }
 }
 
 /* Avisos de retirada: estilos restritos ao novo diálogo. */
-.pickup-launch { display: inline-flex; align-items: center; justify-content: center; gap: 9px; margin-left: auto; flex-shrink: 0; padding: 13px 18px; border: 1px solid #079ee8; border-radius: 9px; color: #0077b5; background: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+.orders-selected-header:has(> .pickup-launch) { grid-template-columns: 98px minmax(0, 1fr) auto; }
+.pickup-launch { display: inline-flex; align-items: center; justify-content: center; justify-self: end; gap: 9px; white-space: nowrap; padding: 13px 18px; border: 1px solid #079ee8; border-radius: 9px; color: #0077b5; background: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
 .pickup-dialog { width: min(580px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); margin: auto; padding: 30px; border: 1px solid #edf1f5; border-radius: 22px; color: #17243c; background: #fff; box-shadow: 0 24px 80px #07132433; overflow-y: auto; }
 .pickup-dialog::backdrop { background: #18273599; }
 .pickup-dialog form { margin: 0; }
@@ -2721,7 +2722,7 @@ input[aria-invalid="true"] { border-color: #b83b3b; }
 .pickup-secondary { color: #344664; background: #fff; }
 .pickup-dialog button:disabled, .pickup-launch:disabled { opacity: .55; cursor: not-allowed; }
 .pickup-error { margin: 15px 0; padding: 12px; border-radius: 10px; color: #9e2424; background: #fff0f0; font-size: 14px; line-height: 1.5; }
-@media (max-width: 900px) { .orders-selected-header { flex-wrap: wrap; } .pickup-launch { margin-left: 0; } }
+@media (max-width: 900px) { .orders-selected-header:has(> .pickup-launch) { grid-template-columns: 76px minmax(0, 1fr); } .pickup-launch { grid-column: 1 / -1; justify-self: end; } }
 @media (max-width: 560px) { .pickup-dialog { padding: 20px; max-height: calc(100dvh - 24px); border-radius: 20px; } .pickup-heading { gap: 12px; } .pickup-heading-icon { width: 46px; height: 46px; border-radius: 14px; } .pickup-heading h2 { font-size: 20px; } .pickup-heading p { font-size: 12px; } .pickup-footer > button { flex: 1; padding: 12px; } .pickup-message { padding: 16px; } }
 .pickup-dialog { scrollbar-width: thin; scrollbar-color: #c5cfda transparent; }
 .pickup-message p.pickup-message-gap { height: 12px; line-height: 12px; }
