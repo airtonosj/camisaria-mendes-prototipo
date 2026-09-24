@@ -1,3 +1,5 @@
+-- Execute via npm run db:migrate. api/pickup-email-migration.mjs resumes
+-- this migration safely when an earlier startup persisted only part of its DDL.
 ALTER TABLE campaigns ADD COLUMN pickup_group_url VARCHAR(512) NULL;
 
 CREATE TABLE pickup_email_batches (
@@ -14,8 +16,8 @@ CREATE TABLE pickup_email_batches (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 ALTER TABLE order_email_notifications
-  DROP CHECK chk_order_email_notifications_type,
-  DROP CHECK chk_order_email_notifications_status,
+  DROP CONSTRAINT chk_order_email_notifications_type,
+  DROP CONSTRAINT chk_order_email_notifications_status,
   ADD COLUMN pickup_batch_id CHAR(36) NULL,
   ADD COLUMN message_snapshot JSON NULL,
   ADD CONSTRAINT fk_pickup_batch FOREIGN KEY (pickup_batch_id) REFERENCES pickup_email_batches(id),

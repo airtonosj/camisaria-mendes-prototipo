@@ -3,6 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
 import { config } from "./config.mjs";
+import { migratePickupEmail } from './pickup-email-migration.mjs';
+import { createHash } from 'node:crypto';
 
 const apiDirectory = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDirectory = path.resolve(apiDirectory, "..", "database", "migrations");
@@ -26,7 +28,12 @@ const connection = await mysql.createConnection({
   multipleStatements: true,
 });
 
+const lockName = `mendes-migrate-${createHash('sha256').update(config.database.database).digest('hex').slice(0, 40)}`;
+let locked = false;
 try {
+  const [[lock]] = await connection.execute('SELECT GET_LOCK(?, 60) AS acquired', [lockName]);
+  if (Number(lock.acquired) !== 1) throw new Error('Outra instância está executando as migrações. Tente iniciar novamente.');
+  locked = true;
   await connection.query(
     `CREATE TABLE IF NOT EXISTS schema_migrations (
        version VARCHAR(64) PRIMARY KEY,
@@ -44,7 +51,8 @@ try {
       continue;
     }
     const sql = await fs.readFile(path.join(migrationsDirectory, file), "utf8");
-    await connection.query(sql);
+    if (version === '024_pickup_email') await migratePickupEmail(connection, sql);
+    else await connection.query(sql);
     await connection.execute(
       "INSERT INTO schema_migrations (version) VALUES (?) ON DUPLICATE KEY UPDATE version = VALUES(version)",
       [version],
@@ -54,5 +62,7 @@ try {
   }
   if (pending === 0) console.log("O banco já está atualizado.");
 } finally {
-  await connection.end();
+  try {
+    if (locked) await connection.execute('SELECT RELEASE_LOCK(?)', [lockName]);
+  } finally { await connection.end(); }
 }
