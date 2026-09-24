@@ -20,6 +20,7 @@ import { config, productionConfigurationErrors } from "./config.mjs";
 import { pool, withTransaction } from "./database.mjs";
 import { mailerConfigured, sendMail } from "./mailer.mjs";
 import { startOrderEmailNotificationWorker } from "./order-email-notifications.mjs";
+import { pickupInfo, previewPickup, confirmPickup, PickupError } from './pickup-email.mjs';
 import {
   createCheckoutForOrder,
   enqueueInfinitePayEvent,
@@ -2807,6 +2808,25 @@ async function route(request, response) {
   const phaseMatch = path.match(/^\/api\/admin\/campaigns\/([^/]+)\/phase$/);
   if (request.method === "PATCH" && phaseMatch) {
     sendJson(response, 200, { campaign: await changeCampaignPhase(request, phaseMatch[1].toUpperCase()) });
+    return;
+  }
+  const pickupMatch = path.match(/^\/api\/admin\/campaigns\/([^/]+)\/pickup-email(?:\/(preview|confirm))?$/);
+  if (pickupMatch && ['GET', 'POST'].includes(request.method)) {
+    const staff = await requireStaff(request);
+    const code = pickupMatch[1].toUpperCase();
+    try {
+      let result;
+      if (request.method === 'GET' && !pickupMatch[2]) result = await pickupInfo(code);
+      else if (request.method === 'POST' && pickupMatch[2] === 'preview') result = await previewPickup(code, await readJson(request), staff.id);
+      else if (request.method === 'POST' && pickupMatch[2] === 'confirm') {
+        const body = await readJson(request);
+        result = await confirmPickup(code, requireText(body.batchId, 'batchId', 36), staff.id);
+      } else throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Método não permitido.');
+      sendJson(response, 200, result);
+    } catch (error) {
+      if (error instanceof PickupError) throw new ApiError(error.status, 'PICKUP_EMAIL', error.message);
+      throw error;
+    }
     return;
   }
   const campaignOrdersMatch = path.match(/^\/api\/admin\/campaigns\/([^/]+)\/orders$/);

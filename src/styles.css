@@ -2662,3 +2662,55 @@ input[aria-invalid="true"] { border-color: #b83b3b; }
   .coupon-usage-secondary { gap: 16px; }
   .coupon-usage-summary { padding: 22px; }
 }
+
+/* Avisos de retirada: estilos restritos ao novo diálogo. */
+.pickup-launch { display: inline-flex; align-items: center; justify-content: center; gap: 9px; margin-left: auto; flex-shrink: 0; padding: 13px 18px; border: 1px solid #079ee8; border-radius: 9px; color: #0077b5; background: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+.pickup-dialog { width: min(580px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); margin: auto; padding: 30px; border: 1px solid #edf1f5; border-radius: 22px; color: #17243c; background: #fff; box-shadow: 0 24px 80px #07132433; overflow-y: auto; }
+.pickup-dialog::backdrop { background: #18273599; }
+.pickup-dialog form { margin: 0; }
+.pickup-heading { display: flex; align-items: flex-start; gap: 18px; margin-bottom: 28px; }
+.pickup-heading-icon { display: grid; place-items: center; width: 62px; height: 62px; border-radius: 18px; background: #e5f4ff; color: #0084cd; flex-shrink: 0; }
+.pickup-heading-icon > span { font-size: 32px; }
+.pickup-heading h2 { margin: 8px 0 5px; font-size: 24px; letter-spacing: -.04em; }
+.pickup-heading p { margin: 0; color: #65738a; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.pickup-close { display: grid; place-items: center; flex-shrink: 0; margin-left: auto; width: 36px; height: 36px; border: 0; border-radius: 50%; color: #526079; background: #f5f7f9; cursor: pointer; }
+.pickup-ready { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; border-radius: 20px; padding: 7px 12px; background: #dff4e9; color: #166443; font-size: 12px; font-weight: 700; }
+.pickup-ready i { width: 8px; height: 8px; border-radius: 50%; background: #009966; }
+.pickup-section { padding: 21px 0; border-top: 1px solid #e4eaf0; }
+.pickup-section h3 { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; font-size: 18px; letter-spacing: -.02em; }
+.pickup-section h3 > span { color: #0089ce; font-size: 27px; }
+.pickup-section label { display: block; margin: 13px 0 7px; font-size: 13px; color: #435773; }
+.pickup-section textarea, .pickup-input { width: 100%; border: 1px solid #d8e1ed; border-radius: 11px; background: #f8fafc; }
+.pickup-section textarea { padding: 12px 14px; color: #253853; font: inherit; font-size: 14px; resize: vertical; min-height: 78px; }
+.pickup-input { display: flex; flex-wrap: wrap; align-items: center; overflow: hidden; }
+.pickup-input > span { width: 49px; text-align: center; color: #7083a1; font-size: 21px; }
+.pickup-input input { width: 0; min-width: 0; flex: 1; min-height: 46px; padding: 10px 12px; border: 0; border-left: 1px solid #e5eaf1; color: #253853; background: transparent; font-size: 14px; }
+.pickup-input .contact-field-error { flex-basis: 100%; padding: 5px 12px; }
+.pickup-dialog :focus-visible { outline: 2px solid #008dd2; outline-offset: 2px; }
+.pickup-hint { display: flex; gap: 12px; align-items: center; padding: 14px; border-radius: 11px; background: #e6f4ff; color: #216090; font-size: 12px; line-height: 1.6; }
+.pickup-hint > span:first-child { color: #0087d0; }
+.pickup-history { margin: 16px 0; color: #627088; font-size: 13px; }
+.pickup-history summary { cursor: pointer; }
+.pickup-history dl { margin: 12px 0; }
+.pickup-history dl > div { display: flex; justify-content: space-between; padding: 5px 0; }
+.pickup-history dd { margin: 0; font-weight: 700; }
+.pickup-message { padding: 22px; border: 1px solid #dde5ef; border-radius: 16px; background: #f9fafc; }
+.pickup-message > small { color: #71819a; font-size: 11px; letter-spacing: .06em; }
+.pickup-message h3 { margin: 7px 0 23px; padding-bottom: 21px; border-bottom: 1px solid #e1e7ee; font-size: 16px; }
+.pickup-message p { margin: 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.pickup-message a { color: #007cc3; text-decoration: underline; }
+.pickup-recipients { display: flex; gap: 12px; margin: 20px 0; color: #667894; font-size: 13px; line-height: 1.5; }
+.pickup-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #e2e9f1; }
+.pickup-primary, .pickup-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 12px 22px; border: 1px solid #d2dceb; border-radius: 13px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.pickup-primary { color: #fff; background: #0088d0; border-color: #0088d0; }
+.pickup-secondary { color: #344664; background: #fff; }
+.pickup-dialog button:disabled, .pickup-launch:disabled { opacity: .55; cursor: not-allowed; }
+.pickup-error { margin: 15px 0; padding: 12px; border-radius: 10px; color: #9e2424; background: #fff0f0; font-size: 14px; line-height: 1.5; }
+@media (max-width: 900px) { .orders-selected-header { flex-wrap: wrap; } .pickup-launch { margin-left: 0; } }
+@media (max-width: 560px) { .pickup-dialog { padding: 20px; max-height: calc(100dvh - 24px); border-radius: 20px; } .pickup-heading { gap: 12px; } .pickup-heading-icon { width: 46px; height: 46px; border-radius: 14px; } .pickup-heading h2 { font-size: 20px; } .pickup-heading p { font-size: 12px; } .pickup-footer > button { flex: 1; padding: 12px; } .pickup-message { padding: 16px; } }
+.pickup-dialog { scrollbar-width: thin; scrollbar-color: #c5cfda transparent; }
+.pickup-message p.pickup-message-gap { height: 12px; line-height: 12px; }
+.pickup-message a { display: inline-flex; align-items: flex-start; gap: 8px; max-width: 100%; word-break: break-word; }
+.pickup-message a > span { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+.pickup-footer { position: sticky; bottom: -30px; z-index: 1; padding-bottom: 20px; margin-bottom: -20px; background: #fff; }
+@media (max-width: 560px) { .pickup-footer { bottom: -20px; padding-bottom: 14px; margin-bottom: -14px; } }

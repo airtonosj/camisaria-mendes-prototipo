@@ -9,9 +9,10 @@ type Props = {
   placeholder?: string;
   name?: string;
   id?: string;
+  disabled?: boolean;
 };
 
-export function ContactInput({ kind, value, onChange, placeholder, name, id }: Props) {
+export function ContactInput({ kind, value, onChange, placeholder, name, id, disabled }: Props) {
   const ref = useRef<HTMLInputElement>(null);
   const errorId = useId();
   const [touched, setTouched] = useState(false);
@@ -25,7 +26,7 @@ export function ContactInput({ kind, value, onChange, placeholder, name, id }: P
     onChange(next);
   }
   return <>
-    <input ref={ref} id={id} name={name} type={kind === 'phone' ? 'tel' : 'email'}
+    <input ref={ref} id={id} name={name} disabled={disabled} type={kind === 'phone' ? 'tel' : 'email'}
       autoComplete={kind === 'phone' ? 'tel' : 'email'} inputMode={kind === 'phone' ? 'tel' : 'email'}
       placeholder={placeholder} value={value} required maxLength={kind === 'phone' ? 25 : 254}
       aria-invalid={touched && Boolean(error)} aria-describedby={touched && error ? errorId : undefined}

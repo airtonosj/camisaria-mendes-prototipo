@@ -3,6 +3,7 @@ import { formattedWhatsapp, localWhatsapp } from "../phone";
 import { ContactInput } from './ContactInput';
 import { CampaignQrCode } from './CampaignQrCode';
 import { CampaignCouponUsage } from './CampaignCouponUsage';
+import { PickupEmailDialog } from './PickupEmailDialog';
 import { parseWhatsapp } from '../../shared/contact.mjs';
 import {
   assetUrl,
@@ -2597,6 +2598,7 @@ function CampaignSharePanel({ campaign, onClose }: { campaign: PanelCampaign; on
 /* ------------------------------------------------------------------ */
 
 function Orders({ data }: { data: PanelData }) {
+  const [pickupOpen, setPickupOpen] = useState(false);
   const { campaigns, orders, mode, loadOrders, reload } = data;
   const [selectedCode, setSelectedCode] = useState(campaigns[0]?.code ?? "");
   const [search, setSearch] = useState("");
@@ -2637,6 +2639,7 @@ function Orders({ data }: { data: PanelData }) {
   });
 
   function selectCampaign(code: string) {
+    setPickupOpen(false);
     setSelectedCode(code);
     setSearch("");
     setPaymentFilter("all");
@@ -2783,7 +2786,9 @@ function Orders({ data }: { data: PanelData }) {
           <header className="orders-selected-header">
             <img src={selected.artFront} alt={`Arte da campanha ${selected.title}`} />
             <div><span>Campanha selecionada</span><h2>{selected.title}</h2><p>{selected.deadlineLabel} · Retirada com {selected.representative}</p></div>
+            {selected.phase === 'ready_for_delivery' && <button className="pickup-launch" type="button" disabled={mode !== 'live'} onClick={() => setPickupOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">mail</span>Avisar compradores</button>}
           </header>
+          {pickupOpen && <PickupEmailDialog code={selected.code} title={selected.title} onClose={() => setPickupOpen(false)} onSent={message => { setFeedback(message); reload(); }} />}
 
           <ol className="campaign-phase-track" aria-label="Fase operacional da campanha">
             {phaseOrder.map((phase, index) => {

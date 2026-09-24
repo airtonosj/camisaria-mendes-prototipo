@@ -1,6 +1,7 @@
 import { config } from "./config.mjs";
 import { pool } from "./database.mjs";
 import { mailerConfigured, sendMail } from "./mailer.mjs";
+import { processPickupEmails } from "./pickup-email.mjs";
 
 const notificationType = "payment_confirmed";
 const staleLockMinutes = 10;
@@ -133,6 +134,7 @@ export function startOrderEmailNotificationWorker() {
     running = true;
     try {
       await processPaymentConfirmationEmails();
+      await processPickupEmails();
     } catch (error) {
       console.error("Falha ao processar a fila de e-mails de pedidos:", error);
     } finally {

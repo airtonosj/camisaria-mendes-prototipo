@@ -100,6 +100,7 @@ export async function sendMail({ to, subject, text, messageId }) {
   const connection = connect();
   let socket = connection.socket;
   const reader = createReader(socket);
+  let deliveryUncertain = false;
 
   try {
     await new Promise((resolve, reject) => {
@@ -156,9 +157,14 @@ export async function sendMail({ to, subject, text, messageId }) {
       'Content-Type: text/plain; charset="utf-8"',
       "Content-Transfer-Encoding: base64",
     ].join("\r\n");
+    deliveryUncertain = true;
     await write(socket, `${headers}\r\n\r\n${encodeBody(text)}\r\n.`);
     await expect(reader, [250], "o envio");
-    await write(socket, "QUIT");
+    // Once DATA is accepted, a QUIT failure must not turn success into a retry.
+    try { await write(socket, "QUIT"); } catch { /* SMTP already accepted the message. */ }
+  } catch (error) {
+    error.deliveryUncertain = deliveryUncertain;
+    throw error;
   } finally {
     socket.destroy();
   }

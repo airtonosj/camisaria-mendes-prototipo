@@ -693,6 +693,19 @@ export async function changeCampaignPhaseInApi(code: string, targetPhase: Campai
   return payload.campaign;
 }
 
+export type PickupSettings = { instructions: string; representative: string; phone: string; groupUrl: string };
+export type PickupInfo = { settings: PickupSettings; eligible: number; configured: boolean; history: Array<{ status: string; count: number }> };
+export type PickupPreview = { batchId: string; count: number; subject: string; text: string };
+export function fetchPickupInfo(code: string) {
+  return staffRequest<PickupInfo>(`/admin/campaigns/${encodeURIComponent(code)}/pickup-email`);
+}
+export function previewPickupEmail(code: string, settings: PickupSettings) {
+  return staffRequest<PickupPreview>(`/admin/campaigns/${encodeURIComponent(code)}/pickup-email/preview`, { method: 'POST', body: JSON.stringify(settings) }, 60000);
+}
+export function confirmPickupEmail(code: string, batchId: string) {
+  return staffRequest<{ queued: number; skipped?: number; alreadyConfirmed?: boolean }>(`/admin/campaigns/${encodeURIComponent(code)}/pickup-email/confirm`, { method: 'POST', body: JSON.stringify({ batchId }) }, 60000);
+}
+
 export async function changeOrderDeliveryInApi(orderNumber: string, status: "ready" | "delivered" | "issue", note?: string) {
   const payload = await staffRequest<{ order: { deliveryStatus: DeliveryStatusCode } }>(
     `/admin/orders/${encodeURIComponent(orderNumber)}/delivery`,

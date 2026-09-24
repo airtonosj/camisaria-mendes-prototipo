@@ -521,10 +521,15 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "023_license_control");
+  assert.equal(health.schema.current, "024_pickup_email");
   assert.equal(health.storage.ready, true);
   assert.equal(health.license.status, "active");
   step("health check valida conexão e versão do schema");
+  await request('/api/admin/campaigns/MENDES-ENG-26/pickup-email', { expected: 401 });
+  for (const action of ['preview', 'confirm']) {
+    await request(`/api/admin/campaigns/MENDES-ENG-26/pickup-email/${action}`, { method: 'POST', body: {}, expected: 401 });
+  }
+  step('avisos de retirada exigem sessão em consulta, prévia e confirmação');
 
   const login = await request("/api/auth/login", {
     method: "POST",
