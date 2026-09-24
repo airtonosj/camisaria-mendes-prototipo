@@ -39,6 +39,7 @@
     "test:license": "node tests/license-token.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/material-symbols-rounded": "^5.3.7",
     "jspdf": "^4.2.1",
     "mysql2": "^3.14.4",
     "qrcode": "^1.5.4",
