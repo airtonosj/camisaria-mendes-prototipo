@@ -526,6 +526,7 @@ try {
   assert.equal(health.license.status, "active");
   step("health check valida conexão e versão do schema");
   await request('/api/admin/campaigns/MENDES-ENG-26/pickup-email', { expected: 401 });
+  await request('/api/admin/campaigns/MENDES-ENG-26/pickup-email/history', { expected: 401 });
   for (const action of ['preview', 'confirm']) {
     await request(`/api/admin/campaigns/MENDES-ENG-26/pickup-email/${action}`, { method: 'POST', body: {}, expected: 401 });
   }

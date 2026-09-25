@@ -22,3 +22,11 @@ Confirmações de pagamento são processadas antes dos avisos de retirada. O pro
 ## Verificação
 
 `npm run test:smoke` prepara e verifica o banco isolado; depois `npm run test:pickup` verifica a função usando entregador simulado. Nenhuma mensagem real é enviada por esses testes. `npm run build` valida tipos e artefatos de produção.
+
+## Histórico de e-mails por pedido
+
+Na tela de pedidos, o ícone de histórico no canto direito abre os registros de e-mail da campanha, inclusive após a finalização. O envelope continua disponível para avisar compradores quando a campanha está pronta para entrega. Ambos têm nome acessível e tooltip.
+
+O histórico exige sessão da equipe, permite buscar por pedido/nome/destinatário, filtrar por status e paginar (15 registros). A seleção mostra as datas, tentativas, conteúdo armazenado e acesso ao pedido. Os totais por status representam toda a campanha; a lista segue os filtros.
+
+São listadas notificações de pagamento e retirada. O conteúdo só é exibido quando existe `message_snapshot`; mensagens antigas sem snapshot não são reconstruídas. “Aceito pelo servidor” indica aceitação SMTP, sem confirmação de recebimento ou leitura. A consulta não envia nem reenvia e-mails e não precisa de nova migração.

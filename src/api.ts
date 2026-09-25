@@ -727,3 +727,17 @@ export async function fetchDeliveryReport(campaignCode?: string) {
   const payload = await staffRequest<{ rows: ApiDeliveryRow[] }>(`/admin/reports/delivery${reportQuery(campaignCode)}`);
   return payload.rows;
 }
+
+export interface EmailHistoryItem {
+  id: string; orderNumber: string; customerName: string; recipient: string; type: string;
+  status: string; attempts: number; createdAt: string; sentAt: string | null;
+  subject: string | null; text: string | null;
+}
+export interface EmailHistory {
+  page: number; pages: number; total: number; items: EmailHistoryItem[];
+  summary: { status: string; count: number }[];
+}
+export function fetchEmailHistory(code: string, search: string, status: string, page: number) {
+  const params = new URLSearchParams({ search, status, page: String(page) });
+  return staffRequest<EmailHistory>(`/admin/campaigns/${encodeURIComponent(code)}/pickup-email/history?${params}`);
+}

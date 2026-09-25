@@ -1,3 +1,4 @@
+import { EmailHistoryDialog } from './EmailHistoryDialog';
 import { ChangeEvent, CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formattedWhatsapp, localWhatsapp } from "../phone";
 import { ContactInput } from './ContactInput';
@@ -2599,6 +2600,7 @@ function CampaignSharePanel({ campaign, onClose }: { campaign: PanelCampaign; on
 
 function Orders({ data }: { data: PanelData }) {
   const [pickupOpen, setPickupOpen] = useState(false);
+  const [emailHistoryOpen, setEmailHistoryOpen] = useState(false);
   const { campaigns, orders, mode, loadOrders, reload } = data;
   const [selectedCode, setSelectedCode] = useState(campaigns[0]?.code ?? "");
   const [search, setSearch] = useState("");
@@ -2640,6 +2642,7 @@ function Orders({ data }: { data: PanelData }) {
 
   function selectCampaign(code: string) {
     setPickupOpen(false);
+    setEmailHistoryOpen(false);
     setSelectedCode(code);
     setSearch("");
     setPaymentFilter("all");
@@ -2786,8 +2789,12 @@ function Orders({ data }: { data: PanelData }) {
           <header className="orders-selected-header">
             <img src={selected.artFront} alt={`Arte da campanha ${selected.title}`} />
             <div><span>Campanha selecionada</span><h2>{selected.title}</h2><p>{selected.deadlineLabel} · Retirada com {selected.representative}</p></div>
-            {selected.phase === 'ready_for_delivery' && <button className="pickup-launch" type="button" disabled={mode !== 'live'} onClick={() => setPickupOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">mail</span>Avisar compradores</button>}
+            <div className="orders-email-actions">
+              <button className="pickup-launch" type="button" title="Histórico de e-mails" aria-label="Histórico de e-mails" disabled={mode !== 'live'} onClick={() => setEmailHistoryOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">history</span></button>
+              {selected.phase === 'ready_for_delivery' && <button className="pickup-launch" type="button" title="Avisar compradores" aria-label="Avisar compradores" disabled={mode !== 'live'} onClick={() => setPickupOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">mail</span></button>}
+            </div>
           </header>
+          {emailHistoryOpen && <EmailHistoryDialog key={selected.code} code={selected.code} title={selected.title} onClose={() => setEmailHistoryOpen(false)} onOpenOrder={number => { setEmailHistoryOpen(false); setViewingOrderNumber(number); }} />}
           {pickupOpen && <PickupEmailDialog code={selected.code} title={selected.title} onClose={() => setPickupOpen(false)} onSent={message => { setFeedback(message); reload(); }} />}
 
           <ol className="campaign-phase-track" aria-label="Fase operacional da campanha">

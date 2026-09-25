@@ -4,6 +4,7 @@ import { testEnvironment } from './test-environment.mjs';
 
 Object.assign(process.env, testEnvironment());
 const { pool } = await import('../api/database.mjs');
+const { emailHistory } = await import('../api/email-history.mjs');
 const { config } = await import('../api/config.mjs');
 const { pickupSettings, pickupInfo, previewPickup, confirmPickup, processPickupEmails } = await import('../api/pickup-email.mjs');
 assert.match(config.database.database, /_test$/);
@@ -70,6 +71,20 @@ try {
   assert.equal(stale.status, 'uncertain');
   await pool.execute("UPDATE campaigns SET phase = 'production' WHERE id = ?", [campaignId]);
   await assert.rejects(previewPickup(code, settings, staff.id), /pronta para entrega/);
+  const history = await emailHistory(code);
+  assert.equal(history.total, 3);
+  assert.ok(history.items.every(item => item.orderNumber.startsWith('QA-')));
+  assert.ok(history.items.every(item => item.text.includes('Airton Jr')));
+  assert.equal((await emailHistory(code, new URLSearchParams({ status: 'cancelled' }))).total, 1);
+  assert.equal((await emailHistory(code, new URLSearchParams({ search: 'qa0@example.com' }))).total, 1);
+  assert.equal((await emailHistory(code, new URLSearchParams({ search: "' OR 1=1 --" }))).total, 0);
+  assert.equal((await emailHistory(code, new URLSearchParams({ page: '999' }))).page, 1);
+  const otherCode = 'OTHER-' + randomUUID().slice(0, 8);
+  const [other] = await pool.execute("INSERT INTO campaigns (code, title, phase, deadline_at, pickup_instructions, representative_name, representative_whatsapp) VALUES (?, 'Outra', 'production', '2026-12-31', 'Local', 'Rep', '5598999991234')", [otherCode]);
+  try { assert.equal((await emailHistory(otherCode)).total, 0); } finally { await pool.execute('DELETE FROM campaigns WHERE id = ?', [other.insertId]); }
+  await assert.rejects(emailHistory(code, new URLSearchParams({ status: 'invalid' })), /Status inválido/);
+  await assert.rejects(emailHistory('missing-campaign'), /não encontrada/);
+  console.log('✓ Histórico: filtros, isolamento por campanha, snapshot, paginação e validação.');
   console.log('✓ Avisos: validação, elegibilidade, prévia sem envio, SMTP ausente, concorrência, duplicidade, snapshot, cancelamento, falha, limite e reinício.');
 } finally {
   if (campaignId) {

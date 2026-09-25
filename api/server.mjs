@@ -1,3 +1,4 @@
+import { emailHistory } from './email-history.mjs';
 import { randomUUID } from "node:crypto";
 import { constants as fsConstants, createReadStream } from "node:fs";
 import fs from "node:fs/promises";
@@ -2810,13 +2811,14 @@ async function route(request, response) {
     sendJson(response, 200, { campaign: await changeCampaignPhase(request, phaseMatch[1].toUpperCase()) });
     return;
   }
-  const pickupMatch = path.match(/^\/api\/admin\/campaigns\/([^/]+)\/pickup-email(?:\/(preview|confirm))?$/);
+  const pickupMatch = path.match(/^\/api\/admin\/campaigns\/([^/]+)\/pickup-email(?:\/(preview|confirm|history))?$/);
   if (pickupMatch && ['GET', 'POST'].includes(request.method)) {
     const staff = await requireStaff(request);
     const code = pickupMatch[1].toUpperCase();
     try {
       let result;
       if (request.method === 'GET' && !pickupMatch[2]) result = await pickupInfo(code);
+      else if (request.method === 'GET' && pickupMatch[2] === 'history') result = await emailHistory(code, requestUrl.searchParams);
       else if (request.method === 'POST' && pickupMatch[2] === 'preview') result = await previewPickup(code, await readJson(request), staff.id);
       else if (request.method === 'POST' && pickupMatch[2] === 'confirm') {
         const body = await readJson(request);
