@@ -2768,3 +2768,16 @@ input[aria-invalid="true"] { border-color: #b83b3b; }
 .email-history-empty { padding: 24px 10px; color: #61728a; font-size: 14px; line-height: 1.6; }
 @media (max-width: 900px) { .orders-selected-header:has(> .orders-email-actions) { grid-template-columns: 76px minmax(0, 1fr); } .orders-email-actions { grid-column: 1 / -1; } }
 @media (max-width: 760px) { .email-history-layout { grid-template-columns: 1fr; } .email-history-filters { flex-wrap: wrap; } .email-history-filters label { flex-basis: 100%; } .email-history-filters select { flex: 1; min-width: 0; } .email-history-list { max-height: 320px; } }
+
+/* Large displays: keep page gutters proportional instead of capping the workspace. */
+@media screen and (min-width: 1280px) {
+  .container,
+  .campaign-shop-header-inner,
+  .campaign-builder,
+  .campaign-checkout,
+  .campaign-payment {
+    width: calc(100% - clamp(48px, 6vw, 192px));
+  }
+
+  .admin-content { width: 100%; }
+}
