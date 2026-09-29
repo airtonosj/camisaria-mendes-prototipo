@@ -3122,7 +3122,12 @@ function Reports({ data }: { data: PanelData }) {
     }
     setBusy(true);
     try {
-      await changeOrderDeliveryInApi(orderNumber, "delivered", "Entrega registrada no painel");
+      const updatedOrder = await changeOrderDeliveryInApi(orderNumber, "delivered", "Entrega registrada no painel");
+      // A confirmação já foi persistida: não depender de outra consulta para
+      // atualizar o checklist, inclusive todas as peças do mesmo pedido.
+      setLiveDelivery((rows) => rows.map((row) => row.orderNumber === orderNumber
+        ? { ...row, deliveryStatus: updatedOrder.deliveryStatus }
+        : row));
       setFeedback(`Entrega do pedido ${orderNumber} registrada.`);
       setLoadCount((value) => value + 1);
       reload();
