@@ -1,3 +1,5 @@
+> Alternativa VPS. Para a hospedagem principal, siga [Hostinger Node.js](deploy-hostinger-business.md).
+
 # Publicar na Hostinger
 
 Para o plano Business com **Node.js Web App gerenciado**, siga primeiro

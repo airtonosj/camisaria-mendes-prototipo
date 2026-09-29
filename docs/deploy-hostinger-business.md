@@ -83,3 +83,13 @@ O bootstrap nunca imprime a senha no log. Depois do primeiro acesso, remova
 `ADMIN_INITIAL_PASSWORD` do hPanel e redeploye. A conta persistida permanece no MySQL;
 em `APP_ENV=production`, a API recusa iniciar enquanto a variável existir ou alguma
 conta ativa ainda estiver marcada para troca obrigatória.
+
+## Migrações e versão da release
+
+`npm start` e `api/start.mjs` permanecem os pontos de entrada. `MIGRATIONS_ON_START=true` é o padrão compatível com a hospedagem gerenciada. O modo recomendado, quando existe etapa operacional anterior à ativação, é executar `npm run db:migrate` e então iniciar com `MIGRATIONS_ON_START=false`. Nesse modo o processo recusa schema pendente antes de abrir a porta.
+
+`MIGRATION_DB_USER` e `MIGRATION_DB_PASSWORD` são opcionais, mas devem ser informadas juntas. Só o processo de migração usa esse par; a aplicação continua com `DB_USER` e `DB_PASSWORD`. As migrações históricas conservam seus identificadores. DDL do MySQL não oferece rollback transacional geral: use backup e teste de retomada.
+
+O build gera `dist/version.json` com commit, indicação de alterações locais e horário, sem segredos. `/api/health` inclui essa identificação. Compare o retorno com o artefato aprovado; um push não comprova publicação.
+
+Antes de cada ativação, registre artefato anterior, backup de banco e uploads e resultados de validação isolada. Use `ops:backup` e `ops:restore:test` conforme o runbook; a restauração exige banco novo terminado em `_restore_test` e diretório independente. Na recuperação, prefira reativar código anterior compatível. Restauração de dados de produção exige autorização e avaliação de pedidos recebidos depois do backup.

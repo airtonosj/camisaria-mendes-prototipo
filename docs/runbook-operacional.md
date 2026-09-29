@@ -1,6 +1,6 @@
-# Runbook operacional
+# Runbook operacional — alternativa VPS
 
-Este é o procedimento curto para publicar, observar e recuperar a Camisaria Mendes. Ele
+O procedimento principal está em [Hostinger](deploy-hostinger-business.md). Este é o procedimento alternativo para publicar, observar e recuperar a Camisaria Mendes. Ele
 assume Linux, Nginx, systemd, MySQL 8 e releases em `/var/www/camisaria/releases`.
 
 ## Estrutura persistente
