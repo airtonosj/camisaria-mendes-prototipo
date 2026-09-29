@@ -1,11 +1,7 @@
+import { startWorker } from './runtime/worker.mjs';
 import { config } from "./config.mjs";
 import { pool, withTransaction } from "./database.mjs";
-import {
-  checkInfinitePayPayment,
-  createInfinitePayLink,
-  InfinitePayRequestError,
-  normalizeInfinitePayEvent,
-} from "./infinitepay.mjs";
+import { checkInfinitePayPayment, createInfinitePayLink, InfinitePayRequestError, normalizeInfinitePayEvent } from "./infinitepay.mjs";
 import { whatsappLookupValues } from "./phone.mjs";
 
 const provider = "infinitepay";
@@ -409,28 +405,13 @@ export async function processInfinitePayEvents({ limit = 10 } = {}) {
         );
       }
       result.failed += 1;
-      console.error(`Falha ao reconciliar evento InfinitePay ${candidate.id}:`, error);
+      console.error(`Falha ao reconciliar evento InfinitePay ${candidate.id}:`, { code: error.code ?? "WORKER_ERROR" });
     }
   }
   return result;
 }
 
 export function startInfinitePayReconciliationWorker() {
-  if (config.payments.provider !== provider || !config.payments.infinitePay.checkoutEnabled) return () => {};
-  let running = false;
-  const run = async () => {
-    if (running) return;
-    running = true;
-    try {
-      await processInfinitePayEvents();
-    } catch (error) {
-      console.error("Falha ao processar a fila InfinitePay:", error);
-    } finally {
-      running = false;
-    }
-  };
-  void run();
-  const timer = setInterval(run, config.payments.infinitePay.reconciliationIntervalMs);
-  timer.unref();
-  return () => clearInterval(timer);
+ if(!(config.payments.provider === provider && config.payments.infinitePay.checkoutEnabled))return async()=>{};
+ return startWorker(async()=>{await processInfinitePayEvents();},config.payments.infinitePay.reconciliationIntervalMs,error=>console.error('Worker falhou:',{code:error.code??'WORKER_ERROR'}));
 }

@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 
 export const projectDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-function readEnvFile() {
-  const envPath = path.join(projectDirectory, ".env");
+function readEnvFile(filename = ".env") {
+  const envPath = path.join(projectDirectory, filename);
   if (!fs.existsSync(envPath)) return {};
   const values = {};
   for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
@@ -23,7 +23,7 @@ function readEnvFile() {
 
 export function testEnvironment() {
   const fromFile = readEnvFile();
-  const base = { ...fromFile, ...process.env };
+  const base = { ...fromFile, ...readEnvFile('.env.test.local'), ...process.env };
   const primaryDatabase = base.DB_NAME || "camisaria_mendes";
   const testDatabase = base.TEST_DB_NAME || `${primaryDatabase}_test`;
   if (!/^[A-Za-z0-9_]+_test$/.test(testDatabase)) {
@@ -32,9 +32,21 @@ export function testEnvironment() {
   if (testDatabase === primaryDatabase) {
     throw new Error("O banco de teste não pode ser o banco principal.");
   }
+  const host = base.TEST_DB_HOST || '127.0.0.1';
+  if (!['127.0.0.1', 'localhost', '::1'].includes(host)) throw new Error('Testes exigem MySQL local.');
+  if (!base.TEST_DB_USER || base.TEST_DB_PASSWORD === undefined) throw new Error('Configure TEST_DB_USER e TEST_DB_PASSWORD exclusivos de teste.');
   return {
     ...base,
     APP_ENV: "test",
+    PORT: '',
+    DB_HOST: host,
+    DB_PORT: base.TEST_DB_PORT || '3306',
+    DB_USER: base.TEST_DB_USER,
+    DB_PASSWORD: base.TEST_DB_PASSWORD,
+    MIGRATION_DB_USER: '',
+    MIGRATION_DB_PASSWORD: '',
+    LICENSE_CONTROL_ENABLED: 'false',
+    ADMIN_INITIAL_PASSWORD: '',
     API_HOST: "127.0.0.1",
     API_PORT: base.TEST_API_PORT || "3334",
     TRUST_PROXY: "true",

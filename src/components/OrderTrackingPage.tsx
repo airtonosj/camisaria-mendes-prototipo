@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { ApiRequestError, assetUrl, createInfinitePayCheckout, requestInfinitePayReconciliation, trackOrderInApi } from "../api";
-import { buildRoute } from "../App";
+import { buildRoute } from '../navigation';
 import { shirtModels } from "../data";
 import type { CampaignArtMode, VariantArtwork } from "../data";
 import { Brand } from "./Brand";

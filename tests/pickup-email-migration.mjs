@@ -5,8 +5,8 @@ import { testEnvironment } from './test-environment.mjs';
 import { migratePickupEmail } from '../api/pickup-email-migration.mjs';
 
 const env = testEnvironment();
-const database = `pickup_recovery_${Date.now()}_test`;
-assert.match(database, /^pickup_recovery_\d+_test$/);
+const database = `${env.DB_NAME}_pickup_recovery_test`;
+assert.match(database, /^[A-Za-z0-9_]+_test$/);
 const connection = await mysql.createConnection({ host: env.DB_HOST || '127.0.0.1', port: Number(env.DB_PORT || 3306), user: env.DB_USER, password: env.DB_PASSWORD || '', multipleStatements: true });
 const sql = await fs.readFile(new URL('../database/migrations/024_pickup_email.sql', import.meta.url), 'utf8');
 let created = false;

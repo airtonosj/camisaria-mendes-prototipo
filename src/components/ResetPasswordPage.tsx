@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { checkPasswordResetToken, confirmPasswordReset } from "../api";
-import { buildRoute } from "../App";
+import { buildRoute } from '../navigation';
 import { Brand } from "./Brand";
 
 const minimumPasswordLength = 8;
@@ -92,7 +92,7 @@ export function ResetPasswordPage({ token }: { token: string }) {
 
         <a className="staff-back" href="./"><span className="material-symbols-rounded" aria-hidden="true">arrow_back</span>Voltar ao site público</a>
       </section>
-      <aside className="staff-login-art"><img src={new URL("../../assets/shirt-oversized.png", import.meta.url).href} alt="Camisa oversized Camisaria Mendes" /><div><span>Área interna</span><strong>Campanhas.<br />Pedidos.<br />Produção.</strong></div></aside>
+      <aside className="staff-login-art"><img src={new URL("../../assets/shirt-oversized.webp", import.meta.url).href} alt="Camisa oversized Camisaria Mendes" /><div><span>Área interna</span><strong>Campanhas.<br />Pedidos.<br />Produção.</strong></div></aside>
     </main>
   );
 }

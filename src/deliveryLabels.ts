@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import logo from '../assets/logo-mendes.png';
+import logo from '../assets/logo-mendes.webp';
 import type { ApiDeliveryRow } from './api';
 
 export const deliveryLabelBrand = { instagram: '@camisariamendes', phone: '(98) 98778-0960' };

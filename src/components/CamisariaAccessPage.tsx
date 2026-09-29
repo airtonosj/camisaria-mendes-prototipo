@@ -1,6 +1,9 @@
 import { FormEvent, useState } from "react";
 import { ApiRequestError, loginStaff, requestPasswordReset, setStaffToken } from "../api";
-import { buildRoute, DEMO_STAFF_EMAIL, DEMO_STAFF_PASSWORD, STAFF_SESSION_KEY } from "../App";
+import { buildRoute } from '../navigation';
+import { DEMO_STAFF_EMAIL } from '../features/admin/session';
+import { DEMO_STAFF_PASSWORD } from '../features/admin/session';
+import { STAFF_SESSION_KEY } from '../features/admin/session';
 import { Brand } from "./Brand";
 
 export function CamisariaAccessPage() {
@@ -110,7 +113,7 @@ export function CamisariaAccessPage() {
         )}
         <a className="staff-back" href="./"><span className="material-symbols-rounded" aria-hidden="true">arrow_back</span>Voltar ao site público</a>
       </section>
-      <aside className="staff-login-art"><img src={new URL("../../assets/shirt-oversized.png", import.meta.url).href} alt="Camisa oversized Camisaria Mendes" /><div><span>Área interna</span><strong>Campanhas.<br />Pedidos.<br />Produção.</strong></div></aside>
+      <aside className="staff-login-art"><img src={new URL("../../assets/shirt-oversized.webp", import.meta.url).href} alt="Camisa oversized Camisaria Mendes" /><div><span>Área interna</span><strong>Campanhas.<br />Pedidos.<br />Produção.</strong></div></aside>
     </main>
   );
 }

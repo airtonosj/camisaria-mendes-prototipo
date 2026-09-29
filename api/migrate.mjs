@@ -5,6 +5,7 @@ import mysql from "mysql2/promise";
 import { config } from "./config.mjs";
 import { migratePickupEmail } from './pickup-email-migration.mjs';
 import { createHash } from 'node:crypto';
+import { migrationDatabase } from './migration-config.mjs';
 
 const apiDirectory = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDirectory = path.resolve(apiDirectory, "..", "database", "migrations");
@@ -18,11 +19,7 @@ if (files.length === 0) {
 }
 
 const connection = await mysql.createConnection({
-  host: config.database.host,
-  port: config.database.port,
-  user: config.database.user,
-  password: config.database.password,
-  database: config.database.database,
+  ...migrationDatabase(config.database),
   charset: "utf8mb4",
   timezone: "Z",
   multipleStatements: true,

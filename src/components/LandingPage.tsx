@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { buildRoute } from "../App";
+import { buildRoute } from '../navigation';
 import { heroShirts, showcaseCampaigns, whatsappCampaignUrl } from "../data";
 import { Brand } from "./Brand";
 import { Header } from "./Header";

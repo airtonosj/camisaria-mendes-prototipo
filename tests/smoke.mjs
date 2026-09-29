@@ -1,6 +1,8 @@
+import { runNode as runTestNode, startApi as startTestApi, waitForApi as waitForTestApi, stopApi } from './helpers/environment.mjs';
+import { fakeInfinitePay, startFakeInfinitePay } from './helpers/infinitepay.mjs';
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -17,21 +19,7 @@ environment.LICENSE_INSTALLATION_ID = "cliente-smoke-001";
 environment.LICENSE_PUBLIC_KEY_BASE64 = licensePublicKeyObject.export({ format: "der", type: "spki" }).toString("base64");
 const baseUrl = `http://${environment.API_HOST}:${environment.API_PORT}`;
 
-function runNode(script, args = []) {
-  const result = spawnSync(process.execPath, [script, ...args], {
-    cwd: projectDirectory,
-    env: environment,
-    encoding: "utf8",
-  });
-  if (result.status !== 0) {
-    throw new Error([
-      `Falha ao executar ${script}.`,
-      result.stdout?.trim(),
-      result.stderr?.trim(),
-    ].filter(Boolean).join("\n"));
-  }
-  return result.stdout;
-}
+const runNode = (script, args = []) => runTestNode(environment, script, args);
 
 function assertInvalidProductionIsRejected() {
   const result = spawnSync(process.execPath, ["api/server.mjs"], {
@@ -91,55 +79,6 @@ function assertAdminBootstrapHidesPassword() {
   });
   assert.equal(missing.status, 1, "O bootstrap aceitou senha inicial ausente.");
   assert.match(`${missing.stdout}\n${missing.stderr}`, /informada explicitamente/i);
-}
-
-const fakeInfinitePay = { links: [], checks: new Map(), checkRequests: [] };
-
-async function readRequestJson(request) {
-  const chunks = [];
-  for await (const chunk of request) chunks.push(chunk);
-  return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
-}
-
-async function startFakeInfinitePay() {
-  const server = http.createServer(async (request, response) => {
-    const body = await readRequestJson(request);
-    response.setHeader("Content-Type", "application/json");
-    if (request.method === "POST" && request.url === "/links") {
-      // O provedor real recusa telefone fora do formato internacional com
-      // 422 "not a valid phone number". O fake precisa recusar igual: foi a ausencia
-      // desta validacao que deixou passar um checkout enviando +DDD sem o codigo do pais.
-      if (!/^[+]55[0-9]{10,11}$/.test(String(body.customer?.phone_number ?? ""))) {
-        response.statusCode = 422;
-        response.end(JSON.stringify({
-          success: false,
-          message: "Invalid checkout link params",
-          errors: { customer: { phone_number: ["not a valid phone number"] } },
-        }));
-        return;
-      }
-      fakeInfinitePay.links.push(body);
-      response.end(JSON.stringify({
-        url: `https://checkout.infinitepay.io/smoke-infinitepay?lenc=${encodeURIComponent(body.order_nsu)}`,
-      }));
-      return;
-    }
-    if (request.method === "POST" && request.url === "/payment_check") {
-      fakeInfinitePay.checkRequests.push(body);
-      response.end(JSON.stringify(fakeInfinitePay.checks.get(body.transaction_nsu) ?? {
-        success: true,
-        paid: false,
-        amount: 0,
-      }));
-      return;
-    }
-    response.statusCode = 404;
-    response.end(JSON.stringify({ error: "not_found" }));
-  });
-  const port = Number.parseInt(new URL(environment.INFINITEPAY_API_BASE_URL).port, 10);
-  server.listen(port, "127.0.0.1");
-  await once(server, "listening");
-  return server;
 }
 
 async function deliverQueuedPaymentEmailForTest(orderNumber) {
@@ -364,19 +303,30 @@ async function forceFinalPaymentAttemptForTest(transactionNsu) {
     timezone: "Z",
   });
   try {
-    await connection.execute(
-      `UPDATE payment_events
-          SET attempts = 5, available_at = CURRENT_TIMESTAMP(3), locked_at = NULL
-        WHERE provider = 'infinitepay' AND provider_event_id = ?`,
-      [transactionNsu],
-    );
+    // Aguarde a primeira tentativa terminar. Alterar attempts enquanto o worker
+    // possui o evento faz o teste disputar com o contador capturado pelo worker.
+    const deadline = Date.now() + 12000;
+    while (Date.now() < deadline) {
+      const [updated] = await connection.execute(
+        `UPDATE payment_events
+            SET attempts = 5, available_at = CURRENT_TIMESTAMP(3)
+          WHERE provider = 'infinitepay' AND provider_event_id = ?
+            AND attempts > 0 AND locked_at IS NULL
+            AND available_at > CURRENT_TIMESTAMP(3)
+            AND processed_at IS NULL AND dead_lettered_at IS NULL`,
+        [transactionNsu],
+      );
+      if (updated.affectedRows === 1) return;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    throw new Error('A primeira tentativa de reconciliação não terminou antes de preparar a última.');
   } finally {
     await connection.end();
   }
 }
 
 async function waitForDeadLetterForTest(orderNumber, transactionNsu) {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
     const rows = await paymentEventsForTest(orderNumber);
     const event = rows.find((row) => row.provider_event_id === transactionNsu);
     if (event?.dead_lettered_at) return event;
@@ -457,19 +407,7 @@ const validMp4 = Buffer.concat([
   Buffer.from("isommp42", "ascii"),
 ]);
 
-async function waitForApi(child) {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    if (child.exitCode !== null) throw new Error("A API encerrou antes do smoke test.");
-    try {
-      const response = await fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(1000) });
-      if (response.ok) return response.json();
-    } catch {
-      // A API ainda está iniciando.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-  throw new Error("A API de teste não ficou pronta no prazo esperado.");
-}
+const waitForApi = child => waitForTestApi(child, baseUrl);
 
 async function waitForOrderStatus(orderNumber, whatsapp, expectedStatus) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -480,27 +418,7 @@ async function waitForOrderStatus(orderNumber, whatsapp, expectedStatus) {
   throw new Error(`Pedido ${orderNumber} não alcançou o status ${expectedStatus}.`);
 }
 
-function startApi() {
-  const child = spawn(process.execPath, ["api/server.mjs"], {
-    cwd: projectDirectory,
-    env: environment,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let output = "";
-  child.stdout.on("data", (chunk) => { output += chunk.toString(); });
-  child.stderr.on("data", (chunk) => { output += chunk.toString(); });
-  return { child, output: () => output };
-}
-
-async function stopApi(child) {
-  if (child.exitCode !== null) return;
-  child.kill("SIGTERM");
-  await Promise.race([
-    once(child, "exit"),
-    new Promise((resolve) => setTimeout(resolve, 3000)),
-  ]);
-  if (child.exitCode === null) child.kill("SIGKILL");
-}
+const startApi = () => startTestApi(environment);
 
 function step(name) {
   console.log(`✓ ${name}`);
@@ -516,7 +434,7 @@ step("banco recriado, migrado e sem dados do ambiente principal");
 assertAdminBootstrapHidesPassword();
 step("bootstrap exige senha explícita e nunca a imprime nos logs");
 
-const providerApi = await startFakeInfinitePay();
+const providerApi = await startFakeInfinitePay(environment);
 const api = startApi();
 try {
   const health = await waitForApi(api.child);
@@ -699,12 +617,15 @@ try {
     ...couponOrderBody,
     items: couponOrderBody.items.map((item, index) => ({ ...item, quantity: index === 0 ? 1 : 2 })),
   };
-  const discountedOrder = await request("/api/orders", {
+  const concurrentCouponOrders = await Promise.all([0, 1].map(() => fetch(baseUrl + "/api/orders", {
     method: "POST",
-    expected: 201,
-    headers: { "Idempotency-Key": randomUUID() },
-    body: qualifyingCouponOrderBody,
-  });
+    headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+    body: JSON.stringify(qualifyingCouponOrderBody),
+    signal: AbortSignal.timeout(5000),
+  })));
+  assert.deepEqual(concurrentCouponOrders.map(response => response.status).sort(), [201, 409], "O último uso do cupom só pode ser consumido por um pedido concorrente.");
+  const discountedOrder = await concurrentCouponOrders.find(response => response.status === 201).json();
+  assert.equal((await concurrentCouponOrders.find(response => response.status === 409).json()).error.code, "COUPON_EXHAUSTED");
   assert.equal(discountedOrder.order.totalCents, 15970);
   const trackedDiscountedOrder = await request(`/api/orders/${discountedOrder.order.number}?whatsapp=5598999992070`);
   assert.equal(trackedDiscountedOrder.order.subtotalCents, 19970);

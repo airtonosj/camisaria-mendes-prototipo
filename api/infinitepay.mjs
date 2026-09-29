@@ -16,6 +16,7 @@ export class InfinitePayRequestError extends Error {
 
 function boundedText(value, field, maximum = 190) {
   const text = typeof value === "string" ? value.trim() : "";
+  // eslint-disable-next-line no-control-regex -- reject control characters in provider input
   if (!text || text.length > maximum || /[\u0000-\u001f\u007f]/.test(text)) {
     throw new InfinitePayRequestError("INVALID_PROVIDER_PAYLOAD", `Campo ${field} inválido.`);
   }

@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { testEnvironment } from './test-environment.mjs';
 
-Object.assign(process.env, testEnvironment());
+const environment = testEnvironment();
+const { prepareDatabase } = await import('./helpers/environment.mjs');
+await prepareDatabase(environment);
+Object.assign(process.env, environment);
 const { pool } = await import('../api/database.mjs');
 const { emailHistory } = await import('../api/email-history.mjs');
 const { config } = await import('../api/config.mjs');

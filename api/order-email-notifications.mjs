@@ -1,3 +1,4 @@
+import { startWorker } from './runtime/worker.mjs';
 import { config } from "./config.mjs";
 import { pool } from "./database.mjs";
 import { mailerConfigured, sendMail } from "./mailer.mjs";
@@ -120,29 +121,13 @@ export async function processPaymentConfirmationEmails({ database = pool, send =
         [message, candidate.id],
       );
       result.failed += 1;
-      console.error(`Falha ao enviar confirmação de pagamento da notificação ${candidate.id}:`, error);
+      console.error(`Falha ao enviar confirmação de pagamento da notificação ${candidate.id}:`, { code: error.code ?? "WORKER_ERROR" });
     }
   }
   return result;
 }
 
 export function startOrderEmailNotificationWorker() {
-  if (!mailerConfigured()) return () => {};
-  let running = false;
-  const run = async () => {
-    if (running) return;
-    running = true;
-    try {
-      await processPaymentConfirmationEmails();
-      await processPickupEmails();
-    } catch (error) {
-      console.error("Falha ao processar a fila de e-mails de pedidos:", error);
-    } finally {
-      running = false;
-    }
-  };
-  void run();
-  const timer = setInterval(run, config.smtp.deliveryIntervalMs);
-  timer.unref();
-  return () => clearInterval(timer);
+ if(!(mailerConfigured()))return async()=>{};
+ return startWorker(async()=>{await processPaymentConfirmationEmails(); await processPickupEmails();},config.smtp.deliveryIntervalMs,error=>console.error('Worker falhou:',{code:error.code??'WORKER_ERROR'}));
 }

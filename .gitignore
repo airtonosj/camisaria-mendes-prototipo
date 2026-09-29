@@ -6,6 +6,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 .env
+.env.test.local
+playwright-report/
+test-results/
 npm-debug.log*
 uploads/
 backups/

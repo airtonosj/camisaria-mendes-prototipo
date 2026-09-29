@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import {
-  createLicenseCommand,
-  LicenseTokenError,
-  parseLicensePublicKey,
-  verifyLicenseCommand,
-} from "../api/license-token.mjs";
+import { createLicenseCommand, LicenseTokenError, parseLicensePublicKey, verifyLicenseCommand } from "../api/license-token.mjs";
 
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 const privatePem = privateKey.export({ format: "pem", type: "pkcs8" });

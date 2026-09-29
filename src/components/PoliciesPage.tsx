@@ -1,4 +1,4 @@
-import { buildRoute } from "../App";
+import { buildRoute } from '../navigation';
 import { whatsappCampaignUrl } from "../data";
 import { Brand } from "./Brand";
 

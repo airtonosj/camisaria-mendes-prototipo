@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { buildRoute } from "../App";
+import { buildRoute } from '../navigation';
 import { Brand } from "./Brand";
 
 export function CampaignAccessPage({ invalidCampaignCode }: { invalidCampaignCode?: string }) {

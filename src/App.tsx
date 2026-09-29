@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { ApiRequestError, fetchCampaignFromApi } from "./api";
-import { AdminDashboard } from "./components/AdminDashboard";
-import { CamisariaAccessPage } from "./components/CamisariaAccessPage";
+const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(m => ({ default:m.AdminDashboard })));
+const CamisariaAccessPage = lazy(() => import('./components/CamisariaAccessPage').then(m => ({ default:m.CamisariaAccessPage })));
 import { CampaignAccessPage } from "./components/CampaignAccessPage";
 import { LandingPage } from "./components/LandingPage";
-import { OrderTrackingPage } from "./components/OrderTrackingPage";
+const OrderTrackingPage = lazy(() => import('./components/OrderTrackingPage').then(m => ({ default:m.OrderTrackingPage })));
 import { PoliciesPage } from "./components/PoliciesPage";
-import { PrivateCampaignPage } from "./components/PrivateCampaignPage";
-import { ResetPasswordPage } from "./components/ResetPasswordPage";
+const PrivateCampaignPage = lazy(() => import('./components/PrivateCampaignPage').then(m => ({ default:m.PrivateCampaignPage })));
+const ResetPasswordPage = lazy(() => import('./components/ResetPasswordPage').then(m => ({ default:m.ResetPasswordPage })));
 import { DEMO_CAMPAIGNS_STORAGE_KEY, privateCampaigns, privateCodeAliases } from "./data";
 import type { PrivateCampaign } from "./data";
 
@@ -21,9 +21,7 @@ import type { PrivateCampaign } from "./data";
  * empacotador apaga o ramo inteiro e as campanhas, os pedidos e as credenciais
  * fictícias não chegam ao arquivo publicado.
  */
-export const DEMO_STAFF_EMAIL = "admin@teste.com";
-export const DEMO_STAFF_PASSWORD = "123456";
-export const STAFF_SESSION_KEY = "camisaria-mendes-demo-session";
+import { STAFF_SESSION_KEY } from './features/admin/session';
 
 function normalizeCode(value: string | null) {
   return value?.trim().toUpperCase().replace(/\s+/g, "-") ?? "";
@@ -42,21 +40,9 @@ export function resolveCampaign(code: string | null) {
   return canonicalCode ? privateCampaigns[canonicalCode] : undefined;
 }
 
-export function buildRoute(route?: string, campaign?: string, order?: string, resume?: string, coupon?: string) {
-  const url = new URL("./", window.location.href);
-  url.search = "";
-  url.hash = "";
-  if (route) url.searchParams.set("rota", route);
-  if (campaign) url.searchParams.set("campanha", campaign);
-  if (order) url.searchParams.set("pedido", order);
-  if (resume) url.searchParams.set("retomar", resume);
-  if (coupon) url.searchParams.set("cupom", coupon);
-  return url.toString();
-}
-
 type CampaignLookup = "loading" | "ready" | "not_found" | "unavailable";
 
-export default function App() {
+function AppRoutes() {
   const params = new URLSearchParams(window.location.search);
   const campaignCode = params.get("campanha");
   const couponCode = params.get("cupom");
@@ -158,3 +144,5 @@ export default function App() {
 
   return <LandingPage />;
 }
+
+export default function App() { return <Suspense fallback={<main className="campaign-api-loading" aria-live="polite">Carregando...</main>}><AppRoutes /></Suspense>; }

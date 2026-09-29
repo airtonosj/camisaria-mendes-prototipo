@@ -27,7 +27,7 @@ export async function emailHistory(code, params = new URLSearchParams()) {
     JOIN orders o ON o.id = n.order_id WHERE o.campaign_id = ? GROUP BY n.status`, [campaign.id]);
   return { page, pages, total, summary: summary.map(r => ({ status: r.status, count: Number(r.count) })), items: rows.map(row => {
     const snapshot = typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot;
-    const { snapshot: ignored, ...item } = row;
+    const { snapshot: _ignored, ...item } = row;
     return { ...item, id: String(item.id), subject: snapshot?.subject || null, text: snapshot?.text || null };
   }) };
 }

@@ -1,17 +1,19 @@
-import campaignAdmin from "../assets/campaign-admin-v2.png";
-import campaignEngineering from "../assets/campaign-engineering-v2.png";
-import campaignLaw from "../assets/campaign-law.png";
-import campaignNursing from "../assets/campaign-nursing-v2.png";
-import logoMendes from "../assets/logo-mendes.png";
-import shirtBabyLook from "../assets/shirt-babylook.png";
-import shirtCommon from "../assets/shirt-common.png";
-import shirtCommonBack from "../assets/shirt-common-back.png";
-import shirtOversized from "../assets/shirt-oversized.png";
-import shirtOversizedBack from "../assets/shirt-oversized-back.png";
-import shirtStandardMockup from "../assets/mockups/standard-front-v1.png";
-import shirtStandardMockupBack from "../assets/mockups/standard-back-v1.png";
-import shirtOversizedMockup from "../assets/mockups/oversized-front-v1.png";
-import shirtOversizedMockupBack from "../assets/mockups/oversized-back-v1.png";
+import type { ArtworkTransform, VariantArtwork } from '../shared/artwork';
+export type { ArtworkTransform, ArtworkAsset, VariantArtwork } from '../shared/artwork';
+import campaignAdmin from "../assets/campaign-admin-v2.webp";
+import campaignEngineering from "../assets/campaign-engineering-v2.webp";
+import campaignLaw from "../assets/campaign-law.webp";
+import campaignNursing from "../assets/campaign-nursing-v2.webp";
+import logoMendes from "../assets/logo-mendes.webp";
+import shirtBabyLook from "../assets/shirt-babylook.webp";
+import shirtCommon from "../assets/shirt-common.webp";
+import shirtCommonBack from "../assets/shirt-common-back.webp";
+import shirtOversized from "../assets/shirt-oversized.webp";
+import shirtOversizedBack from "../assets/shirt-oversized-back.webp";
+import shirtStandardMockup from "../assets/mockups/standard-front-v1.webp";
+import shirtStandardMockupBack from "../assets/mockups/standard-back-v1.webp";
+import shirtOversizedMockup from "../assets/mockups/oversized-front-v1.webp";
+import shirtOversizedMockupBack from "../assets/mockups/oversized-back-v1.webp";
 
 export type ShowcaseCampaign = {
   course: string;
@@ -36,9 +38,7 @@ export type SizeCode = "PP" | "P" | "M" | "G" | "GG" | "EXGG" | "XG" | "PPB" | "
  * `legacy_mockup` preserva campanhas antigas que já enviaram a foto completa da peça.
  */
 export type CampaignArtMode = "overlay" | "variant_mockup" | "legacy_mockup";
-export type ArtworkTransform = { x: number; y: number; scale: number; rotation: number };
-export type ArtworkAsset = { url: string; transform: ArtworkTransform };
-export type VariantArtwork = { front: ArtworkAsset | null; back: ArtworkAsset | null };
+
 export type CampaignArt = {
   front: string;
   back: string | null;
