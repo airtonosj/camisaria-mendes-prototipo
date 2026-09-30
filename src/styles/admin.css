@@ -97,7 +97,7 @@
   .code-panel-grid, .editorial-heading, .about-editorial-grid, .representative-grid, .access-page-main { grid-template-columns: 1fr; }
   .code-panel-grid { gap: 25px; padding-block: 38px; }
   .editorial-heading { gap: 17px; }
-  .portfolio-grid { grid-template-columns: 1fr 1fr; }
+  .portfolio-grid { grid-template-columns: 1fr; }
   .portfolio-all { justify-self: start; }
   .process-grid { grid-template-columns: repeat(2, 1fr); }
   .process-heading { grid-column: 1 / -1; padding: 0 0 38px; }

@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { buildRoute } from '../navigation';
-import { heroShirts, showcaseCampaigns, whatsappCampaignUrl } from "../data";
+import { heroShirts, whatsappCampaignUrl } from "../data";
+import { portfolioCampaigns } from '../portfolio';
 import { Brand } from "./Brand";
 import { Header } from "./Header";
 
@@ -10,8 +11,6 @@ const steps = [
   ["03", "share", "Você compartilha o acesso", "Recebe um link, código ou QR Code para divulgar entre os colegas."],
   ["04", "checkroom", "Pedidos vão para produção e entrega", "Após o prazo, os pedidos seguem para produção e chegam na sua turma."],
 ];
-
-const portfolioCampaigns = [showcaseCampaigns[1], showcaseCampaigns[2], showcaseCampaigns[0], showcaseCampaigns[3]];
 
 export function LandingPage() {
   const [code, setCode] = useState("");
@@ -69,14 +68,13 @@ export function LandingPage() {
         <section className="portfolio-section" id="mostruario">
           <div className="container">
             <div className="editorial-heading">
-              <div><span className="kicker">Mostruário</span><h2>Campanhas que<br />já vestimos.</h2></div>
-              <a className="portfolio-all" href="#mostruario">Ver todas as campanhas<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></a>
+              <div><span className="kicker">Mostruário</span><h2>Campanhas com a<br />nossa assinatura.</h2></div>
             </div>
             <div className="portfolio-grid">
               {portfolioCampaigns.map((campaign) => (
-                <article className="portfolio-item" key={campaign.course}>
-                  <div className="portfolio-image"><img src={campaign.image} alt={`Projeto concluído de ${campaign.course}`} /></div>
-                  <div className="portfolio-title"><div><h3>{campaign.course}</h3><small>{campaign.group} <i>•</i> {campaign.year}</small></div></div>
+                <article className="portfolio-item" key={campaign.title}>
+                  <div className="portfolio-image"><img src={campaign.image} alt={campaign.alt} width={1024} height={1024} loading="lazy" decoding="async" /></div>
+                  <div className="portfolio-title"><h3>{campaign.title}</h3><small>{campaign.subtitle}</small></div>
                 </article>
               ))}
             </div>
