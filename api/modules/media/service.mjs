@@ -6,6 +6,9 @@ import { pool } from "../../database.mjs";
 import { frontendDirectory, uploadsDirectory, uploadExtensions, uploadContentTypes, frontendContentTypes, maxUploadBytes, maxVideoUploadBytes, staleVideoPartAgeMs } from "../../runtime/constants.mjs";
 import { ApiError, readBinary } from "../../http/response.mjs";
 import { requireStaff } from "../../http/auth.mjs";
+import { config } from "../../config.mjs";
+import { getCampaign } from "../campaigns/service.mjs";
+import { campaignPreviewHtml, campaignShareSource, renderShareImage } from "./campaign-preview.mjs";
 
 export async function listSizes() {
   const [rows] = await pool.execute(
@@ -171,6 +174,49 @@ export async function serveUpload(request, response, filename) {
   });
 }
 
+async function shareImage(source) {
+  // Uploads are immutable by name, so the rendered thumbnail can be cached per source file.
+  // It lives in .tmp because it is regenerable and must stay out of backups.
+  const cacheDirectory = path.join(uploadsDirectory, ".tmp", "share-preview");
+  const cacheFile = path.join(cacheDirectory, `${path.parse(source).name}.jpg`);
+  const cached = await fs.readFile(cacheFile).catch(() => null);
+  if (cached) return cached;
+  const input = await fs.readFile(path.join(uploadsDirectory, source)).catch(() => null);
+  if (!input) return null;
+  let image;
+  try {
+    image = await renderShareImage(input);
+  } catch {
+    return null;
+  }
+  await fs.mkdir(cacheDirectory, { recursive: true });
+  const partial = `${cacheFile}.${randomUUID()}.part`;
+  await fs.writeFile(partial, image);
+  await fs.rename(partial, cacheFile).catch(() => fs.unlink(partial).catch(() => {}));
+  return image;
+}
+
+export async function serveShareImage(request, response, encodedCode) {
+  let code;
+  try {
+    code = decodeURIComponent(encodedCode).trim().toUpperCase();
+  } catch {
+    code = "";
+  }
+  if (!code || code.length > 100) throw new ApiError(404, "FILE_NOT_FOUND", "Arquivo não encontrado.");
+  const source = campaignShareSource(await getCampaign(code), config.publicAppUrl);
+  const image = source ? await shareImage(source) : null;
+  if (!image) throw new ApiError(404, "FILE_NOT_FOUND", "Arquivo não encontrado.");
+  response.writeHead(200, {
+    "Content-Type": "image/jpeg",
+    "Content-Length": image.length,
+    // The page links a versioned URL; the unversioned one may change when the campaign photo changes.
+    "Cache-Control": "public, max-age=86400",
+    "X-Content-Type-Options": "nosniff",
+  });
+  response.end(request.method === "HEAD" ? undefined : image);
+}
+
 export async function serveFrontend(request, response, requestPath) {
   const relativePath = requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
   const requestedFile = path.resolve(frontendDirectory, relativePath);
@@ -196,6 +242,9 @@ export async function serveFrontend(request, response, requestPath) {
   }
 
   const extension = path.extname(filePath).toLowerCase();
+  if (filePath === path.join(frontendDirectory, "index.html")) {
+    file = Buffer.from(await campaignPreviewHtml(file.toString("utf8"), request.url, config.publicAppUrl, getCampaign));
+  }
   const immutableAsset = relativeToFrontend.startsWith(`assets${path.sep}`);
   response.writeHead(200, {
     "Content-Type": frontendContentTypes.get(extension) || "application/octet-stream",

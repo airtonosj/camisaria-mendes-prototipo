@@ -18,7 +18,7 @@ import { getCampaign, getPublicCampaignCoupon, listCampaigns } from '../modules/
 import { createCampaign, updateCampaign, deleteCampaign, changeCampaignPhase } from '../modules/campaigns/http.mjs';
 import { trackOrder, listCampaignOrders } from '../modules/orders/service.mjs';
 import { createOrder, changeDeliveryStatus, cancelOrder, registerOrderRefund } from '../modules/orders/http.mjs';
-import { listSizes, uploadArtwork, uploadVideo, serveUpload, serveFrontend } from "../modules/media/service.mjs";
+import { listSizes, uploadArtwork, uploadVideo, serveUpload, serveShareImage, serveFrontend } from "../modules/media/service.mjs";
 import { productionReport, deliveryReport } from "../modules/reports/service.mjs";
 
 import { buildVersion } from '../runtime/version.mjs';
@@ -75,6 +75,11 @@ export async function route(request, response) {
   const uploadMatch = path.match(/^\/uploads\/([^/]+)$/);
   if ((request.method === "GET" || request.method === "HEAD") && uploadMatch) {
     await serveUpload(request, response, uploadMatch[1]);
+    return;
+  }
+  const shareImageMatch = path.match(/^\/compartilhar\/([^/]+)\.jpg$/);
+  if ((request.method === "GET" || request.method === "HEAD") && shareImageMatch) {
+    await serveShareImage(request, response, shareImageMatch[1]);
     return;
   }
   if (request.method === "GET" && path === "/api/settings") {

@@ -38,6 +38,14 @@ Após os commits locais autorizados, o próximo passo é push especificamente au
 Revisão por módulos e divisão proposta registradas em [revisão para commit](revisao-para-commit.md). O manifesto inclui os arquivos novos e hashes do conteúdo local. Índice preservado; commits e push ainda dependem de autorização específica.
 
 
+## Prévia do link da campanha (30/09/2026)
+
+- O HTML servido para `/?campanha=<código>` recebe `og:*` e `twitter:card` antes do React, para o WhatsApp exibir título, descrição e foto.
+- `og:image` aponta para `/compartilhar/<código>.jpg?v=<início do arquivo>`: JPEG 1200×630 opaco (fundo branco), gerado pelo `sharp` a partir da primeira foto real ou, na falta dela, da arte frontal. Só aceita arquivos de `/uploads` deste servidor.
+- Cache regenerável em `UPLOADS_DIR/.tmp/share-preview`, fora do backup. Trocar a foto muda o `v` e força o WhatsApp a buscar a nova.
+- `sharp` passou de devDependency para dependency. Campanha inexistente ou banco indisponível mantêm o HTML original.
+- Testes: `tests/unit/campaign-preview.test.mjs` e `tests/e2e/campaign-preview.spec.mjs`.
+
 ## Registro dos commits autorizados
 
 Implementação: `35be302`. Documentação e evidências acompanham o commit seguinte. A verificação dos arquivos novos preparados apontou espaços finais e linhas vazias extras em sete arquivos; corrigidos sem alteração de comportamento. Os resultados funcionais anteriores permanecem registrados acima. Nenhum push ou deploy foi executado.

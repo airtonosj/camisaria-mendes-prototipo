@@ -104,6 +104,10 @@ npm ci
 DB_USER=camisaria_migrator DB_PASSWORD='outra-senha-longa' npm run db:migrate
 ```
 
+`npm ci` precisa instalar o `sharp` (dependência de produção com binário nativo): ele gera a
+miniatura `/compartilhar/<código>.jpg` usada pelo WhatsApp. Sem ele o site funciona, mas o link
+da campanha fica sem foto. Confira com `node -e "import('sharp').then(()=>console.log('ok'))"`.
+
 `npm run db:seed` carrega campanhas fictícias e o usuário `admin@teste.com`. Ele **recusa
 rodar com `APP_ENV=production`** e não deve ser usado no servidor publicado.
 
