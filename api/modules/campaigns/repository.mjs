@@ -110,8 +110,8 @@ export function listCampaignsQuery1(executor, values) {
             COUNT(DISTINCT o.id) AS order_count,
             COALESCE(SUM(CASE WHEN o.payment_status = 'paid' THEN o.total_cents ELSE 0 END), 0) AS paid_total_cents,
             NOT EXISTS (SELECT 1 FROM orders order_history WHERE order_history.campaign_id = c.id) AS can_delete,
-            c.receiver_id, ANY_VALUE(pr.name) AS receiver_name,
-            ANY_VALUE(pr.infinitepay_handle) AS receiver_handle, ANY_VALUE(pr.active) AS receiver_active
+            c.receiver_id, MAX(pr.name) AS receiver_name,
+            MAX(pr.infinitepay_handle) AS receiver_handle, MAX(pr.active) AS receiver_active
        FROM campaigns c
        LEFT JOIN payment_receivers pr ON pr.id = c.receiver_id
        LEFT JOIN orders o ON o.campaign_id = c.id AND o.status = 'active'

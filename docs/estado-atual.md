@@ -74,3 +74,12 @@ Implementação: `35be302`. Documentação e evidências acompanham o commit seg
 - A primeira execução das 18 jornadas passou nos casos, mas não encerrou no sandbox Windows. Foi interrompida após os testes; a repetição usa permissão para encerrar os próprios processos do Playwright, preservando processos alheios.
 - Repetição completa após o ajuste visual: `npm.cmd run test:e2e`, 18 jornadas aprovadas e encerramento normal. Build, lint e `git diff --check` também aprovados após as alterações.
 - Sem commit, push, deploy, compra ou envio real. Produção e contas reais InfinitePay permanecem não verificadas.
+
+## Falha de carregamento do painel (02/10/2026)
+
+- Em produção, login e schema 025 funcionavam, mas `GET /api/admin/campaigns` retornava 500 na versão `e261f145b41ba07a819031156d17476cad765739`.
+- Diagnóstico somente leitura autorizado no phpMyAdmin: servidor `11.8.9-MariaDB-log`; `SELECT ANY_VALUE(1)` falha com erro 1305 (função inexistente), enquanto `SELECT MAX(1)` funciona.
+- A consulta de campanhas usa agora `MAX` nos três campos do recebedor. O JOIN vincula um único recebedor pela chave primária; a repetição por pedido não muda os valores. Contagens, totais, IDs, contratos e schema permanecem preservados.
+- Regressão em `tests/receivers.mjs`: listagem com recebedor e três pedidos (dois pagos), nome/handle/estado corretos, contagem e total sem duplicação; campanha sem recebedor mantém `null` e seus totais.
+- `npm.cmd run check:release` aprovado: tipos, lint, 27 testes unitários, sete integrações, build e 18 jornadas desktop/celular, com encerramento normal. Banco local `_test`, credenciais `TEST_DB_*` e provedores falsos.
+- Backup manual de arquivos e banco concluído na Hostinger, registrado em 02/10/2026 às 10:34 (America/Fortaleza). Publicação da correção autorizada pelo usuário; verificar o commit publicado em `/api/health` e o painel autenticado após a ativação.

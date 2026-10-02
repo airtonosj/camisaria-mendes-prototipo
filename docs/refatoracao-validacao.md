@@ -69,3 +69,9 @@ Referências de implementação: [Playwright webServer](https://playwright.dev/d
 
 
 Fechamento de 29/09/2026: tipos, lint, 20 testes unitários, cinco integrações, build e 14 jornadas aprovados. O teste de collation recebeu preparação independente e passou também isoladamente. Referência completa do artefato em [estado atual](estado-atual.md).
+
+## Correção da listagem do painel em 02/10/2026
+
+`npm.cmd run check:release` passou com tipos, lint, 27 testes unitários, sete integrações, build e 18 jornadas desktop/celular. A regressão da listagem confere os dados do recebedor e totais de campanhas com múltiplos pedidos e sem recebedor. Execução local em MySQL 8.0.46 e Node 24.18.0, sem banco nem provedor de produção.
+
+Diagnóstico somente leitura autorizado no servidor de produção MariaDB 11.8.9 reproduziu o erro 1305 de `ANY_VALUE` e confirmou o funcionamento de `MAX(1)`. A substituição das três agregações evita essa função indisponível. Backup Hostinger de arquivos e banco concluído em 02/10/2026 às 10:34; versão anterior `e261f145b41ba07a819031156d17476cad765739`, schema 025. A verificação do painel após a publicação é uma etapa distinta das evidências locais.

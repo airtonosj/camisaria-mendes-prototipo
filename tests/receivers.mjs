@@ -156,6 +156,19 @@ try {
   const list = await receivers.listReceivers();
   assert.deepEqual(list.map((receiver) => [receiver.infinitepayHandle, receiver.active]), [['ana_nova', true], ['bruno_conta', false]]);
   assert.deepEqual(list[0].campaigns.map((campaign) => campaign.code), [`QA-REC-${suffix}`]);
+  // O JOIN repete o mesmo recebedor por pedido; a agregação preserva conta e totais.
+  await createOrder(withReceiver);
+  const panel = await campaigns.listCampaigns();
+  const receivedCampaign = panel.find((campaign) => campaign.code === `QA-REC-${suffix}`);
+  assert.equal(receivedCampaign.receiver.name, 'Ana Maria Recebedora');
+  assert.equal(receivedCampaign.receiver.infinitepayHandle, 'ana_nova');
+  assert.equal(receivedCampaign.receiver.active, true);
+  assert.equal(receivedCampaign.orderCount, 3);
+  assert.equal(receivedCampaign.paidTotalCents, 20000);
+  const defaultCampaign = panel.find((campaign) => campaign.code === `QA-PAD-${suffix}`);
+  assert.equal(defaultCampaign.receiver, null);
+  assert.equal(defaultCampaign.orderCount, 1);
+  assert.equal(defaultCampaign.paidTotalCents, 10000);
   console.log('Recebedores por campanha: cadastro, checkout, conferência e travas validados.');
 } finally {
   provider.close();
