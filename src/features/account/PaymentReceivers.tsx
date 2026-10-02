@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { createPaymentReceiver, fetchPaymentReceivers, updatePaymentReceiver } from "../../api";
 import type { ApiPaymentReceiver } from "../../api";
 import { normalizeInfinitePayHandle, validInfinitePayHandle } from "../../../shared/receiver.mjs";
@@ -26,6 +26,27 @@ export function PaymentReceivers() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [removing, setRemoving] = useState<ApiPaymentReceiver | null>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const modalOpen = draft !== null || removing !== null;
+  const activeCount = receivers.filter((receiver) => receiver.active).length;
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const element = dialog.current;
+    const overflow = document.body.style.overflow;
+    element?.showModal();
+    element?.querySelector<HTMLInputElement>("input")?.focus();
+    document.body.style.overflow = "hidden";
+    return () => { element?.close(); document.body.style.overflow = overflow; previous?.focus(); };
+  }, [modalOpen]);
+
+  function closeDialog() {
+    if (saving) return;
+    setRemoving(null);
+    edit(null);
+  }
 
   useEffect(() => {
     let active = true;
@@ -94,13 +115,17 @@ export function PaymentReceivers() {
   }
 
   async function toggle(receiver: ApiPaymentReceiver) {
+    setSaving(true);
     setError("");
     setFeedback("");
     try {
       replace(await updatePaymentReceiver(receiver.id, { active: !receiver.active }));
       setFeedback(receiver.active ? "Recebedor desativado. Campanhas já vinculadas continuam recebendo nesta conta." : "Recebedor reativado.");
+      setRemoving(null);
     } catch (toggleError) {
       setError(errorMessage(toggleError, "Não foi possível alterar o recebedor."));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -108,14 +133,12 @@ export function PaymentReceivers() {
     <section className="admin-account-card payment-receivers" aria-labelledby="payment-receivers-title">
       <header>
         <div>
-          <h3 id="payment-receivers-title">Recebedores de pagamento</h3>
-          <p>Contas InfinitePay que podem receber o dinheiro de uma campanha. Sem recebedor, a campanha usa a conta padrão da camisaria.</p>
+          <h3 id="payment-receivers-title">Recebedores de pagamento <span className="admin-account-role">{activeCount} {activeCount === 1 ? "ativo" : "ativos"}</span></h3>
+          <p>Contas InfinitePay para os pagamentos das campanhas.</p>
         </div>
-        {!draft && (
-          <button className="outline-action" type="button" onClick={() => edit({ ...emptyDraft })}>
-            Adicionar recebedor<span className="material-symbols-rounded" aria-hidden="true">add</span>
+          <button className="primary-action" type="button" onClick={() => edit({ ...emptyDraft })}>
+            <span className="material-symbols-rounded" aria-hidden="true">add</span>Novo recebedor
           </button>
-        )}
       </header>
 
       {loading ? (
@@ -143,12 +166,11 @@ export function PaymentReceivers() {
                   email: receiver.email ?? "",
                   phone: receiver.phone ? localWhatsapp(receiver.phone) : "",
                   handle: receiver.infinitepayHandle,
-                })} aria-label={`Editar ${receiver.name}`}>
-                  <span className="material-symbols-rounded" aria-hidden="true">edit</span>Editar
+                })} aria-label={`Editar ${receiver.name}`} title="Editar" disabled={saving}>
+                  <span className="material-symbols-rounded" aria-hidden="true">edit</span>
                 </button>
-                <button type="button" onClick={() => void toggle(receiver)} aria-label={`${receiver.active ? "Desativar" : "Reativar"} ${receiver.name}`}>
-                  <span className="material-symbols-rounded" aria-hidden="true">{receiver.active ? "block" : "restore"}</span>
-                  {receiver.active ? "Desativar" : "Reativar"}
+                <button type="button" className={receiver.active ? "receiver-remove" : ""} disabled={saving} onClick={() => { if (receiver.active) { setError(""); setFeedback(""); setRemoving(receiver); } else { void toggle(receiver); } }} aria-label={`${receiver.active ? "Remover" : "Reativar"} ${receiver.name}`} title={receiver.active ? "Remover" : "Reativar"}>
+                  <span className="material-symbols-rounded" aria-hidden="true">{receiver.active ? "delete" : "restore"}</span>
                 </button>
               </div>
             </li>
@@ -156,12 +178,20 @@ export function PaymentReceivers() {
         </ul>
       )}
 
+      <p className="payment-receivers-note">Sem recebedor selecionado, a campanha usa a conta padrão.</p>
+      {modalOpen && <dialog ref={dialog} className="pickup-dialog receiver-dialog" aria-labelledby="receiver-dialog-title" onCancel={(event) => { event.preventDefault(); closeDialog(); }}>
+        <header className="pickup-heading">
+          <span className="pickup-heading-icon"><span className="material-symbols-rounded" aria-hidden="true">{removing ? "delete" : "wallet"}</span></span>
+          <div><h2 id="receiver-dialog-title">{removing ? "Remover recebedor" : draft?.id === null ? "Novo recebedor" : "Editar recebedor"}</h2><p>{removing ? removing.name : "Cadastre a conta que receberá os pagamentos."}</p></div>
+          <button className="pickup-close" type="button" aria-label="Fechar" disabled={saving} onClick={closeDialog}><span className="material-symbols-rounded" aria-hidden="true">close</span></button>
+        </header>
       {draft && (
         <form onSubmit={save} aria-label={draft.id === null ? "Novo recebedor" : "Editar recebedor"}>
-          <label className="campaign-field"><span>Nome completo</span><input value={draft.name} onChange={(event) => change("name", event.target.value)} minLength={3} maxLength={160} required /></label>
+          <fieldset disabled={saving} className="receiver-dialog-fields">
+          <label className="campaign-field campaign-field--wide"><span>Nome completo</span><input value={draft.name} onChange={(event) => change("name", event.target.value)} minLength={3} maxLength={160} required /></label>
           <label className="campaign-field"><span>Telefone</span><input type="tel" value={draft.phone} onChange={(event) => change("phone", event.target.value)} inputMode="tel" placeholder="(00) 00000-0000" /></label>
           <label className="campaign-field"><span>E-mail</span><input type="email" value={draft.email} onChange={(event) => change("email", event.target.value)} placeholder="Opcional" /></label>
-          <label className="campaign-field">
+          <label className="campaign-field campaign-field--wide">
             <span>InfiniteTag (handle InfinitePay)</span>
             <span className="payment-receivers-tag">
               <span aria-hidden="true">$</span>
@@ -169,6 +199,7 @@ export function PaymentReceivers() {
             </span>
             <small id="payment-receivers-tag-help">Digite sem o $. Letras minúsculas, números, ponto, hífen e sublinhado.</small>
           </label>
+          </fieldset>
           {confirming && (
             <p className="payment-receivers-confirm" role="alert">
               <span className="material-symbols-rounded" aria-hidden="true">wallet</span>
@@ -176,18 +207,24 @@ export function PaymentReceivers() {
             </p>
           )}
           {error && <p className="campaign-form-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{error}</p>}
-          <div className="campaign-create-actions">
-            <button className="outline-action" type="button" onClick={() => edit(null)} disabled={saving}>Cancelar</button>
-            <button className="primary-action" type="submit" disabled={saving}>
+          <div className="pickup-footer">
+            <button className="pickup-secondary" type="button" onClick={closeDialog} disabled={saving}>Cancelar</button>
+            <button className="pickup-primary" type="submit" disabled={saving}>
               {saving ? "Salvando..." : confirming ? "Confirmar e salvar" : "Salvar recebedor"}
               <span className="material-symbols-rounded" aria-hidden="true">check</span>
             </button>
           </div>
         </form>
       )}
+      {removing && <div className="receiver-remove-confirm">
+        <p>O recebedor ficará desativado para novas campanhas. As campanhas vinculadas e o histórico serão preservados.</p>
+        {error && <p className="pickup-error" role="alert">{error}</p>}
+        <div className="pickup-footer"><button className="pickup-secondary" type="button" onClick={closeDialog} disabled={saving}>Cancelar</button><button className="pickup-primary" type="button" disabled={saving} onClick={() => void toggle(removing)}>{saving ? "Desativando..." : "Desativar recebedor"}</button></div>
+      </div>}
+      </dialog>}
 
-      {!draft && error && <p className="campaign-form-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{error}</p>}
-      {!draft && <p className="admin-account-feedback" role="status" aria-live="polite">{feedback}</p>}
+      {!modalOpen && error && <p className="campaign-form-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{error}</p>}
+      {!modalOpen && feedback && <p className="admin-account-feedback" role="status" aria-live="polite">{feedback}</p>}
     </section>
   );
 }

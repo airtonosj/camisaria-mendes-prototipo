@@ -78,7 +78,7 @@ export function Account({ user, onSaved }: { user: StaffUser | null; onSaved: (u
   return (
     <div className="admin-content admin-account-page">
       <div className="section-actions">
-        <div><span className="kicker">Acesso</span><h2>Conta da camisaria</h2><p>Troque o e-mail e a senha usados para entrar no painel e cadastre quem recebe o pagamento das campanhas.</p></div>
+        <div><span className="kicker">Configurações</span><h2>Conta e recebedores</h2><p>Gerencie seu acesso e as contas que recebem pelas campanhas.</p></div>
       </div>
 
       <section className="admin-account-card" aria-labelledby="account-form-title">

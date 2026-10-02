@@ -1778,6 +1778,38 @@ input[aria-invalid="true"] { border-color: #b83b3b; }
 @media (max-width: 560px) { .pickup-dialog { padding: 20px; max-height: calc(100dvh - 24px); border-radius: 20px; } .pickup-heading { gap: 12px; } .pickup-heading-icon { width: 46px; height: 46px; border-radius: 14px; } .pickup-heading h2 { font-size: 20px; } .pickup-heading p { font-size: 12px; } .pickup-footer > button { flex: 1; padding: 12px; } .pickup-message { padding: 16px; } }
 .pickup-dialog { scrollbar-width: thin; scrollbar-color: #c5cfda transparent; }
 .pickup-message p.pickup-message-gap { height: 12px; line-height: 12px; }
+
+/* Conta compacta: mantém a identidade do painel e os diálogos compartilhados. */
+.admin-account-page .section-actions { margin-bottom: 20px; }
+.admin-account-page .admin-account-card { padding: 20px; }
+.admin-account-page .admin-account-card > form { gap: 12px; margin-top: 16px; padding-top: 16px; }
+.admin-account-page .admin-account-card > form input { min-height: 44px; }
+.payment-receivers > header h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.payment-receivers > header .primary-action { flex-shrink: 0; min-height: 42px; }
+.payment-receivers-list { margin-top: 16px; }
+.payment-receivers-list li > div:first-child { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.payment-receivers-actions button { width: 38px; min-height: 38px; padding: 0; justify-content: center; }
+.payment-receivers-actions .receiver-remove { color: #a43d32; }
+.payment-receivers-note { margin: 14px 0 0; color: #747b7f; font-size: .72rem; line-height: 1.5; }
+.receiver-dialog form { display: block; border: 0; padding: 0; margin: 0; }
+.receiver-dialog-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-width: 0; border: 0; border-top: 1px solid #e4eaf0; padding: 18px 0 0; margin: 0; }
+.receiver-dialog .campaign-field { min-width: 0; color: #435773; }
+.receiver-dialog .campaign-field > span:first-child { font-size: 13px; }
+.receiver-dialog .campaign-field input { min-height: 46px; border: 1px solid #d8e1ed; border-radius: 11px; padding: 10px 12px; color: #253853; background: #f8fafc; font-size: 14px; }
+.receiver-dialog .payment-receivers-tag { min-height: 46px; border-color: #d8e1ed; border-radius: 11px; background: #f8fafc; overflow: hidden; }
+.receiver-dialog .payment-receivers-tag input { border: 0; border-radius: 0; background: transparent; }
+.receiver-dialog .payment-receivers-tag > span { background: transparent; }
+.receiver-dialog form small { font-size: 12px; }
+.receiver-dialog .payment-receivers-confirm { margin-top: 16px; border-radius: 11px; font-size: 13px; }
+.receiver-remove-confirm > p { color: #65738a; font-size: 14px; line-height: 1.6; }
+@media (max-width: 720px) {
+  .admin-account-page .admin-account-card { padding: 16px; }
+  .payment-receivers-list li { flex-direction: row; align-items: flex-start; gap: 10px; }
+  .payment-receivers-actions button { flex: 0 0 44px; width: 44px; min-height: 44px; }
+  .payment-receivers > header .primary-action { width: 100%; }
+  .receiver-dialog-fields { grid-template-columns: 1fr; }
+  .receiver-dialog .campaign-field input { font-size: 16px; }
+}
 .pickup-message a { display: inline-flex; align-items: flex-start; gap: 8px; max-width: 100%; word-break: break-word; }
 .pickup-message a > span { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
 .pickup-footer { position: sticky; bottom: -30px; z-index: 1; padding-bottom: 20px; margin-bottom: -20px; background: #fff; }
