@@ -9,7 +9,7 @@ test('orders workspace keeps paid defaults, one campaign selector and historical
     number, customer: { name: 'Comprador QA', whatsapp: '5598999994321', email: 'qa@example.test' },
     status, cancellationReason: status === 'cancelled' ? 'Cancelamento QA' : null,
     paymentStatus, paymentMethod: paymentStatus === 'pending' ? null : 'pix', deliveryStatus: 'waiting_campaign',
-    totalCents: 9000, subtotalCents: 10000, discountCents: 1000, couponCode: number === 'QA-PAID' ? 'HISTORICO10' : null,
+    totalCents: 9000, subtotalCents: 10000, discountCents: 1000, couponCode: ['QA-PAID', 'QA-PENDING', 'QA-CANCELLED'].includes(number) ? 'HISTORICO10' : null,
     createdAt: '2026-10-02T12:00:00Z', items: [{ modelName: 'Comum', color: { name: 'Preto', hex: '#111315' },
       size: 'M', sizeGroup: 'standard', quantity: 2, unitPriceCents: 5000, unitDiscountCents: 500,
       discountedQuantity: 2, lineTotalCents: 9000 }],
@@ -32,6 +32,7 @@ test('orders workspace keeps paid defaults, one campaign selector and historical
   await expect(page.getByRole('heading', { name: 'Resumo de produção' })).toHaveCount(0);
   await expect(page.locator('.orders-campaign-summary')).toContainText('2 peças');
   await expect(page.locator('.orders-campaign-summary')).toContainText('1 pedidos pagos');
+  await expect(page.locator('.orders-campaign-summary')).toContainText('1 pedido pago com cupom');
   await expect(page.locator('.orders-campaign-summary')).not.toContainText('Não disponível');
   const header = page.locator('.campaign-orders-head');
   await expect(header).toContainText('Valor pago');

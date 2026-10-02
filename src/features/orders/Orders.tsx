@@ -45,6 +45,7 @@ export function Orders({ data }: { data: PanelData }) {
   const viewingOrder = campaignOrders.find((order) => order.number === viewingOrderNumber);
   const currentPhaseIndex = selected ? phaseOrder.indexOf(selected.phase) : 0;
   const paidOrders = campaignOrders.filter((order) => order.paymentStatus === "paid" && order.status !== "cancelled");
+  const paidCouponOrders = paidOrders.filter((order) => Boolean(order.couponCode?.trim())).length;
   const paidPieces = new Map<string, number>();
   for (const order of paidOrders) for (const item of panelOrderItems(order)) {
     paidPieces.set(item.model, (paidPieces.get(item.model) ?? 0) + item.quantity);
@@ -227,7 +228,7 @@ export function Orders({ data }: { data: PanelData }) {
           <div className="orders-campaign-summary" aria-label="Informações gerais da campanha">
             <article><span>Preços base</span>{selected.basePrices?.length ? selected.basePrices.map((price) => <strong key={price.modelName}>{price.modelName}: {formatCents(price.minPriceCents)}{price.maxPriceCents !== price.minPriceCents && " a " + formatCents(price.maxPriceCents)}</strong>) : <strong>Não disponível</strong>}</article>
             <article><span>Peças pagas</span><strong>{ordersLoaded ? pieceCount + " peças" : "Carregando…"}</strong><small>{ordersLoaded && [...paidPieces].map(([model, count]) => model + ": " + count).join(" · ")}</small></article>
-            <article><span>Pagamentos confirmados</span><strong>{formatCents(selected.paidTotalCents)}</strong><small>{ordersLoaded ? paidOrders.length + " pedidos pagos" : "Carregando pedidos…"}</small></article>
+            <article><span>Pagamentos confirmados</span><strong>{formatCents(selected.paidTotalCents)}</strong><small>{ordersLoaded ? paidOrders.length + " pedidos pagos" : "Carregando pedidos…"}</small><small>{ordersLoaded ? paidCouponOrders + (paidCouponOrders === 1 ? " pedido pago com cupom" : " pedidos pagos com cupom") : "Carregando cupons…"}</small></article>
             <article><span>Recebedor</span><strong>{selected.receiver?.name ?? "Conta padrão"}</strong>{selected.receiver && <small>{"$" + selected.receiver.infinitepayHandle}</small>}</article>
           </div>
           {emailHistoryOpen && <EmailHistoryDialog key={selected.code} code={selected.code} title={selected.title} onClose={() => setEmailHistoryOpen(false)} onOpenOrder={number => { setEmailHistoryOpen(false); setViewingOrderNumber(number); }} />}
