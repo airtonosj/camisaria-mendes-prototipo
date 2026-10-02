@@ -310,7 +310,7 @@ export function Orders({ data }: { data: PanelData }) {
                 </div>
               </section>
             )}
-            <div className="campaign-orders-scroll">
+            <div className="campaign-orders-scroll" role="region" aria-label="Lista de pedidos da campanha" tabIndex={0}>
               <div className="campaign-orders-head"><span>Pedido</span><span>Cliente</span><span>Telefone</span><span>Qtd.</span><span>Valor pago</span><span>Cupom</span><span>Pagamento</span><span>Ações</span></div>
               {filteredOrders.map((order) => (
                 <div className="campaign-orders-row" key={order.number}>

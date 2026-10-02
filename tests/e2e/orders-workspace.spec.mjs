@@ -15,8 +15,9 @@ test('orders workspace keeps paid defaults, one campaign selector and historical
       discountedQuantity: 2, lineTotalCents: 9000 }],
   });
   let partial = false;
+  let longList = false;
   await page.route('**/api/admin/campaigns/*/orders', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({
-    orders: [order('QA-PAID', 'paid'), order('QA-PENDING', 'pending'), order('QA-CANCELLED', 'paid', 'cancelled'),
+    orders: longList ? Array.from({ length: 35 }, (_, i) => ({ ...order('QA-HISTORY-' + i, 'paid'), createdAt: new Date(Date.UTC(2026, 9, 2, 12) - i * 86400000).toISOString() })) : [order('QA-PAID', 'paid'), order('QA-PENDING', 'pending'), order('QA-CANCELLED', 'paid', 'cancelled'),
       ...(partial ? [order('QA-PARTIAL', 'partially_refunded')] : [])],
   }) }));
   await page.goto('/acesso-camisaria/');
@@ -88,4 +89,20 @@ test('orders workspace keeps paid defaults, one campaign selector and historical
   await payment.selectOption('paid');
   await page.screenshot({ path: `qa-evidence/orders-compact/workspace-${testInfo.project.name}.png`, fullPage: true });
   expect(await page.locator('html').evaluate((element) => element.scrollWidth <= element.ownerDocument.defaultView.innerWidth)).toBe(true);
+  longList = true;
+  await page.reload();
+  await page.getByRole('button', { name: 'Pedidos', exact: true }).click();
+  await page.mouse.move(1000, 100);
+  await expect(page.locator('.campaign-orders-row')).toHaveCount(35);
+  const list = page.getByRole('region', { name: 'Lista de pedidos da campanha' });
+  expect(await list.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+  await list.focus();
+  await list.press('Control+End');
+  const oldest = page.locator('.campaign-orders-row').filter({ hasText: '#QA-HISTORY-34' }).getByRole('button').first();
+  await expect(oldest).toBeInViewport();
+  await expect.poll(() => list.evaluate(el => Math.abs(el.querySelector('.campaign-orders-head').getBoundingClientRect().top - el.getBoundingClientRect().top))).toBeLessThanOrEqual(2);
+  await oldest.click();
+  await expect(page.getByRole('dialog', { name: '#QA-HISTORY-34' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.screenshot({ path: `qa-evidence/orders-compact/history-${testInfo.project.name}.png`, fullPage: true });
 });

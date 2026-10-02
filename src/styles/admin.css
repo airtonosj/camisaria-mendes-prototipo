@@ -1908,3 +1908,8 @@ input[aria-invalid="true"] { border-color: #b83b3b; }
   .orders-picker-filters input, .orders-picker-filters select { font-size: 16px; }
   .admin-orders-workspace .order-row-action button { width: 44px; min-height: 44px; }
 }
+
+/* Rolagem independente dos pedidos, preservando acesso ao histórico. */
+.admin-orders-workspace .campaign-orders-scroll { max-height: 65dvh; overflow: auto; scrollbar-gutter: stable; }
+.admin-orders-workspace .campaign-orders-head { position: sticky; top: 0; z-index: 1; background: #fff; }
+.admin-orders-workspace .campaign-orders-scroll:focus-visible { outline: 2px solid #087fca; outline-offset: 2px; }
