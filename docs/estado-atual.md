@@ -91,3 +91,9 @@ Implementação: `35be302`. Documentação e evidências acompanham o commit seg
 - Detalhes de cobertura, resultados e limites em [revisão do carregamento](revisao-carregamento-painel.md). CI preparado para os dois bancos em máquinas separadas; ainda sem execução remota dessa configuração.
 - Novos ajustes permanecem locais. Não houve novo commit, push, deploy, compra nem envio real.
 - Gates finais MySQL 8.0.46 e MariaDB 11.8.9 aprovados sequencialmente: tipos, lint, 28 unitários, 8 integrações, build e 30 jornadas por banco, com encerramento normal. Capturas desktop/celular inspecionadas; MariaDB portátil encerrado.
+
+## Pedidos: organização compacta aprovada (02/10/2026)
+
+- Implementação e verificações em [pedidos compactos](pedidos-compactos.md): seletor único com pesquisa/fase, preços base e totais pagos no cabeçalho, tabela simplificada e detalhes preservados em popup.
+- Cupons e valores usam o histórico da compra. Reembolso parcial permanece no domínio e aparece no filtro apenas quando existente; ações usam ícones com nomes acessíveis.
+- Publicação autorizada pelo usuário em 02/10/2026. Sem migração nova; validações locais aprovadas. Capturas em `qa-evidence/orders-compact/`; confirmação da implantação será registrada após a ativação.

@@ -144,6 +144,15 @@ export function listCampaignsQuery2(executor, values) {
       ORDER BY cc.id DESC`, values);
 }
 
+/** Prices are grouped independently of orders to avoid multiplying totals. */
+export function listCampaignPrices(executor) {
+  return executor.execute(`SELECT cv.campaign_id, sm.name AS model_name,
+      MIN(cv.unit_price_cents) AS min_price_cents, MAX(cv.unit_price_cents) AS max_price_cents
+    FROM campaign_variants cv JOIN shirt_models sm ON sm.id = cv.shirt_model_id
+    WHERE cv.active = TRUE
+    GROUP BY cv.campaign_id, sm.name ORDER BY sm.name`);
+}
+
 /** Uses the caller's connection; the service owns the transaction.
  * @param {import('mysql2/promise').Pool | import('mysql2/promise').PoolConnection} executor
  * @param {unknown[]} values

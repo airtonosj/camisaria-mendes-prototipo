@@ -13,6 +13,8 @@ function adminCampaign(value) {
     && object(value.representative) && string(value.representative.name) && nullableString(value.representative.whatsapp)
     && nullableString(value.artFrontUrl) && nullableString(value.artBackUrl)
     && money(value.orderCount) && money(value.paidTotalCents) && typeof value.canDelete === 'boolean'
+    && (value.basePrices === undefined || (Array.isArray(value.basePrices) && value.basePrices.every(price =>
+      object(price) && string(price.modelName) && money(price.minPriceCents) && money(price.maxPriceCents) && price.maxPriceCents >= price.minPriceCents)))
     && (receiver == null || (object(receiver) && Number.isSafeInteger(receiver.id) && receiver.id > 0
       && string(receiver.name) && string(receiver.infinitepayHandle) && typeof receiver.active === 'boolean'))
     && (value.activeCoupon == null || coupon(value.activeCoupon))

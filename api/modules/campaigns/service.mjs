@@ -224,6 +224,14 @@ export async function getPublicCampaignCoupon(campaignCode, rawCouponCode) {
 export async function listCampaigns() {
   const [rows] = await queries.listCampaignsQuery1(pool, []);
   const [couponRows] = await queries.listCampaignsQuery2(pool, []);
+  const [priceRows] = await queries.listCampaignPrices(pool);
+  const pricesByCampaign = new Map();
+  for (const price of priceRows) {
+    const id = Number(price.campaign_id);
+    const prices = pricesByCampaign.get(id) ?? [];
+    prices.push({ modelName: price.model_name, minPriceCents: Number(price.min_price_cents), maxPriceCents: Number(price.max_price_cents) });
+    pricesByCampaign.set(id, prices);
+  }
   const couponsByCampaign = new Map();
   const couponHistoryByCampaign = new Map();
   for (const row of couponRows) {
@@ -256,6 +264,7 @@ export async function listCampaigns() {
     artRenderMode: row.art_render_mode,
     orderCount: Number(row.order_count),
     paidTotalCents: Number(row.paid_total_cents),
+    basePrices: pricesByCampaign.get(Number(row.id)) ?? [],
     canDelete: Boolean(row.can_delete),
     activeCoupon: couponsByCampaign.get(Number(row.id)) ?? null,
     couponHistory: couponHistoryByCampaign.get(Number(row.id)) ?? [],

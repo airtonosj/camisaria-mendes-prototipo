@@ -190,6 +190,7 @@ export type CampaignCouponStats = {
 };
 
 export type ApiAdminCampaign = {
+  basePrices?: Array<{ modelName: string; minPriceCents: number; maxPriceCents: number }>;
   code: string;
   title: string;
   subtitle: string | null;

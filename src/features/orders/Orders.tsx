@@ -1,12 +1,11 @@
 import { EmailHistoryDialog } from "../../components/EmailHistoryDialog";
-import { CSSProperties, useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PickupEmailDialog } from "../../components/PickupEmailDialog";
 import { cancelOrderInApi, changeCampaignPhaseInApi, registerOrderRefundInApi } from "../../api";
 import { paymentMethodLabel } from "../../payment";
 import type { CampaignPhaseCode, PaymentStatusCode } from "../../api";
 import { phaseOrder, phaseMeta, paymentLabels, deliveryLabels, effectiveDelivery, panelOrderItems, formatCents, formatOrderDateTime, errorMessage } from "../admin/model";
 import type { PanelData } from "../admin/model";
-import { groupProduction, productionFromOrders, usedSizes } from "../reports/Reports";
 
 /* ------------------------------------------------------------------ */
 /* Pedidos por campanha                                                */
@@ -18,7 +17,11 @@ export function Orders({ data }: { data: PanelData }) {
   const { campaigns, orders, mode, loadOrders, reload } = data;
   const [selectedCode, setSelectedCode] = useState(campaigns[0]?.code ?? "");
   const [search, setSearch] = useState("");
-  const [paymentFilter, setPaymentFilter] = useState<"all" | PaymentStatusCode>("all");
+  const [paymentFilter, setPaymentFilter] = useState<"all" | PaymentStatusCode>("paid");
+  const [campaignSearch, setCampaignSearch] = useState("");
+  const [phaseFilter, setPhaseFilter] = useState<"all" | CampaignPhaseCode>("all");
+  const pickerRef = useRef<HTMLDialogElement>(null);
+  const pickerSearchRef = useRef<HTMLInputElement>(null);
   const [feedback, setFeedback] = useState("");
   const [confirmingReturn, setConfirmingReturn] = useState(false);
   const [returnReason, setReturnReason] = useState("");
@@ -41,16 +44,23 @@ export function Orders({ data }: { data: PanelData }) {
   const campaignOrders = selected ? orders[selected.code] ?? [] : [];
   const viewingOrder = campaignOrders.find((order) => order.number === viewingOrderNumber);
   const currentPhaseIndex = selected ? phaseOrder.indexOf(selected.phase) : 0;
-  const production = useMemo(
-    () => (selected ? groupProduction(productionFromOrders([selected], orders)) : []),
-    [selected, orders],
-  );
-  const productionColumns = usedSizes(production);
-  const pieceCount = production.reduce((total, group) => total + group.total, 0);
+  const paidOrders = campaignOrders.filter((order) => order.paymentStatus === "paid" && order.status !== "cancelled");
+  const paidPieces = new Map<string, number>();
+  for (const order of paidOrders) for (const item of panelOrderItems(order)) {
+    paidPieces.set(item.model, (paidPieces.get(item.model) ?? 0) + item.quantity);
+  }
+  const pieceCount = paidOrders.reduce((total, order) => total + order.quantity, 0);
+  const ordersLoaded = mode !== "live" || Boolean(selected && orders[selected.code]);
+  const filteredCampaigns = campaigns.filter((campaign) => {
+    const query = campaignSearch.trim().toLocaleLowerCase("pt-BR");
+    return (!query || `${campaign.title} ${campaign.code}`.toLocaleLowerCase("pt-BR").includes(query))
+      && (phaseFilter === "all" || campaign.phase === phaseFilter);
+  });
 
   const filteredOrders = campaignOrders.filter((order) => {
     const query = search.trim().toLocaleLowerCase("pt-BR");
-    const matchesSearch = !query || [order.number, order.customer, ...panelOrderItems(order).flatMap((item) => [item.model, item.color, item.size])].some((value) => String(value).toLocaleLowerCase("pt-BR").includes(query));
+    const matchesSearch = !query || [order.number, order.customer, order.whatsapp, ...panelOrderItems(order).flatMap((item) => [item.model, item.color, item.size])].some((value) => String(value).toLocaleLowerCase("pt-BR").includes(query))
+      || (query.replace(/\D/g, "").length >= 3 && order.whatsapp.replace(/\D/g, "").includes(query.replace(/\D/g, "")));
     const matchesPayment = paymentFilter === "all" || order.paymentStatus === paymentFilter;
     return matchesSearch && matchesPayment;
   });
@@ -60,7 +70,8 @@ export function Orders({ data }: { data: PanelData }) {
     setEmailHistoryOpen(false);
     setSelectedCode(code);
     setSearch("");
-    setPaymentFilter("all");
+    setPaymentFilter("paid");
+    pickerRef.current?.close();
     setFeedback("");
     setConfirmingReturn(false);
     setReturnReason("");
@@ -184,21 +195,25 @@ export function Orders({ data }: { data: PanelData }) {
   return (
     <div className="admin-content admin-orders-workspace">
       <section className="orders-flow-shell" aria-label="Pedidos organizados por campanha">
-        <aside className="orders-campaign-rail">
-          <header><span>Campanhas</span><small>{campaigns.length} no fluxo</small></header>
-          <div className="orders-campaign-list">
-            {campaigns.map((campaign) => (
-              <button className={campaign.code === selected.code ? "is-selected" : ""} type="button" onClick={() => selectCampaign(campaign.code)} key={campaign.code} aria-pressed={campaign.code === selected.code}>
-                <img src={campaign.artFront} alt="" />
-                <span className="orders-campaign-card-copy">
-                  <strong>{campaign.title}</strong>
-                  <em className={`campaign-flow-badge campaign-flow-badge--${phaseMeta[campaign.phase].tone}`}>{phaseMeta[campaign.phase].label}</em>
-                  <span><b>{campaign.orderCount}</b> pedidos <b>{formatCents(campaign.paidTotalCents)}</b> pagos</span>
-                </span>
-              </button>
-            ))}
-          </div>
+        <aside className="orders-campaign-rail orders-campaign-rail--compact">
+          <button className="orders-picker-launch" type="button" title="Selecionar campanha" aria-label="Selecionar campanha" onClick={() => { pickerRef.current?.showModal(); pickerSearchRef.current?.focus(); }}>
+            <span className="material-symbols-rounded" aria-hidden="true">search</span><span className="orders-picker-launch-copy">Trocar campanha</span>
+          </button>
         </aside>
+        <dialog className="orders-campaign-picker" ref={pickerRef} aria-labelledby="campaign-picker-title" onClick={(event) => { if (event.target === event.currentTarget) { const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) event.currentTarget.close(); } }}>
+          <header><h3 id="campaign-picker-title">Selecionar campanha</h3><button type="button" aria-label="Fechar seletor de campanhas" onClick={() => pickerRef.current?.close()}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
+          <div className="orders-picker-filters">
+            <label><span>Pesquisar campanha</span><input ref={pickerSearchRef} value={campaignSearch} onChange={(event) => setCampaignSearch(event.target.value)} placeholder="Nome ou código da campanha" /></label>
+            <label><span>Filtrar por fase</span><select value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value as "all" | CampaignPhaseCode)}><option value="all">Todas as fases</option>{phaseOrder.map((phase) => <option key={phase} value={phase}>{phaseMeta[phase].label}</option>)}</select></label>
+          </div>
+          <p className="orders-picker-count" role="status">{filteredCampaigns.length} de {campaigns.length} campanhas</p>
+          <div className="orders-campaign-list">
+            {filteredCampaigns.map((campaign) => <button className={campaign.code === selected.code ? "is-selected" : ""} type="button" onClick={() => selectCampaign(campaign.code)} key={campaign.code} aria-pressed={campaign.code === selected.code}>
+              <img src={campaign.artFront} alt="" /><span className="orders-campaign-card-copy"><strong>{campaign.title}</strong><em className={"campaign-flow-badge campaign-flow-badge--" + phaseMeta[campaign.phase].tone}>{phaseMeta[campaign.phase].label}</em><span>{campaign.code}</span></span>
+            </button>)}
+            {filteredCampaigns.length === 0 && <p className="orders-picker-empty">Nenhuma campanha encontrada com esses filtros.</p>}
+          </div>
+        </dialog>
 
         <div className="orders-campaign-detail">
           <header className="orders-selected-header">
@@ -209,6 +224,12 @@ export function Orders({ data }: { data: PanelData }) {
               {selected.phase === 'ready_for_delivery' && <button className="pickup-launch" type="button" title="Avisar compradores" aria-label="Avisar compradores" disabled={mode !== 'live'} onClick={() => setPickupOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">mail</span></button>}
             </div>
           </header>
+          <div className="orders-campaign-summary" aria-label="Informações gerais da campanha">
+            <article><span>Preços base</span>{selected.basePrices?.length ? selected.basePrices.map((price) => <strong key={price.modelName}>{price.modelName}: {formatCents(price.minPriceCents)}{price.maxPriceCents !== price.minPriceCents && " a " + formatCents(price.maxPriceCents)}</strong>) : <strong>Não disponível</strong>}</article>
+            <article><span>Peças pagas</span><strong>{ordersLoaded ? pieceCount + " peças" : "Carregando…"}</strong><small>{ordersLoaded && [...paidPieces].map(([model, count]) => model + ": " + count).join(" · ")}</small></article>
+            <article><span>Pagamentos confirmados</span><strong>{formatCents(selected.paidTotalCents)}</strong><small>{ordersLoaded ? paidOrders.length + " pedidos pagos" : "Carregando pedidos…"}</small></article>
+            <article><span>Recebedor</span><strong>{selected.receiver?.name ?? "Conta padrão"}</strong>{selected.receiver && <small>{"$" + selected.receiver.infinitepayHandle}</small>}</article>
+          </div>
           {emailHistoryOpen && <EmailHistoryDialog key={selected.code} code={selected.code} title={selected.title} onClose={() => setEmailHistoryOpen(false)} onOpenOrder={number => { setEmailHistoryOpen(false); setViewingOrderNumber(number); }} />}
           {pickupOpen && <PickupEmailDialog code={selected.code} title={selected.title} onClose={() => setPickupOpen(false)} onSent={message => { setFeedback(message); reload(); }} />}
 
@@ -247,32 +268,15 @@ export function Orders({ data }: { data: PanelData }) {
           </section>
           <p className="campaign-phase-feedback" role="status" aria-live="polite">{feedback}</p>
 
-          <section className="campaign-production-table" aria-labelledby="production-summary-title">
-            <header><div><h3 id="production-summary-title">Resumo de produção</h3><p>Somente peças de pedidos com pagamento confirmado.</p></div><strong>{pieceCount} {pieceCount === 1 ? "peça" : "peças"} no total</strong></header>
-            {production.length === 0 ? (
-              <p className="campaign-production-empty"><span className="material-symbols-rounded" aria-hidden="true">hourglass_empty</span>Nenhum pagamento confirmado nesta campanha ainda.</p>
-            ) : (
-              <div className="campaign-production-scroll" style={{ "--size-columns": productionColumns.length } as CSSProperties}>
-                <div className="campaign-production-head"><span>Corte e cor</span>{productionColumns.map((size) => <span key={size}>{size}</span>)}<span>Total</span></div>
-                {production.map((group) => (
-                  <div className="campaign-production-row" key={`${group.modelName}-${group.colorName}`}>
-                    <span><strong>{group.modelName}</strong><small>{group.colorName}</small></span>
-                    {productionColumns.map((size) => <span key={size}>{group.sizes[size] ?? 0}</span>)}<strong>{group.total}</strong>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
           <section className="campaign-orders-table" aria-labelledby="campaign-orders-title">
             <header>
-              <div><h3 id="campaign-orders-title">Pedidos da campanha</h3><p>{campaignOrders.length} {campaignOrders.length === 1 ? "linha registrada" : "linhas registradas"}</p></div>
+              <div><h3 id="campaign-orders-title">Pedidos da campanha</h3><p>{filteredOrders.length} pedidos exibidos de {campaignOrders.length}</p></div>
               <div className="campaign-order-filters">
-                <label><span className="sr-only">Buscar pedido ou cliente</span><span className="material-symbols-rounded" aria-hidden="true">search</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar pedido ou cliente" /></label>
+                <label><span className="sr-only">Pedido, cliente ou telefone</span><span className="material-symbols-rounded" aria-hidden="true">search</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pedido, cliente ou telefone" /></label>
                 <label><span className="sr-only">Filtrar por pagamento</span>
                   <select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value as "all" | PaymentStatusCode)}>
                     <option value="all">Todos</option>
-                    {(Object.keys(paymentLabels) as PaymentStatusCode[]).map((status) => <option value={status} key={status}>{paymentLabels[status]}</option>)}
+                    {(Object.keys(paymentLabels) as PaymentStatusCode[]).filter((status) => status !== "partially_refunded" || campaignOrders.some((order) => order.paymentStatus === status)).map((status) => <option value={status} key={status}>{paymentLabels[status]}</option>)}
                   </select>
                 </label>
               </div>
@@ -306,29 +310,25 @@ export function Orders({ data }: { data: PanelData }) {
               </section>
             )}
             <div className="campaign-orders-scroll">
-              <div className="campaign-orders-head"><span>Pedido</span><span>Cliente</span><span>Corte</span><span>Cor</span><span>Tam.</span><span>Qtd.</span><span>Pagamento</span><span>Entrega</span><span>Ação</span></div>
+              <div className="campaign-orders-head"><span>Pedido</span><span>Cliente</span><span>Telefone</span><span>Qtd.</span><span>Valor pago</span><span>Cupom</span><span>Pagamento</span><span>Ações</span></div>
               {filteredOrders.map((order) => (
                 <div className="campaign-orders-row" key={order.number}>
-                  <button className="campaign-order-number" type="button" title={`Ver detalhes do pedido ${order.number}${order.createdAt ? `, feito em ${formatOrderDateTime(order.createdAt)}` : ""}`} onClick={() => setViewingOrderNumber(order.number)}><strong>#{order.number}</strong><small className={order.status === "cancelled" ? "is-cancelled" : ""}>{order.status === "cancelled" ? "Cancelado" : "Ver detalhes"}{order.createdAt && ` · ${formatOrderDateTime(order.createdAt, true)}`}</small></button><span>{order.customer}</span><span>{panelOrderItems(order).length === 1 ? order.model : `${panelOrderItems(order).length} combinações`}</span>
-                  <span className="campaign-order-color">{panelOrderItems(order).length === 1 ? <><i style={{ backgroundColor: order.colorHex }} />{order.color}</> : <small className="campaign-order-items-summary">{panelOrderItems(order).map((item) => `${item.color} ${item.size}`).join(" · ")}</small>}</span>
-                  <span>{panelOrderItems(order).length === 1 ? order.size : "Vários"}</span><span>{order.quantity}</span>
+                  <button className="campaign-order-number" type="button" title={"Ver detalhes do pedido " + order.number} onClick={() => setViewingOrderNumber(order.number)}><strong>#{order.number}</strong><small className={order.status === "cancelled" ? "is-cancelled" : ""}>{order.status === "cancelled" ? "Cancelado" : "Ver detalhes"}{order.createdAt && " · " + formatOrderDateTime(order.createdAt, true)}</small></button>
+                  <span>{order.customer}</span><span>{order.whatsapp || "—"}</span><span>{order.quantity}</span>
+                  <span className="campaign-order-paid-value">{["paid", "refunded", "partially_refunded"].includes(order.paymentStatus) ? formatCents(order.totalCents) : "—"}{order.paymentStatus === "refunded" && <small>Estorno integral</small>}{order.paymentStatus === "partially_refunded" && <small>Estorno parcial</small>}</span>
+                  <span className="campaign-order-coupon">{order.couponCode ? <>Sim<small>{order.couponCode}</small></> : "Não"}</span>
                   <span className={`order-payment order-payment--${order.paymentStatus}`}>
                     <span><i />{paymentLabels[order.paymentStatus]}</span>
                     {order.paymentStatus !== "pending" && <small>{paymentMethodLabel(order.paymentMethod)}</small>}
                   </span>
-                  {order.status === "cancelled" ? (
-                    <span className="order-delivery order-delivery--cancelled" title={order.cancellationReason ?? undefined}><span className="material-symbols-rounded" aria-hidden="true">cancel</span>Cancelado</span>
-                  ) : (
-                    <span className="order-delivery"><span className="material-symbols-rounded" aria-hidden="true">schedule</span>{deliveryLabels[effectiveDelivery(order, selected.phase)]}</span>
-                  )}
                   <span className="order-row-action">
                     {order.status === "cancelled"
                       ? <small title={order.cancellationReason ?? undefined}>No histórico</small>
                       : order.paymentStatus === "paid"
-                        ? <button className="order-refund-action" type="button" disabled={busy} onClick={() => { setCancellingOrder(""); setRefundingOrder(order.number); setRefundReference(""); setRefundReason(""); setRefundReceipt(""); setFeedback(`Faça o estorno integral na InfinitePay e registre a referência do pedido ${order.number}.`); }}>Reembolsar</button>
+                        ? <button className="order-refund-action" type="button" title="Registrar reembolso" aria-label={`Registrar reembolso do pedido ${order.number}`} disabled={busy} onClick={() => { setCancellingOrder(""); setRefundingOrder(order.number); setRefundReference(""); setRefundReason(""); setRefundReceipt(""); setFeedback(`Faça o estorno integral na InfinitePay e registre a referência do pedido ${order.number}.`); }}><span className="material-symbols-rounded" aria-hidden="true">currency_exchange</span></button>
                         : order.paymentStatus === "partially_refunded"
                           ? <small>Atendimento manual</small>
-                          : <button type="button" disabled={busy} onClick={() => { setRefundingOrder(""); setCancellingOrder(order.number); setCancellationReason(""); setFeedback(`Informe o motivo para cancelar o pedido ${order.number}.`); }}>Cancelar</button>}
+                          : <button type="button" title="Cancelar pedido" aria-label={`Cancelar pedido ${order.number}`} disabled={busy} onClick={() => { setRefundingOrder(""); setCancellingOrder(order.number); setCancellationReason(""); setFeedback(`Informe o motivo para cancelar o pedido ${order.number}.`); }}><span className="material-symbols-rounded" aria-hidden="true">cancel</span></button>}
                   </span>
                 </div>
               ))}
@@ -345,8 +345,8 @@ export function Orders({ data }: { data: PanelData }) {
                   <div className="order-detail-summary">
                     <article><span>Cliente</span><strong>{viewingOrder.customer}</strong><small>{viewingOrder.whatsapp}</small>{viewingOrder.email && <small>{viewingOrder.email}</small>}</article>
                     <article><span>Pagamento</span><strong className={`order-payment order-payment--${viewingOrder.paymentStatus}`}><span><i />{paymentLabels[viewingOrder.paymentStatus]}</span></strong><small>{viewingOrder.paymentStatus === "pending" ? "Forma definida no checkout" : `Forma: ${paymentMethodLabel(viewingOrder.paymentMethod)}`}</small><small>{viewingOrder.status === "cancelled" ? "Pedido cancelado" : deliveryLabels[effectiveDelivery(viewingOrder, selected.phase)]}</small></article>
-                    <article><span>Resumo</span><strong>{viewingOrder.quantity} {viewingOrder.quantity === 1 ? "peça" : "peças"}</strong><small>{panelOrderItems(viewingOrder).length} {panelOrderItems(viewingOrder).length === 1 ? "combinação" : "combinações"}</small></article>
-                    <article><span>Total do pedido</span><strong>{formatCents(viewingOrder.totalCents)}</strong><small>Valor único da compra</small></article>
+                    <article><span>Resumo</span><strong>{viewingOrder.quantity} {viewingOrder.quantity === 1 ? "peça" : "peças"}</strong><small>{panelOrderItems(viewingOrder).length} {panelOrderItems(viewingOrder).length === 1 ? "combinação" : "combinações"}</small><small>Cupom: {viewingOrder.couponCode ?? "Não utilizado"}</small></article>
+                    <article><span>Total do pedido</span><strong>{formatCents(viewingOrder.totalCents)}</strong><small>Subtotal: {formatCents(viewingOrder.subtotalCents ?? viewingOrder.totalCents)}</small><small>Desconto: {formatCents(viewingOrder.discountCents ?? 0)}</small></article>
                   </div>
                   {viewingOrder.cancellationReason && <p className="order-detail-cancellation"><span className="material-symbols-rounded" aria-hidden="true">cancel</span><span><strong>Motivo do cancelamento</strong>{viewingOrder.cancellationReason}</span></p>}
                   <div className="order-detail-items">
@@ -358,7 +358,7 @@ export function Orders({ data }: { data: PanelData }) {
                         <span data-label="Tamanho"><strong>{item.size}</strong></span>
                         <span data-label="Quantidade">{item.quantity}</span>
                         <span data-label="Unitário">{formatCents(item.unitPriceCents)}</span>
-                        <span data-label="Subtotal"><strong>{formatCents(item.unitPriceCents * item.quantity)}</strong></span>
+                        <span data-label="Subtotal"><strong>{formatCents(item.lineTotalCents ?? item.unitPriceCents * item.quantity)}</strong></span>
                       </article>
                     ))}
                   </div>

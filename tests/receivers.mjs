@@ -165,6 +165,9 @@ try {
   assert.equal(receivedCampaign.receiver.active, true);
   assert.equal(receivedCampaign.orderCount, 3);
   assert.equal(receivedCampaign.paidTotalCents, 20000);
+  assert.ok(receivedCampaign.basePrices.length > 0);
+  assert.equal(receivedCampaign.basePrices[0].minPriceCents, 5000);
+  assert.equal(receivedCampaign.basePrices[0].maxPriceCents, 5000);
   const defaultCampaign = panel.find((campaign) => campaign.code === `QA-PAD-${suffix}`);
   assert.equal(defaultCampaign.receiver, null);
   assert.equal(defaultCampaign.orderCount, 1);

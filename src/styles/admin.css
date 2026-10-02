@@ -1865,3 +1865,46 @@ input[aria-invalid="true"] { border-color: #b83b3b; }
 
   .admin-content { width: 100%; }
 }
+
+/* Pedidos: seletor compacto e resumo da campanha, mantendo o painel existente. */
+.admin-orders-workspace .orders-flow-shell { grid-template-columns: 58px minmax(0, 1fr); }
+.orders-campaign-rail.orders-campaign-rail--compact { padding: 20px 7px; }
+.orders-picker-launch { width: 42px; min-height: 42px; display: flex; align-items: center; justify-content: center; border: 1px solid #dce1de; padding: 8px; cursor: pointer; color: #087fca; background: #fff; }
+.orders-picker-launch:hover, .orders-picker-launch:focus-visible { border-color: #0799e3; background: #eef9fe; }
+.orders-picker-launch-copy { display: none; }
+.orders-campaign-picker { width: min(430px, calc(100% - 28px)); max-height: calc(100dvh - 40px); overflow-y: auto; border: 1px solid #d7dcda; padding: 20px; color: #394044; background: #fff; box-shadow: 0 24px 70px rgb(13 22 27 / 28%); }
+.orders-campaign-picker::backdrop { background: rgb(7 12 16 / 58%); }
+.orders-campaign-picker > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e0e4e2; padding-bottom: 14px; }
+.orders-campaign-picker h3 { margin: 0; color: #171b1e; font-size: 1rem; letter-spacing: -.03em; }
+.orders-campaign-picker > header button { width: 36px; height: 36px; display: grid; place-content: center; border: 1px solid #d9dddb; padding: 0; cursor: pointer; color: #626b70; background: #fff; }
+.orders-picker-filters { display: grid; gap: 12px; margin-top: 16px; }
+.orders-picker-filters label { display: grid; gap: 6px; color: #737c80; font-size: .74rem; }
+.orders-picker-filters input, .orders-picker-filters select { width: 100%; min-height: 42px; border: 1px solid #d5dad7; border-radius: 0; padding: 8px 10px; color: #33393c; background: #fff; font: inherit; }
+.orders-picker-count, .orders-picker-empty { color: #747b7f; font-size: .74rem; line-height: 1.5; }
+.orders-picker-count { margin: 14px 0 10px; }
+.orders-campaign-picker .orders-campaign-list > button { grid-template-columns: 56px minmax(0, 1fr); }
+.orders-campaign-picker .orders-campaign-list > button > img { width: 56px; height: 56px; }
+.orders-campaign-picker .orders-campaign-card-copy > span { overflow-wrap: anywhere; }
+.orders-campaign-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin: 20px 0; border-block: 1px solid #dce1de; padding: 16px 0; }
+.orders-campaign-summary article { min-width: 0; display: grid; align-content: start; gap: 6px; }
+.orders-campaign-summary article > span { color: #747b7f; font-size: .72rem; }
+.orders-campaign-summary article > strong { color: #24292c; font-size: .8rem; overflow-wrap: anywhere; }
+.orders-campaign-summary article > small { color: #747b7f; font-size: .72rem; line-height: 1.5; overflow-wrap: anywhere; }
+.admin-orders-workspace .campaign-orders-head, .admin-orders-workspace .campaign-orders-row { min-width: 900px; grid-template-columns: 1.3fr 1.2fr 1fr .35fr .8fr .7fr .75fr .45fr; }
+.campaign-order-paid-value, .campaign-order-coupon { display: grid; gap: 4px; }
+.campaign-order-paid-value small, .campaign-order-coupon small { color: #747b7f; font-size: .68rem; overflow-wrap: anywhere; }
+.campaign-order-coupon:has(small) { color: #087fca; }
+.admin-orders-workspace .order-row-action button { width: 36px; min-height: 36px; display: inline-grid; place-content: center; padding: 6px; }
+.admin-orders-workspace .order-row-action button .material-symbols-rounded { font-size: 20px; }
+@media (max-width: 900px) {
+  .orders-campaign-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+}
+@media (max-width: 580px) {
+  .admin-orders-workspace .orders-flow-shell { display: block; }
+  .orders-campaign-rail.orders-campaign-rail--compact { border-right: 0; border-bottom: 1px solid #dce1de; padding: 14px; }
+  .orders-picker-launch { width: 100%; justify-content: flex-start; gap: 10px; padding: 10px 12px; }
+  .orders-picker-launch-copy { display: inline; font-size: .8rem; }
+  .orders-campaign-picker { padding: 18px 14px; }
+  .orders-picker-filters input, .orders-picker-filters select { font-size: 16px; }
+  .admin-orders-workspace .order-row-action button { width: 44px; min-height: 44px; }
+}

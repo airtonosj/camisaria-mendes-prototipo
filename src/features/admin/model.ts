@@ -55,6 +55,7 @@ export function effectiveDelivery(order: PanelOrder, phase: CampaignPhaseCode): 
 }
 
 export type PanelCampaign = {
+  basePrices?: Array<{ modelName: string; minPriceCents: number; maxPriceCents: number }>;
   code: string;
   title: string;
   subtitle?: string | null;
@@ -71,6 +72,9 @@ export type PanelCampaign = {
 };
 
 export type PanelOrder = {
+  couponCode?: string | null;
+  subtotalCents?: number;
+  discountCents?: number;
   number: string;
   customer: string;
   whatsapp: string;
@@ -88,7 +92,7 @@ export type PanelOrder = {
   /** Ausente nos dados de demonstração, que só têm pedidos ativos. */
   status?: "active" | "cancelled";
   cancellationReason?: string | null;
-  items?: Array<{ model: string; color: string; colorHex: string; size: SizeCode; quantity: number; unitPriceCents: number }>;
+  items?: Array<{ model: string; color: string; colorHex: string; size: SizeCode; quantity: number; unitPriceCents: number; lineTotalCents?: number }>;
 };
 
 export function panelOrderItems(order: PanelOrder) {

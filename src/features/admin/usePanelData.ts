@@ -40,6 +40,7 @@ export function usePanelData(): PanelData {
             artFront: campaign.artFrontUrl ?? shirtModels[0].image,
             orderCount: campaign.orderCount,
             paidTotalCents: campaign.paidTotalCents,
+            basePrices: campaign.basePrices,
             canDelete: campaign.canDelete,
             activeCoupon: campaign.activeCoupon,
             couponHistory: campaign.couponHistory,
@@ -86,10 +87,13 @@ export function usePanelData(): PanelData {
               paymentMethod: order.paymentMethod,
               deliveryStatus: order.deliveryStatus,
               totalCents: order.totalCents,
+              couponCode: order.couponCode,
+              subtotalCents: order.subtotalCents,
+              discountCents: order.discountCents,
               createdAt: order.createdAt,
               status: order.status,
               cancellationReason: order.cancellationReason,
-              items: order.items.map((item) => ({ model: item.modelName, color: item.color.name, colorHex: item.color.hex, size: item.size as SizeCode, quantity: item.quantity, unitPriceCents: item.unitPriceCents })),
+              items: order.items.map((item) => ({ model: item.modelName, color: item.color.name, colorHex: item.color.hex, size: item.size as SizeCode, quantity: item.quantity, unitPriceCents: item.unitPriceCents, lineTotalCents: item.lineTotalCents })),
             };
           }),
         }));
