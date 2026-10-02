@@ -86,5 +86,5 @@ test('orders workspace keeps paid defaults, one campaign selector and historical
   await expect(page.locator('.campaign-orders-row')).toContainText('Atendimento manual');
   await payment.selectOption('paid');
   await page.screenshot({ path: `qa-evidence/orders-compact/workspace-${testInfo.project.name}.png`, fullPage: true });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(await page.locator('html').evaluate((element) => element.scrollWidth <= element.ownerDocument.defaultView.innerWidth)).toBe(true);
 });
