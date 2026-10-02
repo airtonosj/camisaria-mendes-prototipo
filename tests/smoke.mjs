@@ -621,15 +621,17 @@ try {
     ...couponOrderBody,
     items: couponOrderBody.items.map((item, index) => ({ ...item, quantity: index === 0 ? 1 : 2 })),
   };
-  const concurrentCouponOrders = await Promise.all([0, 1].map(() => fetch(baseUrl + "/api/orders", {
+  const concurrentCouponOrders = await Promise.all(Array.from({ length: 8 }, () => fetch(baseUrl + "/api/orders", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID(), "X-Forwarded-For": "198.51.100.40" },
     body: JSON.stringify(qualifyingCouponOrderBody),
     signal: AbortSignal.timeout(5000),
   })));
-  assert.deepEqual(concurrentCouponOrders.map(response => response.status).sort(), [201, 409], "O último uso do cupom só pode ser consumido por um pedido concorrente.");
+  assert.deepEqual(concurrentCouponOrders.map(response => response.status).sort(), [201, ...Array(7).fill(409)], "O último uso do cupom só pode ser consumido por um pedido concorrente, sem falha interna.");
   const discountedOrder = await concurrentCouponOrders.find(response => response.status === 201).json();
-  assert.equal((await concurrentCouponOrders.find(response => response.status === 409).json()).error.code, "COUPON_EXHAUSTED");
+  for (const response of concurrentCouponOrders.filter(response => response.status === 409)) {
+    assert.equal((await response.json()).error.code, "COUPON_EXHAUSTED");
+  }
   assert.equal(discountedOrder.order.totalCents, 15970);
   const trackedDiscountedOrder = await request(`/api/orders/${discountedOrder.order.number}?whatsapp=5598999992070`);
   assert.equal(trackedDiscountedOrder.order.subtotalCents, 19970);

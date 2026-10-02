@@ -6,15 +6,28 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: mysql-8.0
+            image: mysql:8.0
+            health: mysqladmin ping -h localhost -ptest-only-password
+          - database: mariadb-11.8.9
+            image: mariadb:11.8.9
+            health: healthcheck.sh --connect --innodb_initialized
+    name: release (${{ matrix.database }})
     services:
       mysql:
-        image: mysql:8.0
+        image: ${{ matrix.image }}
         env:
           MYSQL_ROOT_PASSWORD: test-only-password
           MYSQL_ROOT_HOST: '%'
+          MARIADB_ROOT_PASSWORD: test-only-password
+          MARIADB_ROOT_HOST: '%'
         ports: ['3306:3306']
         options: >-
-          --health-cmd="mysqladmin ping -h localhost -ptest-only-password"
+          --health-cmd="${{ matrix.health }}"
           --health-interval=10s --health-timeout=5s --health-retries=10
     env:
       TEST_DB_HOST: 127.0.0.1
@@ -35,7 +48,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: test-evidence
+          name: test-evidence-${{ matrix.database }}
           path: |
             playwright-report/
             test-results/

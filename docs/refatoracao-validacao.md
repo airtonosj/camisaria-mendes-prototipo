@@ -75,3 +75,7 @@ Fechamento de 29/09/2026: tipos, lint, 20 testes unitários, cinco integrações
 `npm.cmd run check:release` passou com tipos, lint, 27 testes unitários, sete integrações, build e 18 jornadas desktop/celular. A regressão da listagem confere os dados do recebedor e totais de campanhas com múltiplos pedidos e sem recebedor. Execução local em MySQL 8.0.46 e Node 24.18.0, sem banco nem provedor de produção.
 
 Diagnóstico somente leitura autorizado no servidor de produção MariaDB 11.8.9 reproduziu o erro 1305 de `ANY_VALUE` e confirmou o funcionamento de `MAX(1)`. A substituição das três agregações evita essa função indisponível. Backup Hostinger de arquivos e banco concluído em 02/10/2026 às 10:34; versão anterior `e261f145b41ba07a819031156d17476cad765739`, schema 025. A verificação do painel após a publicação é uma etapa distinta das evidências locais.
+
+## Revisão extensa após a publicação (02/10/2026)
+
+Gates finais completos aprovados em MySQL 8.0.46 e MariaDB 11.8.9, sequencialmente: tipos, lint, 28 unitários, oito integrações, build e 30 jornadas desktop/celular por banco, com encerramento normal. Cobertura da listagem com 52 campanhas, 2.423 pedidos, agrupamento estrito, duas collations e dez leituras concorrentes; oito pedidos disputam o último uso de cupom. Falhas HTTP, conexão, resposta inválida e timeout têm regressões de recuperação no navegador. Correções adicionais e limites descritos na [revisão do carregamento](revisao-carregamento-painel.md). Ajustes locais, sem nova publicação; CI com os dois bancos preparado, ainda sem execução remota.

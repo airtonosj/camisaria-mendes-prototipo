@@ -92,6 +92,8 @@ export function getPublicCampaignCouponQuery1(executor, values) {
  * @param {unknown[]} values
  */
 export function listCampaignsQuery1(executor, values) {
+  // Aggregate orders before joining: one row per campaign, including under
+  // MariaDB ONLY_FULL_GROUP_BY (which cannot infer MySQL's functional dependencies).
   return executor.execute(`SELECT c.id, c.code, c.title, c.subtitle, c.phase, c.deadline_at, c.pickup_instructions,
             c.representative_name, c.representative_whatsapp, c.art_front_url, c.art_back_url, c.art_render_mode,
             COALESCE(
@@ -107,15 +109,19 @@ export function listCampaignsQuery1(executor, values) {
                   AND cva.artwork_mode = 'variant_mockup'
                 ORDER BY cover_variant.id LIMIT 1)
             ) AS cover_art_url,
-            COUNT(DISTINCT o.id) AS order_count,
-            COALESCE(SUM(CASE WHEN o.payment_status = 'paid' THEN o.total_cents ELSE 0 END), 0) AS paid_total_cents,
+            COALESCE(order_totals.order_count, 0) AS order_count,
+            COALESCE(order_totals.paid_total_cents, 0) AS paid_total_cents,
             NOT EXISTS (SELECT 1 FROM orders order_history WHERE order_history.campaign_id = c.id) AS can_delete,
-            c.receiver_id, MAX(pr.name) AS receiver_name,
-            MAX(pr.infinitepay_handle) AS receiver_handle, MAX(pr.active) AS receiver_active
+            c.receiver_id, pr.name AS receiver_name,
+            pr.infinitepay_handle AS receiver_handle, pr.active AS receiver_active
        FROM campaigns c
        LEFT JOIN payment_receivers pr ON pr.id = c.receiver_id
-       LEFT JOIN orders o ON o.campaign_id = c.id AND o.status = 'active'
-      GROUP BY c.id
+       LEFT JOIN (
+         SELECT campaign_id, COUNT(*) AS order_count,
+                SUM(CASE WHEN payment_status = 'paid' THEN total_cents ELSE 0 END) AS paid_total_cents
+           FROM orders WHERE status = 'active'
+          GROUP BY campaign_id
+       ) order_totals ON order_totals.campaign_id = c.id
       ORDER BY c.created_at DESC`, values);
 }
 

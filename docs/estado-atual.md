@@ -82,4 +82,12 @@ Implementação: `35be302`. Documentação e evidências acompanham o commit seg
 - A consulta de campanhas usa agora `MAX` nos três campos do recebedor. O JOIN vincula um único recebedor pela chave primária; a repetição por pedido não muda os valores. Contagens, totais, IDs, contratos e schema permanecem preservados.
 - Regressão em `tests/receivers.mjs`: listagem com recebedor e três pedidos (dois pagos), nome/handle/estado corretos, contagem e total sem duplicação; campanha sem recebedor mantém `null` e seus totais.
 - `npm.cmd run check:release` aprovado: tipos, lint, 27 testes unitários, sete integrações, build e 18 jornadas desktop/celular, com encerramento normal. Banco local `_test`, credenciais `TEST_DB_*` e provedores falsos.
-- Backup manual de arquivos e banco concluído na Hostinger, registrado em 02/10/2026 às 10:34 (America/Fortaleza). Publicação da correção autorizada pelo usuário; verificar o commit publicado em `/api/health` e o painel autenticado após a ativação.
+- Backup manual de arquivos e banco concluído na Hostinger, registrado em 02/10/2026 às 10:34 (America/Fortaleza). Correção publicada no commit `e61415a2f8bbac624088e106e15d213b82472113`: implantação Hostinger, `/api/health`, nova tentativa e recarga do painel autenticado confirmados. Evidência em `qa-evidence/panel-load-fix/verification.md`.
+
+## Revisão extensa da listagem (02/10/2026)
+
+- Revisão local solicitada após a publicação. Consulta com agregação prévia dos pedidos evita também erro 1055 no MariaDB com agrupamento estrito; resposta administrativa agora recebe validação em tempo de execução no navegador.
+- A validação completa no MariaDB reproduziu erro 1020 em pedidos concorrentes. `createOrder` usa `READ COMMITTED` somente naquela transação, mantendo as travas. Regressão disputa o último uso do cupom entre oito pedidos.
+- Detalhes de cobertura, resultados e limites em [revisão do carregamento](revisao-carregamento-painel.md). CI preparado para os dois bancos em máquinas separadas; ainda sem execução remota dessa configuração.
+- Novos ajustes permanecem locais. Não houve novo commit, push, deploy, compra nem envio real.
+- Gates finais MySQL 8.0.46 e MariaDB 11.8.9 aprovados sequencialmente: tipos, lint, 28 unitários, 8 integrações, build e 30 jornadas por banco, com encerramento normal. Capturas desktop/celular inspecionadas; MariaDB portátil encerrado.

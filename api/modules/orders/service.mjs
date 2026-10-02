@@ -117,7 +117,10 @@ export async function createOrder({ idempotencyKey, body }) {
       await queries.createOrderQuery7(connection, [coupon.id, orderResult.insertId, coupon.code, discountCents]);
     }
     return { created: true, order: { order_number: orderNumber, total_cents: totalCents, payment_status: "pending" } };
-  });
+  // MariaDB can reject a locking read after another checkout commits when an
+  // earlier idempotency lookup established a REPEATABLE READ snapshot (1020).
+  // READ COMMITTED sees that commit; campaign/coupon locks still serialize uses.
+  }, { readCommitted: true });
 }
 
 export function effectiveOrderStatus(order) {
