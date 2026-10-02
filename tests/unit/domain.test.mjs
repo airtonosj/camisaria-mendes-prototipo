@@ -24,3 +24,14 @@ test("coupon normalization is shared without weakening server validation",()=>{
  assert.equal(normalizeCouponText("  turma  10 "),"TURMA-10");
  assert.equal(normalizeCouponText(null),"");
 });
+test('InfiniteTag is typed without the dollar sign and saved in the provider format',async()=>{
+ const { normalizeInfinitePayHandle, validInfinitePayHandle } = await import('../../shared/receiver.mjs');
+ assert.equal(normalizeInfinitePayHandle('$Camisaria Mendes'),'camisariamendes');
+ assert.equal(normalizeInfinitePayHandle('  $$João_Conta.2 '),'joao_conta.2');
+ assert.equal(normalizeInfinitePayHandle('conta-ção!@#'),'conta-cao');
+ assert.equal(normalizeInfinitePayHandle(null),'');
+ assert.equal(normalizeInfinitePayHandle('a'.repeat(80)).length,64);
+ assert.equal(validInfinitePayHandle('camisariamendes'),true);
+ assert.equal(validInfinitePayHandle('a'),false);
+ assert.equal(validInfinitePayHandle('$conta'),false);
+});

@@ -1,4 +1,4 @@
-import type { StaffUser, AccountUpdate } from "../../../shared/contracts";
+import type { StaffUser, AccountUpdate, ApiPaymentReceiver, CreateReceiverPayload, UpdateReceiverPayload } from "../../../shared/contracts";
 import { request, staffToken, setStaffToken, staffRequest } from "../../lib/http";
 
 export async function loginStaff(email: string, password: string) {
@@ -54,4 +54,25 @@ export async function confirmPasswordReset(token: string, password: string) {
     method: "POST",
     body: JSON.stringify({ token, password }),
   });
+}
+
+export async function fetchPaymentReceivers() {
+  const payload = await staffRequest<{ receivers: ApiPaymentReceiver[] }>("/admin/receivers");
+  return payload.receivers;
+}
+
+export async function createPaymentReceiver(input: CreateReceiverPayload) {
+  const payload = await staffRequest<{ receiver: ApiPaymentReceiver }>("/admin/receivers", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return payload.receiver;
+}
+
+export async function updatePaymentReceiver(id: number, input: UpdateReceiverPayload) {
+  const payload = await staffRequest<{ receiver: ApiPaymentReceiver }>(`/admin/receivers/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+  return payload.receiver;
 }

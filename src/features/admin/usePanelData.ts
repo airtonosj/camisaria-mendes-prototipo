@@ -43,6 +43,7 @@ export function usePanelData(): PanelData {
             canDelete: campaign.canDelete,
             activeCoupon: campaign.activeCoupon,
             couponHistory: campaign.couponHistory,
+            receiver: campaign.receiver,
           })),
         );
         setMode("live");

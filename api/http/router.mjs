@@ -20,6 +20,7 @@ import { trackOrder, listCampaignOrders } from '../modules/orders/service.mjs';
 import { createOrder, changeDeliveryStatus, cancelOrder, registerOrderRefund } from '../modules/orders/http.mjs';
 import { listSizes, uploadArtwork, uploadVideo, serveUpload, serveShareImage, serveFrontend } from "../modules/media/service.mjs";
 import { productionReport, deliveryReport } from "../modules/reports/service.mjs";
+import { listReceivers, createReceiver, updateReceiver } from '../modules/receivers/http.mjs';
 
 import { buildVersion } from '../runtime/version.mjs';
 
@@ -207,6 +208,19 @@ export async function route(request, response) {
     sendJson(response, 200, { order: await trackOrder(requestUrl, trackingMatch[1].toUpperCase()) });
     return;
   }
+  if (request.method === "GET" && path === "/api/admin/receivers") {
+    sendJson(response, 200, { receivers: await listReceivers(request) });
+    return;
+  }
+  if (request.method === "POST" && path === "/api/admin/receivers") {
+    sendJson(response, 201, { receiver: await createReceiver(request) });
+    return;
+  }
+  const receiverMatch = path.match(/^\/api\/admin\/receivers\/([^/]+)$/);
+  if (request.method === "PATCH" && receiverMatch) {
+    sendJson(response, 200, { receiver: await updateReceiver(request, receiverMatch[1]) });
+    return;
+  }
   if (request.method === "GET" && path === "/api/admin/campaigns") {
     await requireStaff(request);
     sendJson(response, 200, { campaigns: await listCampaigns() });
@@ -219,7 +233,7 @@ export async function route(request, response) {
   const campaignMatch = path.match(/^\/api\/admin\/campaigns\/([^/]+)$/);
   if (request.method === "GET" && campaignMatch) {
     await requireStaff(request);
-    sendJson(response, 200, { campaign: await getCampaign(campaignMatch[1].toUpperCase(), { includeCoupon: true }) });
+    sendJson(response, 200, { campaign: await getCampaign(campaignMatch[1].toUpperCase(), { includeCoupon: true, includeReceiver: true }) });
     return;
   }
   if (request.method === "PATCH" && campaignMatch) {

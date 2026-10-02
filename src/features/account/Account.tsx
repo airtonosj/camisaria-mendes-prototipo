@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { updateStaffAccount } from "../../api";
 import type { StaffUser } from "../../api";
 import { errorMessage } from "../admin/model";
+import { PaymentReceivers } from "./PaymentReceivers";
 
 /* ------------------------------------------------------------------ */
 /* Conta da equipe                                                     */
@@ -77,7 +78,7 @@ export function Account({ user, onSaved }: { user: StaffUser | null; onSaved: (u
   return (
     <div className="admin-content admin-account-page">
       <div className="section-actions">
-        <div><span className="kicker">Acesso</span><h2>Conta da camisaria</h2><p>Troque o e-mail e a senha usados para entrar no painel.</p></div>
+        <div><span className="kicker">Acesso</span><h2>Conta da camisaria</h2><p>Troque o e-mail e a senha usados para entrar no painel e cadastre quem recebe o pagamento das campanhas.</p></div>
       </div>
 
       <section className="admin-account-card" aria-labelledby="account-form-title">
@@ -98,6 +99,8 @@ export function Account({ user, onSaved }: { user: StaffUser | null; onSaved: (u
           </div>
         </form>
       </section>
+
+      {user.role === "camisaria" && !user.mustChangePassword && <PaymentReceivers />}
     </div>
   );
 }

@@ -1246,9 +1246,35 @@
 .admin-account-card form { display: grid; grid-template-columns: 1fr 1fr; gap: 17px; margin-top: 25px; border-top: 1px solid #e3e6e4; padding-top: 23px; }
 .admin-account-feedback { flex: 1 1 auto; margin: 0; align-self: center; color: #16895b; font-size: .62rem; line-height: 1.5; }
 .admin-account-card .campaign-create-actions { align-items: center; justify-content: space-between; }
+/* conta: recebedores de pagamento */
+.payment-receivers { margin-top: 20px; }
+.payment-receivers .campaign-create-actions { justify-content: flex-end; }
+.payment-receivers-empty { margin: 22px 0 0; border-top: 1px solid #e3e6e4; padding-top: 20px; color: #747b7f; font-size: .66rem; line-height: 1.5; }
+.payment-receivers-list { display: grid; margin: 22px 0 0; padding: 0; list-style: none; border-top: 1px solid #e3e6e4; }
+.payment-receivers-list li { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #eef0ef; padding: 14px 0; }
+.payment-receivers-list li > div:first-child { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 12px; min-width: 0; }
+.payment-receivers-list strong { color: #15191c; font-size: .76rem; }
+.payment-receivers-list small { grid-column: 1 / -1; color: #747b7f; font-size: .62rem; line-height: 1.5; overflow-wrap: anywhere; }
+.payment-receivers-list li.is-inactive strong, .payment-receivers-list li.is-inactive .payment-receivers-handle { color: #9aa0a3; }
+.payment-receivers-handle { color: var(--blue-dark); font-size: .7rem; font-weight: 700; overflow-wrap: anywhere; }
+.payment-receivers-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+.payment-receivers-actions button { min-height: 38px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid #d7deda; padding: 0 12px; cursor: pointer; color: #34393d; background: #fff; font-size: .62rem; font-weight: 700; }
+.payment-receivers-actions button:hover, .payment-receivers-actions button:focus-visible { border-color: #0799e3; outline: 0; }
+.payment-receivers-actions .material-symbols-rounded { font-size: 17px; }
+.payment-receivers-tag { min-height: 50px; display: flex; align-items: stretch; border: 1px solid #cfd5d2; background: #fff; }
+.payment-receivers-tag:focus-within { border-color: #0799e3; box-shadow: inset 0 0 0 1px #0799e3; }
+.payment-receivers-tag > span { display: flex; align-items: center; border-right: 1px solid #e3e6e4; padding: 0 12px; color: #4e5559; background: #f5f7f6; font-size: .78rem; font-weight: 750; }
+.payment-receivers-tag > input { flex: 1 1 auto; min-width: 0; border: 0; padding: 0 14px; color: #202528; font-size: .7rem; outline: 0; background: transparent; }
+.payment-receivers form small { color: #747b7f; font-size: .6rem; line-height: 1.5; }
+.payment-receivers-confirm { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 9px; margin: 0; border: 1px solid #cfe3ee; padding: 12px 14px; color: #2f5567; background: #f2f9fc; font-size: .66rem; line-height: 1.5; }
+.payment-receivers-confirm .material-symbols-rounded { flex: 0 0 auto; font-size: 19px; }
 @media (max-width: 720px) {
   .admin-account-card { padding: 19px 16px; }
   .admin-account-card form { grid-template-columns: 1fr; gap: 14px; }
+  .payment-receivers > header { flex-direction: column; gap: 14px; }
+  .payment-receivers > header .outline-action { width: 100%; }
+  .payment-receivers-list li { flex-direction: column; align-items: stretch; }
+  .payment-receivers-actions button { flex: 1 1 0; justify-content: center; }
   .received-pix-panel { padding: 20px 16px; }
   .received-pix-key { flex-direction: column; align-items: stretch; }
 }
@@ -1490,6 +1516,10 @@
 .campaign-step .campaign-field > span { color: #3e494e; font-size: .69rem; }
 .campaign-step .campaign-field > input { height: 48px; border-radius: 7px; padding: 0 14px; font-size: .76rem; background: #fff; }
 .campaign-step .campaign-field > input:focus { border-color: #0799e3; box-shadow: 0 0 0 3px rgba(7,153,227,.12); }
+.campaign-receiver-field > select { width: 100%; height: 48px; border: 1px solid #cfd5d2; border-radius: 7px; padding: 0 14px; color: #202528; background: #fff; font-size: .76rem; outline: 0; }
+.campaign-receiver-field > select:focus { border-color: #0799e3; box-shadow: 0 0 0 3px rgba(7,153,227,.12); }
+.campaign-receiver-field > small { color: #747b7f; font-size: .62rem; line-height: 1.5; }
+.campaign-admin-card-body > p.campaign-admin-card-receiver { margin-top: 4px; overflow-wrap: anywhere; }
 .campaign-advanced-details { margin-top: 18px; border: 1px solid #dfe4e2; border-radius: 8px; background: #fff; }
 .campaign-advanced-details summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 17px; cursor: pointer; list-style: none; }
 .campaign-advanced-details summary::-webkit-details-marker { display: none; }

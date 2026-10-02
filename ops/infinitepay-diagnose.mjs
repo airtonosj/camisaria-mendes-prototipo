@@ -3,8 +3,8 @@
  *
  * Sem `--send`, apenas monta e imprime o payload exato que a API enviaria para o pedido
  * informado: nenhuma chamada externa, nenhuma escrita. Com `--send`, cria de fato o link
- * na conta da camisaria e imprime o status e o corpo da resposta -- a unica forma de
- * saber por que o provedor recusou, porque a mensagem que chega ao cliente e generica.
+ * na conta do recebedor da campanha (ou na conta padrao) e imprime o status e o corpo
+ * da resposta -- a unica forma de saber por que o provedor recusou, porque a mensagem que chega ao cliente e generica.
  *
  *   node ops/infinitepay-diagnose.mjs CM-2026-XXXXXXXX
  *   node ops/infinitepay-diagnose.mjs CM-2026-XXXXXXXX --send
@@ -38,15 +38,19 @@ function webhookUrl() {
 
 try {
   console.log("Conta e endpoint em uso:");
-  console.log(`  handle           : ${config.payments.infinitePay.handle || "(nao configurada)"}`);
+  console.log(`  handle padrao    : ${config.payments.infinitePay.handle || "(nao configurada)"}`);
   console.log(`  apiBaseUrl       : ${config.payments.infinitePay.apiBaseUrl}`);
   console.log(`  checkoutEnabled  : ${config.payments.infinitePay.checkoutEnabled}`);
   console.log(`  publicAppUrl     : ${config.publicAppUrl}`);
 
   const [orders] = await pool.execute(
     `SELECT o.id, o.order_number, o.customer_name, o.customer_whatsapp, o.customer_email,
-            o.status, o.payment_status, o.subtotal_cents, o.discount_cents, o.coupon_code, o.total_cents
-       FROM orders o WHERE o.order_number = ? LIMIT 1`,
+            o.status, o.payment_status, o.subtotal_cents, o.discount_cents, o.coupon_code, o.total_cents,
+            pr.name AS receiver_name, pr.infinitepay_handle AS receiver_handle
+       FROM orders o
+       JOIN campaigns c ON c.id = o.campaign_id
+       LEFT JOIN payment_receivers pr ON pr.id = c.receiver_id
+      WHERE o.order_number = ? LIMIT 1`,
     [orderNumber],
   );
   if (orders.length === 0) {
@@ -58,11 +62,12 @@ try {
   console.log(`  status/pagamento : ${order.status} / ${order.payment_status}`);
   console.log(`  subtotal/desconto: ${order.subtotal_cents} / ${order.discount_cents} (cupom ${order.coupon_code ?? "-"})`);
   console.log(`  total            : ${order.total_cents}`);
+  console.log(`  recebedor        : ${order.receiver_handle ? `${order.receiver_name} ($${order.receiver_handle})` : "conta padrao"}`);
   console.log(`  e-mail cadastrado: ${order.customer_email ?? "(vazio)"}`);
   console.log(`  whatsapp         : ${order.customer_whatsapp}`);
 
   const [checkouts] = await pool.execute(
-    "SELECT status, checkout_url IS NOT NULL AS tem_url, last_error, locked_at FROM payment_checkouts WHERE order_id = ? AND provider = 'infinitepay' LIMIT 1",
+    "SELECT status, handle, checkout_url IS NOT NULL AS tem_url, last_error, locked_at FROM payment_checkouts WHERE order_id = ? AND provider = 'infinitepay' LIMIT 1",
     [order.id],
   );
   console.log("\nUltima tentativa registrada:");
@@ -81,6 +86,7 @@ try {
   );
 
   const input = {
+    handle: order.receiver_handle || config.payments.infinitePay.handle,
     orderNumber: order.order_number,
     customer: {
       name: order.customer_name,

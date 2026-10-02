@@ -133,3 +133,37 @@ test('campaign creation completes all four editor steps',async({page})=>{
  const response=await created;expect(response.status()).toBe(201);
  expect((await response.json()).campaign.title).toBe(title);
 });
+
+test('payment receiver is registered in the account tab and chosen for a campaign',async({page},testInfo)=>{
+ const project=testInfo.project.name;
+ await login(page);await page.getByRole('button',{name:'Conta',exact:true}).first().click();
+ const card=page.getByRole('region',{name:'Recebedores de pagamento'});await expect(card).toBeVisible();
+ await card.getByRole('button',{name:/Adicionar recebedor/}).click();
+ await card.getByLabel('Nome completo').fill(`Recebedor ${project}`);
+ await card.getByLabel('Telefone').fill('98988881234');
+ const tag=card.getByLabel(/InfiniteTag/);
+ await tag.pressSequentially(`$Camisaria ${project}`);
+ await expect(tag).toHaveValue(`camisaria${project}`);
+ await card.getByRole('button',{name:'Salvar recebedor'}).click();
+ await expect(card.getByText(`$camisaria${project}`,{exact:false}).first()).toBeVisible();
+ await page.screenshot({path:`qa-evidence/receivers/account-confirm-${project}.png`,fullPage:true});
+ const created=page.waitForResponse(r=>r.request().method()==='POST'&&r.url().endsWith('/api/admin/receivers'));
+ await card.getByRole('button',{name:'Confirmar e salvar'}).click();expect((await created).status()).toBe(201);
+ await expect(card.getByText('Recebedor cadastrado.')).toBeVisible();
+ await expect(card.getByRole('listitem').filter({hasText:`Recebedor ${project}`})).toContainText(`$camisaria${project}`);
+ await page.screenshot({path:`qa-evidence/receivers/account-list-${project}.png`,fullPage:true});
+
+ await page.getByRole('button',{name:'Campanhas',exact:false}).first().click();await page.mouse.move(1000,100);
+ await page.locator('article.campaign-admin-card',{hasText:'MENDES-ADS-26'}).getByRole('button',{name:'Editar',exact:true}).click();
+ const receiver=page.getByLabel('Recebedor do pagamento');await expect(receiver).toBeVisible();
+ await expect(receiver.locator('option',{hasText:`Recebedor ${project}`})).toHaveCount(1);
+ await receiver.selectOption({label:`Recebedor ${project} · $camisaria${project}`});
+ await page.screenshot({path:`qa-evidence/receivers/campaign-select-${project}.png`,fullPage:true});
+ await page.getByRole('button',{name:/Revisão/}).click();
+ await expect(page.getByText(`Pagamentos na conta InfinitePay $camisaria${project}`)).toBeVisible();
+ const saved=page.waitForResponse(r=>r.request().method()==='PATCH'&&r.url().includes('/api/admin/campaigns/MENDES-ADS-26'));
+ await page.getByRole('button',{name:/Salvar alterações/}).click();expect((await saved).ok()).toBe(true);
+ await expect(page.locator('article.campaign-admin-card',{hasText:'MENDES-ADS-26'})).toContainText(`$camisaria${project}`);
+ const stored=await database(c=>c.execute("SELECT r.infinitepay_handle FROM campaigns c JOIN payment_receivers r ON r.id=c.receiver_id WHERE c.code='MENDES-ADS-26'"));
+ expect(stored[0][0].infinitepay_handle).toBe(`camisaria${project}`);
+});

@@ -439,7 +439,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "024_pickup_email");
+  assert.equal(health.schema.current, "025_campaign_receivers");
   assert.equal(health.storage.ready, true);
   assert.equal(health.license.status, "active");
   step("health check valida conexão e versão do schema");
@@ -449,6 +449,10 @@ try {
     await request(`/api/admin/campaigns/MENDES-ENG-26/pickup-email/${action}`, { method: 'POST', body: {}, expected: 401 });
   }
   step('avisos de retirada exigem sessão em consulta, prévia e confirmação');
+  await request('/api/admin/receivers', { expected: 401 });
+  await request('/api/admin/receivers', { method: 'POST', body: { name: 'Sem sessão', infinitepayHandle: 'semsessao' }, expected: 401 });
+  await request('/api/admin/receivers/1', { method: 'PATCH', body: { active: false }, expected: 401 });
+  step('recebedores de pagamento exigem sessão da camisaria');
 
   const login = await request("/api/auth/login", {
     method: "POST",

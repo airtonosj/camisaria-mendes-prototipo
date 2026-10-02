@@ -8,7 +8,7 @@ async function readRequestJson(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
 }
 
-export async function startFakeInfinitePay(environment) {
+export async function startFakeInfinitePay(environment, { beforeLinkResponse } = {}) {
   const server = http.createServer(async (request, response) => {
     const body = await readRequestJson(request);
     response.setHeader("Content-Type", "application/json");
@@ -26,6 +26,7 @@ export async function startFakeInfinitePay(environment) {
         return;
       }
       fakeInfinitePay.links.push(body);
+      if (beforeLinkResponse) await beforeLinkResponse(body);
       response.end(JSON.stringify({
         url: `https://checkout.infinitepay.io/smoke-infinitepay?lenc=${encodeURIComponent(body.order_nsu)}`,
       }));

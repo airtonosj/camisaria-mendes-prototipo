@@ -1,11 +1,11 @@
 import { normalizeCouponText } from "../../../shared/domain.mjs";
 import { useCampaignDraft } from './useCampaignDraft';
-import { ChangeEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useRef } from "react";
+import { ChangeEvent, FormEvent, PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { localWhatsapp } from "../../phone";
 
 import { parseWhatsapp } from "../../../shared/contact.mjs";
-import { assetUrl, createCampaignInApi, deleteCampaignInApi, fetchCampaignDetail, updateCampaignInApi, uploadCampaignArt, uploadCampaignVideo } from "../../api";
-import type { CampaignArtworkConfig, CampaignRealPhotoConfig, CampaignRealVideoConfig, UpdateCampaignPayload } from '../../api';
+import { assetUrl, createCampaignInApi, deleteCampaignInApi, fetchCampaignDetail, fetchPaymentReceivers, updateCampaignInApi, uploadCampaignArt, uploadCampaignVideo } from "../../api";
+import type { ApiPaymentReceiver, CampaignArtworkConfig, CampaignRealPhotoConfig, CampaignRealVideoConfig, UpdateCampaignPayload } from '../../api';
 import { defaultCampaignColors, defaultCampaignSizes, campaignSizesInGroup, shirtColors, shirtModels, sortSizes } from "../../data";
 import type { ShirtColorName, ShirtColorOption, ShirtModelName, SizeCode, SizeGroup } from "../../data";
 import type { ArtworkTransform, VariantArtwork } from "../../data";
@@ -17,11 +17,24 @@ import type { CampaignFormStep, ArtSideDraft, VariantArtDraft } from './editor-m
 
 export function useCampaignEditor(data:PanelData) {
   const { campaigns, mode, reload } = data;
-  const { loadDraft, resetDraft, phaseFilter, setPhaseFilter, creating, setCreating, shared, setShared, notice, setNotice, deleteConfirmation, setDeleteConfirmation, deleting, setDeleting, deleteError, setDeleteError, editing, setEditing, loadingDetail, setLoadingDetail, existingArt, setExistingArt, campaignName, setCampaignName, campaignCodeInput, setCampaignCodeInput, subtitle, setSubtitle, pickup, setPickup, representative, setRepresentative, representativePhone, setRepresentativePhone, deadline, setDeadline, commonPrice, setCommonPrice, oversizedPrice, setOversizedPrice, couponEnabled, setCouponEnabled, couponCode, setCouponCode, couponDiscounts, setCouponDiscounts, couponExpires, setCouponExpires, couponLimit, setCouponLimit, couponMinimumQuantity, setCouponMinimumQuantity, couponMaximumQuantity, setCouponMaximumQuantity, selectedModels, setSelectedModels, front, setFront, back, setBack, artMode, setArtMode, mockupEnabled, setMockupEnabled, realPhotosEnabled, setRealPhotosEnabled, artScope, setArtScope, baseTransforms, setBaseTransforms, variantArts, setVariantArts, realPhotosByColor, setRealPhotosByColor, realVideosByColor, setRealVideosByColor, artVariant, setArtVariant, artPreviewSide, setArtPreviewSide, artError, setArtError, colorModel, setColorModel, campaignColorOptions, setCampaignColorOptions, modelColors, setModelColors, customColorName, setCustomColorName, customColorHex, setCustomColorHex, colorError, setColorError, sizeModel, setSizeModel, modelSizes, setModelSizes, sizeError, setSizeError, submitting, setSubmitting, formError, setFormError, formStep, setFormStep, productConfiguration, setProductConfiguration, customColorOpen, setCustomColorOpen, advancedArtOpen, setAdvancedArtOpen, draftFeedback, setDraftFeedback } = useCampaignDraft();
+  const { loadDraft, resetDraft, phaseFilter, setPhaseFilter, creating, setCreating, shared, setShared, notice, setNotice, deleteConfirmation, setDeleteConfirmation, deleting, setDeleting, deleteError, setDeleteError, editing, setEditing, loadingDetail, setLoadingDetail, existingArt, setExistingArt, campaignName, setCampaignName, campaignCodeInput, setCampaignCodeInput, subtitle, setSubtitle, pickup, setPickup, representative, setRepresentative, representativePhone, setRepresentativePhone, deadline, setDeadline, receiverId, setReceiverId, commonPrice, setCommonPrice, oversizedPrice, setOversizedPrice, couponEnabled, setCouponEnabled, couponCode, setCouponCode, couponDiscounts, setCouponDiscounts, couponExpires, setCouponExpires, couponLimit, setCouponLimit, couponMinimumQuantity, setCouponMinimumQuantity, couponMaximumQuantity, setCouponMaximumQuantity, selectedModels, setSelectedModels, front, setFront, back, setBack, artMode, setArtMode, mockupEnabled, setMockupEnabled, realPhotosEnabled, setRealPhotosEnabled, artScope, setArtScope, baseTransforms, setBaseTransforms, variantArts, setVariantArts, realPhotosByColor, setRealPhotosByColor, realVideosByColor, setRealVideosByColor, artVariant, setArtVariant, artPreviewSide, setArtPreviewSide, artError, setArtError, colorModel, setColorModel, campaignColorOptions, setCampaignColorOptions, modelColors, setModelColors, customColorName, setCustomColorName, customColorHex, setCustomColorHex, colorError, setColorError, sizeModel, setSizeModel, modelSizes, setModelSizes, sizeError, setSizeError, submitting, setSubmitting, formError, setFormError, formStep, setFormStep, productConfiguration, setProductConfiguration, customColorOpen, setCustomColorOpen, advancedArtOpen, setAdvancedArtOpen, draftFeedback, setDraftFeedback } = useCampaignDraft();
 
   /** Fora de `null`, o formulário está editando a campanha deste código. */
 
   const videoUploadControllers = useRef<Record<string, AbortController>>({});
+
+  // Contas que podem receber o pagamento da campanha. Sem sessão no servidor a lista
+  // fica vazia e a campanha segue na conta padrão.
+  const [receivers, setReceivers] = useState<ApiPaymentReceiver[]>([]);
+  const [receiversError, setReceiversError] = useState("");
+  useEffect(() => {
+    if (!creating || mode !== "live") return;
+    let active = true;
+    fetchPaymentReceivers()
+      .then((list) => { if (active) { setReceivers(list); setReceiversError(""); } })
+      .catch((loadError) => { if (active) setReceiversError(errorMessage(loadError, "Não foi possível carregar os recebedores.")); });
+    return () => { active = false; };
+  }, [creating, mode]);
 
   const filtered = phaseFilter === "all" ? campaigns : campaigns.filter((campaign) => campaign.phase === phaseFilter);
 
@@ -166,6 +179,7 @@ export function useCampaignEditor(data:PanelData) {
       representative: "",
       representativePhone: "",
       deadline: "",
+      receiverId: null,
       couponEnabled: false,
       couponCode: "",
       couponDiscounts: { Comum: "10,00", Oversized: "10,00" },
@@ -214,6 +228,7 @@ export function useCampaignEditor(data:PanelData) {
         representative?: string;
         representativePhone?: string;
         deadline?: string;
+        receiverId?: number | null;
         commonPrice?: string;
         oversizedPrice?: string;
         couponEnabled?: boolean;
@@ -235,6 +250,7 @@ export function useCampaignEditor(data:PanelData) {
       setRepresentative(saved.representative ?? "");
       setRepresentativePhone(saved.representativePhone ?? "");
       setDeadline(saved.deadline ?? "");
+      setReceiverId(typeof saved.receiverId === "number" ? saved.receiverId : null);
       if (saved.commonPrice) setCommonPrice(saved.commonPrice);
       if (saved.oversizedPrice) setOversizedPrice(saved.oversizedPrice);
       setCouponEnabled(Boolean(saved.couponEnabled));
@@ -267,6 +283,7 @@ export function useCampaignEditor(data:PanelData) {
       representative,
       representativePhone,
       deadline,
+      receiverId,
       commonPrice,
       oversizedPrice,
       couponEnabled,
@@ -330,6 +347,7 @@ export function useCampaignEditor(data:PanelData) {
       setRepresentative(detail.representativeName);
       setRepresentativePhone(localWhatsapp(detail.representativeWhatsapp));
       setDeadline(dateInput(detail.deadlineAt));
+      setReceiverId(detail.receiver?.id ?? null);
       setExistingArt({ front: assetUrl(detail.artFrontUrl) ?? "", back: assetUrl(detail.artBackUrl) ?? "" });
       setBaseTransforms({
         front: detail.artworkConfig?.base.front?.transform ?? { ...defaultTransform },
@@ -1187,6 +1205,7 @@ export function useCampaignEditor(data:PanelData) {
           representative: { name: representative, whatsapp: representativePhone },
           presentationConfig,
           coupon: campaignCoupon(),
+          receiverId,
         };
         if (artworkConfig) payload.artworkConfig = artworkConfig;
         if (realPhotos) payload.realPhotos = realPhotos;
@@ -1213,6 +1232,7 @@ export function useCampaignEditor(data:PanelData) {
         realPhotos,
         realVideos,
         coupon: campaignCoupon(),
+        receiverId,
         models: campaignModels(),
       });
       sessionStorage.removeItem(campaignDraftKey);
@@ -1246,5 +1266,5 @@ export function useCampaignEditor(data:PanelData) {
   }
 
 
- return { campaignAlert, clearCampaignAlert, creating, startCampaign, editing, closeForm, loadingDetail, submitCampaign, handleCampaignInvalid, formStep, informationComplete, productsComplete, imagesComplete, goToCampaignStep, variantsLocked, campaignName, setCampaignName, representative, setRepresentative, representativePhone, setRepresentativePhone, deadline, setDeadline, pickup, setPickup, subtitle, setSubtitle, campaignCodeInput, setCampaignCodeInput, selectedModels, commonPrice, oversizedPrice, setCommonPrice, setOversizedPrice, toggleCampaignModel, setProductConfiguration, setColorModel, setSizeModel, productConfiguration, couponEnabled, setCouponEnabled, setFormError, couponCode, setCouponCode, selectedCampaignModels, couponDiscounts, setCouponDiscounts, couponMinimumQuantity, setCouponMinimumQuantity, couponMaximumQuantity, setCouponMaximumQuantity, couponExpires, setCouponExpires, couponLimit, setCouponLimit, colorModel, setColorError, modelColors, campaignColorOptions, toggleCampaignColor, customColorOpen, setCustomColorOpen, customColorName, setCustomColorName, addCustomCampaignColor, customColorHex, setCustomColorHex, removeCustomCampaignColor, sizeModel, setSizeError, modelSizes, toggleSizeGroup, toggleCampaignSize, mockupEnabled, realPhotosEnabled, chooseImagePresentation, artMode, setArtMode, setArtScope, setArtPreviewSide, setArtError, artScope, variantArts, previewModel, previewColor, selectArtworkVariant, previewArtwork, artPreviewSide, previewArt, startArtworkDrag, setAdvancedArtOpen, advancedArtOpen, activeTransform, setCurrentTransform, resetCurrentTransform, front, back, existingArt, currentVariantArt, chooseArt, chooseVariantArt, removeVariantSide, removeBackArt, restoreVariantInheritance, activeVariantCombinations, activeRealPhotoColors, realPhotosByColor, realVideosByColor, removeRealPhoto, chooseRealPhotos, removeRealVideo, chooseRealVideo, summaryColorCount, summarySizeCount, saveCampaignDraft, draftFeedback, goToPreviousCampaignStep, goToNextCampaignStep, submitting, videoUploadInProgress, notice, shared, campaigns, setShared, phaseFilter, setPhaseFilter, filtered, deleteConfirmation, deleteError, setDeleteConfirmation, setDeleteError, deleting, confirmDeleteCampaign, startEdit, setNotice };
+ return { campaignAlert, clearCampaignAlert, creating, startCampaign, editing, closeForm, loadingDetail, submitCampaign, handleCampaignInvalid, formStep, informationComplete, productsComplete, imagesComplete, goToCampaignStep, variantsLocked, campaignName, setCampaignName, representative, setRepresentative, representativePhone, setRepresentativePhone, deadline, setDeadline, receiverId, setReceiverId, receivers, receiversError, pickup, setPickup, subtitle, setSubtitle, campaignCodeInput, setCampaignCodeInput, selectedModels, commonPrice, oversizedPrice, setCommonPrice, setOversizedPrice, toggleCampaignModel, setProductConfiguration, setColorModel, setSizeModel, productConfiguration, couponEnabled, setCouponEnabled, setFormError, couponCode, setCouponCode, selectedCampaignModels, couponDiscounts, setCouponDiscounts, couponMinimumQuantity, setCouponMinimumQuantity, couponMaximumQuantity, setCouponMaximumQuantity, couponExpires, setCouponExpires, couponLimit, setCouponLimit, colorModel, setColorError, modelColors, campaignColorOptions, toggleCampaignColor, customColorOpen, setCustomColorOpen, customColorName, setCustomColorName, addCustomCampaignColor, customColorHex, setCustomColorHex, removeCustomCampaignColor, sizeModel, setSizeError, modelSizes, toggleSizeGroup, toggleCampaignSize, mockupEnabled, realPhotosEnabled, chooseImagePresentation, artMode, setArtMode, setArtScope, setArtPreviewSide, setArtError, artScope, variantArts, previewModel, previewColor, selectArtworkVariant, previewArtwork, artPreviewSide, previewArt, startArtworkDrag, setAdvancedArtOpen, advancedArtOpen, activeTransform, setCurrentTransform, resetCurrentTransform, front, back, existingArt, currentVariantArt, chooseArt, chooseVariantArt, removeVariantSide, removeBackArt, restoreVariantInheritance, activeVariantCombinations, activeRealPhotoColors, realPhotosByColor, realVideosByColor, removeRealPhoto, chooseRealPhotos, removeRealVideo, chooseRealVideo, summaryColorCount, summarySizeCount, saveCampaignDraft, draftFeedback, goToPreviousCampaignStep, goToNextCampaignStep, submitting, videoUploadInProgress, notice, shared, campaigns, setShared, phaseFilter, setPhaseFilter, filtered, deleteConfirmation, deleteError, setDeleteConfirmation, setDeleteError, deleting, confirmDeleteCampaign, startEdit, setNotice };
 }

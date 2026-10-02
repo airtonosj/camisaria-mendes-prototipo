@@ -1,5 +1,5 @@
 import { campaignPhases } from '../../../shared/domain.mjs';
-import type { CampaignPhaseCode, CampaignCoupon, CampaignCouponStats, DeliveryStatusCode, PaymentStatusCode } from "../../api";
+import type { CampaignPhaseCode, CampaignCoupon, CampaignCouponStats, CampaignReceiverSummary, DeliveryStatusCode, PaymentStatusCode } from "../../api";
 import type { SizeCode } from "../../data";
 
 export type AdminSection = "overview" | "campaigns" | "orders" | "products" | "reports" | "account";
@@ -67,6 +67,7 @@ export type PanelCampaign = {
   canDelete: boolean;
   activeCoupon?: CampaignCoupon | null;
   couponHistory?: CampaignCouponStats[];
+  receiver?: CampaignReceiverSummary | null;
 };
 
 export type PanelOrder = {

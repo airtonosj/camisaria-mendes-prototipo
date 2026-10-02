@@ -7,7 +7,7 @@ export function getCampaignQuery1(executor, values) {
             representative_name, representative_whatsapp, art_front_url, art_back_url, art_render_mode,
             mockup_enabled, real_photos_enabled,
             art_front_x, art_front_y, art_front_scale, art_front_rotation,
-            art_back_x, art_back_y, art_back_scale, art_back_rotation
+            art_back_x, art_back_y, art_back_scale, art_back_rotation, receiver_id
        FROM campaigns WHERE code = ? LIMIT 1`, values);
 }
 
@@ -109,8 +109,11 @@ export function listCampaignsQuery1(executor, values) {
             ) AS cover_art_url,
             COUNT(DISTINCT o.id) AS order_count,
             COALESCE(SUM(CASE WHEN o.payment_status = 'paid' THEN o.total_cents ELSE 0 END), 0) AS paid_total_cents,
-            NOT EXISTS (SELECT 1 FROM orders order_history WHERE order_history.campaign_id = c.id) AS can_delete
+            NOT EXISTS (SELECT 1 FROM orders order_history WHERE order_history.campaign_id = c.id) AS can_delete,
+            c.receiver_id, ANY_VALUE(pr.name) AS receiver_name,
+            ANY_VALUE(pr.infinitepay_handle) AS receiver_handle, ANY_VALUE(pr.active) AS receiver_active
        FROM campaigns c
+       LEFT JOIN payment_receivers pr ON pr.id = c.receiver_id
        LEFT JOIN orders o ON o.campaign_id = c.id AND o.status = 'active'
       GROUP BY c.id
       ORDER BY c.created_at DESC`, values);
@@ -374,8 +377,8 @@ export function createCampaignQuery2(executor, values) {
   return executor.execute(`INSERT INTO campaigns
         (code, title, subtitle, deadline_at, pickup_instructions, representative_name,
          representative_whatsapp, art_front_url, art_back_url, art_render_mode,
-         mockup_enabled, real_photos_enabled, created_by_user_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, values);
+         mockup_enabled, real_photos_enabled, created_by_user_id, receiver_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, values);
 }
 
 /** Uses the caller's connection; the service owns the transaction.
@@ -402,7 +405,7 @@ export function createCampaignQuery4(executor, values) {
  * @param {unknown[]} values
  */
 export function updateCampaignQuery1(executor, values) {
-  return executor.execute("SELECT id, phase, art_front_url, art_back_url, art_render_mode, mockup_enabled, real_photos_enabled FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE", values);
+  return executor.execute("SELECT id, phase, art_front_url, art_back_url, art_render_mode, mockup_enabled, real_photos_enabled, receiver_id FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE", values);
 }
 
 /** Uses the caller's connection; the service owns the transaction.

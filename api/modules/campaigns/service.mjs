@@ -8,6 +8,14 @@ import { ApiError } from "../../http/response.mjs";
 import { requireText, normalizeHexColor, optionalText, normalizeWhatsapp, parsePositiveInteger } from "../../http/validation.mjs";
 import { normalizeCampaignCode, suggestedCampaignCode, parseDeadline } from "./validation.mjs";
 import { couponDiscounts, couponPayload, activeCampaignCoupon, validateActiveCoupon, ensureCouponFitsCampaignPrices, applyCampaignCoupon } from "../coupons/service.mjs";
+import { assertCampaignReceiverChangeAllowed, defaultInfinitePayHandle, resolveCampaignReceiver } from "../receivers/service.mjs";
+import { findReceiverQuery } from "../receivers/repository.mjs";
+
+/** Resumo do recebedor para o painel. A página pública nunca recebe a conta de destino. */
+function campaignReceiverSummary(row) {
+  if (!row) return null;
+  return { id: Number(row.id), name: row.name, infinitepayHandle: row.infinitepay_handle, active: Boolean(row.active) };
+}
 
 export function parseArtRenderMode(value) {
   if (value === "overlay" || value === "variant_mockup" || value === "legacy_mockup") return value;
@@ -120,7 +128,7 @@ export function rawVariantArtworkConfig(row) {
   };
 }
 
-export async function getCampaign(code, { includeCoupon = false } = {}) {
+export async function getCampaign(code, { includeCoupon = false, includeReceiver = false } = {}) {
   const [campaignRows] = await queries.getCampaignQuery1(pool, [code]);
   if (campaignRows.length === 0) throw new ApiError(404, "CAMPAIGN_NOT_FOUND", "Campanha não encontrada.");
   const campaign = campaignRows[0];
@@ -130,6 +138,9 @@ export async function getCampaign(code, { includeCoupon = false } = {}) {
   const [realPhotoRows] = await queries.getCampaignQuery5(pool, [campaign.id]);
   const [realVideoRows] = await queries.getCampaignQuery6(pool, [campaign.id]);
   const activeCoupon = includeCoupon ? await activeCampaignCoupon(pool, campaign.id) : undefined;
+  const receiver = includeReceiver && campaign.receiver_id
+    ? campaignReceiverSummary((await findReceiverQuery(pool, [campaign.receiver_id]))[0][0])
+    : null;
   const realPhotosByColorId = new Map();
   for (const row of realPhotoRows) {
     const photos = realPhotosByColorId.get(Number(row.color_id)) ?? [];
@@ -186,6 +197,7 @@ export async function getCampaign(code, { includeCoupon = false } = {}) {
       bytes: Number(row.bytes),
     })),
     ...(includeCoupon ? { activeCoupon } : {}),
+    ...(includeReceiver ? { receiver } : {}),
     sizes: sizes.map((size) => ({
       model: { code: size.model_code, name: size.model_name },
       code: size.code,
@@ -247,6 +259,9 @@ export async function listCampaigns() {
     canDelete: Boolean(row.can_delete),
     activeCoupon: couponsByCampaign.get(Number(row.id)) ?? null,
     couponHistory: couponHistoryByCampaign.get(Number(row.id)) ?? [],
+    receiver: row.receiver_id ? campaignReceiverSummary({
+      id: row.receiver_id, name: row.receiver_name, infinitepay_handle: row.receiver_handle, active: row.receiver_active,
+    }) : null,
   }));
 }
 
@@ -586,8 +601,9 @@ export async function createCampaign({ staff, body }) {
     const [existing] = await queries.createCampaignQuery1(connection, [code]);
     if (existing.length > 0) throw new ApiError(409, "CAMPAIGN_CODE_EXISTS", "Já existe uma campanha com esse código.");
     const { modelIds, colorIds, sizeIds } = await resolveCatalogIds(connection, models);
+    const receiver = body.receiverId === undefined ? null : await resolveCampaignReceiver(connection, body.receiverId);
 
-    const [campaignResult] = await queries.createCampaignQuery2(connection, [code, title, subtitle, deadlineAt, pickupInstructions, representativeName, representativeWhatsapp, artFrontUrl, artBackUrl, artRenderMode, presentation.mockupEnabled, presentation.realPhotosEnabled, staff.id]);
+    const [campaignResult] = await queries.createCampaignQuery2(connection, [code, title, subtitle, deadlineAt, pickupInstructions, representativeName, representativeWhatsapp, artFrontUrl, artBackUrl, artRenderMode, presentation.mockupEnabled, presentation.realPhotosEnabled, staff.id, receiver?.id ?? null]);
     for (const model of models) {
       for (const color of model.colors) {
         await queries.createCampaignQuery3(connection, [campaignResult.insertId, modelIds.get(model.modelCode), colorIds.get(color.name), model.unitPriceCents]);
@@ -603,7 +619,7 @@ export async function createCampaign({ staff, body }) {
     if (presentation.mockupEnabled) await validateMockupCoverage(connection, campaignResult.insertId);
     if (presentation.realPhotosEnabled) await validateRealPhotoCoverage(connection, campaignResult.insertId);
   });
-  return getCampaign(code, { includeCoupon: true });
+  return getCampaign(code, { includeCoupon: true, includeReceiver: true });
 }
 
 /**
@@ -649,6 +665,14 @@ export async function updateCampaign({ body }, code) {
       set("mockup_enabled", presentation.mockupEnabled);
       set("real_photos_enabled", presentation.realPhotosEnabled);
     }
+    if (body.receiverId !== undefined) {
+      const receiver = await resolveCampaignReceiver(connection, body.receiverId, campaign.receiver_id);
+      const nextReceiverId = receiver?.id ?? null;
+      if (Number(nextReceiverId ?? 0) !== Number(campaign.receiver_id ?? 0)) {
+        await assertCampaignReceiverChangeAllowed(connection, campaign.id, receiver?.infinitepay_handle ?? defaultInfinitePayHandle());
+        set("receiver_id", nextReceiverId);
+      }
+    }
     if (assignments.length > 0) {
       await queries.updateCampaignQuery2(connection, [...parameters, campaign.id], assignments.join(", "));
     }
@@ -689,7 +713,7 @@ export async function updateCampaign({ body }, code) {
   if (body.artworkConfig !== undefined || body.realPhotos !== undefined || body.realVideos !== undefined) {
     for (const url of changed.orphanCandidates) await removeOrphanUpload(url);
   }
-  return getCampaign(code, { includeCoupon: true });
+  return getCampaign(code, { includeCoupon: true, includeReceiver: true });
 }
 
 /**

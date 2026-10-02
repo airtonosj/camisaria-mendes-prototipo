@@ -46,6 +46,31 @@ Revisão por módulos e divisão proposta registradas em [revisão para commit](
 - `sharp` passou de devDependency para dependency. Campanha inexistente ou banco indisponível mantêm o HTML original.
 - Testes: `tests/unit/campaign-preview.test.mjs` e `tests/e2e/campaign-preview.spec.mjs`.
 
+## Recebedores de pagamento por campanha (30/09/2026)
+
+- Migração `025_campaign_receivers`: tabela `payment_receivers` (nome, e-mail, telefone, InfiniteTag única, ativo), `campaigns.receiver_id` e `payment_checkouts.handle`. Reexecutável: as colunas só são criadas se faltarem.
+- Recebedor não entra no painel; é só a conta InfinitePay de destino. Cadastro no cartão "Recebedores de pagamento" da aba Conta (`src/features/account/PaymentReceivers.tsx`), rotas `GET/POST /api/admin/receivers` e `PATCH /api/admin/receivers/:id`, todas com `requireStaff`. Sem exclusão; desativar só impede novas escolhas.
+- A InfiniteTag é digitada após um `$` fixo e formatada por `shared/receiver.mjs` (minúsculas, sem acento, espaço nem `$`), na tela e no servidor. Salvar pede confirmação da tag final.
+- Campanha escolhe o recebedor na etapa Informações; vazio mantém a conta padrão (`INFINITEPAY_HANDLE`). A página pública nunca recebe a conta de destino.
+- O link é criado com o handle do recebedor e esse handle fica gravado no checkout; o worker confere o `payment_check` com o handle gravado (legado `NULL` usa a conta padrão).
+- Trocar o recebedor da campanha, ou a InfiniteTag de um recebedor, é recusado com `RECEIVER_IN_USE` enquanto houver link emitido para a conta atual e não pago.
+- Verificação: `npm.cmd test` (27 unitários, 6 integrações, incluindo `tests/receivers.mjs`), build e `npm.cmd run test:e2e` (18 jornadas). Capturas desktop/celular em `qa-evidence/receivers/`.
+- Sem commit, push ou deploy. Em produção, a 025 roda na inicialização; fazer backup antes.
+
 ## Registro dos commits autorizados
 
 Implementação: `35be302`. Documentação e evidências acompanham o commit seguinte. A verificação dos arquivos novos preparados apontou espaços finais e linhas vazias extras em sete arquivos; corrigidos sem alteração de comportamento. Os resultados funcionais anteriores permanecem registrados acima. Nenhum push ou deploy foi executado.
+
+## Revisão dos recebedores (02/10/2026)
+
+- A seleção da conta e a reserva do checkout agora ocorrem na mesma transação, com bloqueio do pedido, campanha e recebedor. O handle é persistido antes da chamada ao provedor; a chamada de rede ocorre após o commit.
+- A troca de recebedor ou InfiniteTag também é bloqueada durante a criação do link, quando `locked_at` está preenchido. Antes, esse intervalo permitia alterar a conta antes de o link ser salvo.
+- Regressão em `tests/receivers.mjs`: provedor falso pausado durante a criação, bloqueio das duas alterações, recusa de checkout concorrente e reutilização sem emitir outro link.
+- `tests/receivers-migration.mjs`: schema completo até a 024, aplicação da 025 e repetição preservando cadastro. Integrações continuam sequenciais.
+- Links pendentes já emitidos são preservados, inclusive se a configuração da conta padrão mudar; sua conferência usa o handle gravado. Checkouts legados com handle `NULL` continuam dependendo da conta padrão.
+- A primeira execução encontrou o MySQL isolado desligado (`ECONNREFUSED` na porta 3317). A instância existente em `tmp/mysql-test` foi iniciada em loopback, sem binary log; nenhuma configuração de produção foi alterada.
+- Tipos, lint, 27 testes unitários, sete integrações e build aprovados. Integrações executadas em `camisaria_receivers_review_test`, com credenciais `TEST_DB_*` e provedor falso.
+- A confirmação da InfiniteTag agora mantém a frase em um único bloco, evitando sua divisão em colunas no celular. Jornada de recebedores repetida após o ajuste: desktop e celular aprovados; capturas em `qa-evidence/receivers/` inspecionadas.
+- A primeira execução das 18 jornadas passou nos casos, mas não encerrou no sandbox Windows. Foi interrompida após os testes; a repetição usa permissão para encerrar os próprios processos do Playwright, preservando processos alheios.
+- Repetição completa após o ajuste visual: `npm.cmd run test:e2e`, 18 jornadas aprovadas e encerramento normal. Build, lint e `git diff --check` também aprovados após as alterações.
+- Sem commit, push, deploy, compra ou envio real. Produção e contas reais InfinitePay permanecem não verificadas.

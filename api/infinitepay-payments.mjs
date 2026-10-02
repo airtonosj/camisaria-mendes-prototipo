@@ -51,76 +51,91 @@ function integrationReady() {
 export async function createCheckoutForOrder(orderNumber, whatsapp) {
   integrationReady();
   const lookup = whatsappLookupValues(whatsapp);
-  const [orders] = await pool.execute(
-    `SELECT o.id, o.order_number, o.customer_name, o.customer_whatsapp, o.customer_email,
-            o.status, o.payment_status, o.total_cents, c.title AS campaign_title
-       FROM orders o
-       JOIN campaigns c ON c.id = o.campaign_id
-      WHERE o.order_number = ? AND o.customer_whatsapp IN (${lookup.map(() => "?").join(", ")}) LIMIT 1`,
-    [orderNumber, ...lookup],
-  );
-  if (orders.length === 0) {
-    throw new PaymentIntegrationError(404, "ORDER_NOT_FOUND", "Pedido não encontrado com os dados informados.");
-  }
-  const order = orders[0];
-  if (order.status !== "active") {
-    throw new PaymentIntegrationError(409, "ORDER_CANCELLED", "Este pedido foi cancelado e não pode receber um novo checkout.");
-  }
-  if (order.payment_status === "paid") {
-    throw new PaymentIntegrationError(409, "ORDER_ALREADY_PAID", "Este pedido já está pago.");
-  }
-  if (["refunded", "partially_refunded"].includes(order.payment_status)) {
-    throw new PaymentIntegrationError(409, "ORDER_PAYMENT_CLOSED", "Este pedido possui historico de reembolso e precisa de atendimento da camisaria.");
-  }
+  const prepared = await withTransaction(async (connection) => {
+    // A seleção da conta e a reserva do checkout são atômicas com as edições
+    // da campanha e do recebedor. A chamada de rede ocorre após o commit.
+    const [orders] = await connection.execute(
+      `SELECT o.id, o.order_number, o.customer_name, o.customer_whatsapp, o.customer_email,
+              o.status, o.payment_status, o.total_cents, c.title AS campaign_title,
+              pr.infinitepay_handle AS receiver_handle
+         FROM orders o
+         JOIN campaigns c ON c.id = o.campaign_id
+         LEFT JOIN payment_receivers pr ON pr.id = c.receiver_id
+        WHERE o.order_number = ? AND o.customer_whatsapp IN (${lookup.map(() => "?").join(", ")}) LIMIT 1 FOR UPDATE`,
+      [orderNumber, ...lookup],
+    );
+    if (orders.length === 0) {
+      throw new PaymentIntegrationError(404, "ORDER_NOT_FOUND", "Pedido não encontrado com os dados informados.");
+    }
+    const order = orders[0];
+    if (order.status !== "active") {
+      throw new PaymentIntegrationError(409, "ORDER_CANCELLED", "Este pedido foi cancelado e não pode receber um novo checkout.");
+    }
+    if (order.payment_status === "paid") {
+      throw new PaymentIntegrationError(409, "ORDER_ALREADY_PAID", "Este pedido já está pago.");
+    }
+    if (["refunded", "partially_refunded"].includes(order.payment_status)) {
+      throw new PaymentIntegrationError(409, "ORDER_PAYMENT_CLOSED", "Este pedido possui historico de reembolso e precisa de atendimento da camisaria.");
+    }
 
-  const [existingRows] = await pool.execute(
-    "SELECT checkout_url, status FROM payment_checkouts WHERE order_id = ? AND provider = ? LIMIT 1",
-    [order.id, provider],
-  );
-  if (existingRows[0]?.checkout_url && existingRows[0].status === "pending") {
-    return { url: existingRows[0].checkout_url, reused: true };
-  }
+    // O dinheiro vai para o recebedor da campanha; sem recebedor, para a conta padrão.
+    const handle = order.receiver_handle || config.payments.infinitePay.handle;
+    const [existingRows] = await connection.execute(
+      "SELECT checkout_url, status, handle FROM payment_checkouts WHERE order_id = ? AND provider = ? LIMIT 1",
+      [order.id, provider],
+    );
+    // Um link pendente continua valendo mesmo que a conta padrão mude: o handle dele está
+    // gravado e a conferência usa essa conta. A troca de recebedor da campanha é recusada
+    // enquanto houver link assim (RECEIVER_IN_USE), então aqui ele sempre é da conta certa.
+    if (existingRows[0]?.checkout_url && existingRows[0].status === "pending") {
+      return { url: existingRows[0].checkout_url, reused: true };
+    }
 
-  const [items] = await pool.execute(
-    `SELECT oi.quantity, oi.unit_price_cents, oi.unit_discount_cents, oi.discounted_quantity,
-            sm.name AS model_name, co.name AS color_name, sz.code AS size_code
-       FROM order_items oi
-       JOIN campaign_variants cv ON cv.id = oi.campaign_variant_id
-       JOIN shirt_models sm ON sm.id = cv.shirt_model_id
-       JOIN colors co ON co.id = cv.color_id
-       JOIN sizes sz ON sz.id = oi.size_id
-      WHERE oi.order_id = ? ORDER BY oi.id`,
-    [order.id],
-  );
-  const computedTotal = items.reduce(
-    (total, item) => total
-      + Number(item.quantity) * Number(item.unit_price_cents)
-      - Number(item.discounted_quantity) * Number(item.unit_discount_cents),
-    0,
-  );
-  if (items.length === 0 || computedTotal !== Number(order.total_cents)) {
-    throw new PaymentIntegrationError(409, "ORDER_TOTAL_INVALID", "O pedido não passou na conferência de valor antes do checkout.");
-  }
+    const [items] = await connection.execute(
+      `SELECT oi.quantity, oi.unit_price_cents, oi.unit_discount_cents, oi.discounted_quantity,
+              sm.name AS model_name, co.name AS color_name, sz.code AS size_code
+         FROM order_items oi
+         JOIN campaign_variants cv ON cv.id = oi.campaign_variant_id
+         JOIN shirt_models sm ON sm.id = cv.shirt_model_id
+         JOIN colors co ON co.id = cv.color_id
+         JOIN sizes sz ON sz.id = oi.size_id
+        WHERE oi.order_id = ? ORDER BY oi.id`,
+      [order.id],
+    );
+    const computedTotal = items.reduce(
+      (total, item) => total
+        + Number(item.quantity) * Number(item.unit_price_cents)
+        - Number(item.discounted_quantity) * Number(item.unit_discount_cents),
+      0,
+    );
+    if (items.length === 0 || computedTotal !== Number(order.total_cents)) {
+      throw new PaymentIntegrationError(409, "ORDER_TOTAL_INVALID", "O pedido não passou na conferência de valor antes do checkout.");
+    }
 
-  await pool.execute(
-    `INSERT INTO payment_checkouts (order_id, provider, status, amount_cents)
-     VALUES (?, ?, 'pending', ?)
-     ON DUPLICATE KEY UPDATE amount_cents = VALUES(amount_cents)`,
-    [order.id, provider, order.total_cents],
-  );
-  const [claim] = await pool.execute(
-    `UPDATE payment_checkouts
-        SET locked_at = CURRENT_TIMESTAMP(3), last_error = NULL
-      WHERE order_id = ? AND provider = ? AND checkout_url IS NULL
-        AND (locked_at IS NULL OR locked_at < DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL ${staleLockMinutes} MINUTE))`,
-    [order.id, provider],
-  );
-  if (claim.affectedRows !== 1) {
-    throw new PaymentIntegrationError(409, "CHECKOUT_IN_PROGRESS", "O checkout deste pedido já está sendo preparado. Tente novamente em instantes.");
-  }
+    await connection.execute(
+      `INSERT INTO payment_checkouts (order_id, provider, status, amount_cents)
+       VALUES (?, ?, 'pending', ?)
+       ON DUPLICATE KEY UPDATE amount_cents = VALUES(amount_cents)`,
+      [order.id, provider, order.total_cents],
+    );
+    const [claim] = await connection.execute(
+      `UPDATE payment_checkouts
+          SET locked_at = CURRENT_TIMESTAMP(3), handle = ?, last_error = NULL
+        WHERE order_id = ? AND provider = ? AND checkout_url IS NULL
+          AND (locked_at IS NULL OR locked_at < DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL ${staleLockMinutes} MINUTE))`,
+      [handle, order.id, provider],
+    );
+    if (claim.affectedRows !== 1) {
+      throw new PaymentIntegrationError(409, "CHECKOUT_IN_PROGRESS", "O checkout deste pedido já está sendo preparado. Tente novamente em instantes.");
+    }
+    return { order, handle, items };
+  });
+  if (prepared.reused) return prepared;
+  const { order, handle, items } = prepared;
 
   try {
     const checkout = await createInfinitePayLink({
+      handle,
       orderNumber: order.order_number,
       customer: {
         name: order.customer_name,
@@ -150,9 +165,9 @@ export async function createCheckoutForOrder(orderNumber, whatsapp) {
     });
     await pool.execute(
       `UPDATE payment_checkouts
-          SET checkout_url = ?, status = 'pending', raw_response = ?, locked_at = NULL, last_error = NULL
+          SET checkout_url = ?, handle = ?, status = 'pending', raw_response = ?, locked_at = NULL, last_error = NULL
         WHERE order_id = ? AND provider = ?`,
-      [checkout.url, JSON.stringify(checkout.response), order.id, provider],
+      [checkout.url, handle, JSON.stringify(checkout.response), order.id, provider],
     );
     return { url: checkout.url, reused: false };
   } catch (error) {
@@ -311,7 +326,15 @@ export async function processInfinitePayEvents({ limit = 10 } = {}) {
       if (rows.length !== 1) throw new Error("Evento InfinitePay não encontrado.");
       const payload = typeof rows[0].payload === "string" ? JSON.parse(rows[0].payload) : rows[0].payload;
       const event = normalizeInfinitePayEvent(payload, "queue");
+      // A conferência consulta a conta que emitiu o link. Checkouts anteriores ao
+      // recebedor por campanha não têm handle gravado e usam a conta padrão.
+      const [checkoutRows] = await pool.execute(
+        `SELECT pc.handle FROM payment_checkouts pc JOIN orders o ON o.id = pc.order_id
+          WHERE o.order_number = ? AND pc.provider = ? LIMIT 1`,
+        [event.orderNsu, provider],
+      );
       const checked = await checkInfinitePayPayment({
+        handle: checkoutRows[0]?.handle ?? null,
         orderNsu: event.orderNsu,
         transactionNsu: event.transactionNsu,
         invoiceSlug: event.invoiceSlug,

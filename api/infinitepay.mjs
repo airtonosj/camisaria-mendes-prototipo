@@ -131,9 +131,10 @@ function providerItem(item, index) {
 }
 
 /** Exportado para o diagnostico poder imprimir o payload exato sem chamar o provedor. */
-export function infinitePayLinkPayload({ orderNumber, items, customer, redirectUrl, webhookUrl }) {
+/** `handle` é a conta de destino da campanha; sem ele, vale a conta padrão do servidor. */
+export function infinitePayLinkPayload({ handle, orderNumber, items, customer, redirectUrl, webhookUrl }) {
   return {
-    handle: config.payments.infinitePay.handle,
+    handle: handle || config.payments.infinitePay.handle,
     redirect_url: redirectUrl,
     webhook_url: webhookUrl,
     order_nsu: orderNumber,
@@ -152,9 +153,10 @@ export async function createInfinitePayLink(input, options) {
   return { url: assertCheckoutUrl(response.url), payload, response };
 }
 
-export async function checkInfinitePayPayment({ orderNsu, transactionNsu, invoiceSlug }, options) {
+/** Confere na mesma conta que emitiu o link: `handle` vem gravado no checkout. */
+export async function checkInfinitePayPayment({ handle, orderNsu, transactionNsu, invoiceSlug }, options) {
   const response = await postJson("/payment_check", {
-    handle: config.payments.infinitePay.handle,
+    handle: handle || config.payments.infinitePay.handle,
     order_nsu: orderNsu,
     transaction_nsu: transactionNsu,
     slug: invoiceSlug,

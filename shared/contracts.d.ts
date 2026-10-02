@@ -98,6 +98,8 @@ export type ApiCampaign = {
   realPhotos?: CampaignRealPhotoConfig[];
   realVideos?: CampaignRealVideoConfig[];
   activeCoupon?: CampaignCoupon | null;
+  /** Só no detalhe do painel; a página pública nunca recebe a conta de destino. */
+  receiver?: CampaignReceiverSummary | null;
   variants: ApiCampaignVariant[];
   sizes: ApiCampaignSize[];
 };
@@ -203,7 +205,27 @@ export type ApiAdminCampaign = {
   canDelete: boolean;
   activeCoupon: CampaignCoupon | null;
   couponHistory: CampaignCouponStats[];
+  /** Conta InfinitePay de destino. `null` usa a conta padrão do servidor. */
+  receiver: CampaignReceiverSummary | null;
 };
+
+export type CampaignReceiverSummary = { id: number; name: string; infinitepayHandle: string; active: boolean };
+
+/** Recebedor de pagamento: só uma conta InfinitePay de destino, sem acesso ao painel. */
+export type ApiPaymentReceiver = {
+  id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  /** InfiniteTag sem o cifrão. */
+  infinitepayHandle: string;
+  active: boolean;
+  campaigns: Array<{ code: string; title: string }>;
+};
+
+export type CreateReceiverPayload = { name: string; email?: string | null; phone?: string | null; infinitepayHandle: string };
+
+export type UpdateReceiverPayload = Partial<CreateReceiverPayload> & { active?: boolean };
 
 export type ApiCampaignOrder = {
   number: string;
@@ -276,6 +298,7 @@ export type CreateCampaignPayload = {
   realPhotos?: CampaignRealPhotoConfig[];
   realVideos?: CampaignRealVideoConfig[];
   coupon?: CampaignCouponPayload | null;
+  receiverId?: number | null;
   models: CampaignModelPayload[];
 };
 
@@ -297,6 +320,7 @@ export type UpdateCampaignPayload = {
   realPhotos?: CampaignRealPhotoConfig[];
   realVideos?: CampaignRealVideoConfig[];
   coupon?: CampaignCouponPayload | null;
+  receiverId?: number | null;
   models?: CampaignModelPayload[];
 };
 
