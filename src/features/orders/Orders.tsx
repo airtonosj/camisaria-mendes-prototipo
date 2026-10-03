@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { PickupEmailDialog } from "../../components/PickupEmailDialog";
 import { cancelOrderInApi, changeCampaignPhaseInApi, registerOrderRefundInApi } from "../../api";
 import { paymentMethodLabel } from "../../payment";
+import { formattedWhatsapp } from "../../phone";
 import type { CampaignPhaseCode, PaymentStatusCode } from "../../api";
 import { phaseOrder, phaseMeta, paymentLabels, deliveryLabels, effectiveDelivery, panelOrderItems, formatCents, formatOrderDateTime, errorMessage } from "../admin/model";
 import type { PanelData } from "../admin/model";
@@ -313,7 +314,7 @@ export function Orders({ data }: { data: PanelData }) {
               {filteredOrders.map((order) => (
                 <div className="campaign-orders-row" key={order.number}>
                   <button className="campaign-order-number" type="button" title={"Ver detalhes do pedido " + order.number} onClick={() => setViewingOrderNumber(order.number)}><strong>#{order.number}</strong><small className={order.status === "cancelled" ? "is-cancelled" : ""}>{order.status === "cancelled" ? "Cancelado" : "Ver detalhes"}{order.createdAt && " · " + formatOrderDateTime(order.createdAt, true)}</small></button>
-                  <span>{order.customer}</span><span>{order.whatsapp || "—"}</span><span>{order.quantity}</span>
+                  <span>{order.customer}</span><span>{order.whatsapp ? formattedWhatsapp(order.whatsapp) : "—"}</span><span>{order.quantity}</span>
                   <span className="campaign-order-paid-value">{["paid", "refunded", "partially_refunded"].includes(order.paymentStatus) ? formatCents(order.totalCents) : "—"}{order.paymentStatus === "refunded" && <small>Estorno integral</small>}{order.paymentStatus === "partially_refunded" && <small>Estorno parcial</small>}</span>
                   <span className="campaign-order-coupon">{order.couponCode ? <>Sim<small>{order.couponCode}</small></> : "Não"}</span>
                   <span className={`order-payment order-payment--${order.paymentStatus}`}>
