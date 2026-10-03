@@ -100,7 +100,6 @@ test('pickup preview never queues notifications',async({page,request})=>{
  try {
  const before=await count();await login(page);await page.getByRole('button',{name:'Pedidos',exact:false}).first().click();
  await page.mouse.move(1000,100);
- await page.getByRole('button',{name:'Selecionar campanha',exact:true}).click();
  await page.locator('.orders-campaign-list button').filter({hasText:campaign.title}).click();
  await page.getByRole('button',{name:'Avisar compradores',exact:true}).click();
  await expect(page.getByRole('dialog')).toBeVisible();

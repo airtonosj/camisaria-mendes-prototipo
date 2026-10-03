@@ -36,6 +36,8 @@ export function usePanelData(): PanelData {
             subtitle: campaign.subtitle,
             phase: campaign.phase,
             deadlineLabel: formatDeadline(campaign.deadlineAt),
+            createdAt: campaign.createdAt,
+            deadlineAt: campaign.deadlineAt,
             representative: campaign.representative.name,
             artFront: campaign.artFrontUrl ?? shirtModels[0].image,
             orderCount: campaign.orderCount,

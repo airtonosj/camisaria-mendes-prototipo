@@ -61,6 +61,8 @@ export type PanelCampaign = {
   subtitle?: string | null;
   phase: CampaignPhaseCode;
   deadlineLabel: string;
+  createdAt?: string;
+  deadlineAt?: string;
   representative: string;
   artFront: string;
   orderCount: number;

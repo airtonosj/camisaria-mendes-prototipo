@@ -257,6 +257,7 @@ export async function listCampaigns() {
     subtitle: row.subtitle,
     phase: row.phase,
     deadlineAt: row.deadline_at,
+    createdAt: row.created_at,
     pickupInstructions: row.pickup_instructions,
     representative: { name: row.representative_name, whatsapp: row.representative_whatsapp },
     artFrontUrl: row.cover_art_url,

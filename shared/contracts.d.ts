@@ -190,6 +190,8 @@ export type CampaignCouponStats = {
 };
 
 export type ApiAdminCampaign = {
+  /** Data de criação usada como início no resumo administrativo. */
+  createdAt?: string;
   basePrices?: Array<{ modelName: string; minPriceCents: number; maxPriceCents: number }>;
   code: string;
   title: string;

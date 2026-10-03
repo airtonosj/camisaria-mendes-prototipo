@@ -94,7 +94,7 @@ export function getPublicCampaignCouponQuery1(executor, values) {
 export function listCampaignsQuery1(executor, values) {
   // Aggregate orders before joining: one row per campaign, including under
   // MariaDB ONLY_FULL_GROUP_BY (which cannot infer MySQL's functional dependencies).
-  return executor.execute(`SELECT c.id, c.code, c.title, c.subtitle, c.phase, c.deadline_at, c.pickup_instructions,
+  return executor.execute(`SELECT c.id, c.code, c.title, c.subtitle, c.phase, c.created_at, c.deadline_at, c.pickup_instructions,
             c.representative_name, c.representative_whatsapp, c.art_front_url, c.art_back_url, c.art_render_mode,
             COALESCE(
               c.art_front_url,

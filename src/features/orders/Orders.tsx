@@ -20,7 +20,7 @@ export function Orders({ data }: { data: PanelData }) {
   const [paymentFilter, setPaymentFilter] = useState<"all" | PaymentStatusCode>("paid");
   const [campaignSearch, setCampaignSearch] = useState("");
   const [phaseFilter, setPhaseFilter] = useState<"all" | CampaignPhaseCode>("all");
-  const pickerRef = useRef<HTMLDialogElement>(null);
+  const [campaignMenuOpen, setCampaignMenuOpen] = useState(true);
   const pickerSearchRef = useRef<HTMLInputElement>(null);
   const [feedback, setFeedback] = useState("");
   const [confirmingReturn, setConfirmingReturn] = useState(false);
@@ -72,7 +72,7 @@ export function Orders({ data }: { data: PanelData }) {
     setSelectedCode(code);
     setSearch("");
     setPaymentFilter("paid");
-    pickerRef.current?.close();
+
     setFeedback("");
     setConfirmingReturn(false);
     setReturnReason("");
@@ -196,36 +196,34 @@ export function Orders({ data }: { data: PanelData }) {
   return (
     <div className="admin-content admin-orders-workspace">
       <section className="orders-flow-shell" aria-label="Pedidos organizados por campanha">
-        <aside className="orders-campaign-rail orders-campaign-rail--compact">
-          <button className="orders-picker-launch" type="button" title="Selecionar campanha" aria-label="Selecionar campanha" onClick={() => { pickerRef.current?.showModal(); pickerSearchRef.current?.focus(); }}>
-            <span className="material-symbols-rounded" aria-hidden="true">search</span><span className="orders-picker-launch-copy">Trocar campanha</span>
-          </button>
+        <aside className={'orders-campaign-rail orders-campaign-rail--list' + (campaignMenuOpen ? '' : ' is-collapsed')} aria-label="Campanhas">
+          <header className="orders-campaign-menu-header"><button className="orders-picker-launch" type="button" title={campaignMenuOpen ? 'Ocultar campanhas' : 'Mostrar campanhas'} aria-label={campaignMenuOpen ? 'Ocultar campanhas' : 'Mostrar campanhas'} aria-expanded={campaignMenuOpen} aria-controls="orders-campaign-menu" onClick={() => setCampaignMenuOpen(!campaignMenuOpen)}><span className="material-symbols-rounded" aria-hidden="true">menu</span></button><h3>Campanhas</h3></header>
+          <div id="orders-campaign-menu" hidden={!campaignMenuOpen}>
+            <div className="orders-picker-filters">
+              <label><span>Pesquisar campanha</span><input ref={pickerSearchRef} value={campaignSearch} onChange={(event) => setCampaignSearch(event.target.value)} placeholder="Nome ou código da campanha" /></label>
+              <label><span>Filtrar por fase</span><select value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value as 'all' | CampaignPhaseCode)}><option value="all">Todas as fases</option>{phaseOrder.map((phase) => <option key={phase} value={phase}>{phaseMeta[phase].label}</option>)}</select></label>
+            </div>
+            <p className="orders-picker-count" role="status">{filteredCampaigns.length} de {campaigns.length} campanhas</p>
+            <div className="orders-campaign-list">
+              {filteredCampaigns.map((campaign) => <button className={campaign.code === selected.code ? 'is-selected' : ''} type="button" onClick={() => selectCampaign(campaign.code)} key={campaign.code} aria-pressed={campaign.code === selected.code}>
+                <img src={campaign.artFront} alt={"Imagem da campanha " + campaign.title} /><span className="orders-campaign-card-copy"><strong>{campaign.title}</strong><em className={'campaign-flow-badge campaign-flow-badge--' + phaseMeta[campaign.phase].tone}>{phaseMeta[campaign.phase].label}</em><span><b>{campaign.orderCount}</b> pedidos <b>{formatCents(campaign.paidTotalCents)}</b> pagos</span></span>
+              </button>)}
+              {filteredCampaigns.length === 0 && <p className="orders-picker-empty">Nenhuma campanha encontrada com esses filtros.</p>}
+            </div>
+          </div>
         </aside>
-        <dialog className="orders-campaign-picker" ref={pickerRef} aria-labelledby="campaign-picker-title" onClick={(event) => { if (event.target === event.currentTarget) { const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) event.currentTarget.close(); } }}>
-          <header><h3 id="campaign-picker-title">Selecionar campanha</h3><button type="button" aria-label="Fechar seletor de campanhas" onClick={() => pickerRef.current?.close()}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
-          <div className="orders-picker-filters">
-            <label><span>Pesquisar campanha</span><input ref={pickerSearchRef} value={campaignSearch} onChange={(event) => setCampaignSearch(event.target.value)} placeholder="Nome ou código da campanha" /></label>
-            <label><span>Filtrar por fase</span><select value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value as "all" | CampaignPhaseCode)}><option value="all">Todas as fases</option>{phaseOrder.map((phase) => <option key={phase} value={phase}>{phaseMeta[phase].label}</option>)}</select></label>
-          </div>
-          <p className="orders-picker-count" role="status">{filteredCampaigns.length} de {campaigns.length} campanhas</p>
-          <div className="orders-campaign-list">
-            {filteredCampaigns.map((campaign) => <button className={campaign.code === selected.code ? "is-selected" : ""} type="button" onClick={() => selectCampaign(campaign.code)} key={campaign.code} aria-pressed={campaign.code === selected.code}>
-              <img src={campaign.artFront} alt="" /><span className="orders-campaign-card-copy"><strong>{campaign.title}</strong><em className={"campaign-flow-badge campaign-flow-badge--" + phaseMeta[campaign.phase].tone}>{phaseMeta[campaign.phase].label}</em><span>{campaign.code}</span></span>
-            </button>)}
-            {filteredCampaigns.length === 0 && <p className="orders-picker-empty">Nenhuma campanha encontrada com esses filtros.</p>}
-          </div>
-        </dialog>
 
         <div className="orders-campaign-detail">
           <header className="orders-selected-header">
             <img src={selected.artFront} alt={`Arte da campanha ${selected.title}`} />
-            <div><span>Campanha selecionada</span><h2>{selected.title}</h2><p>{selected.deadlineLabel} · Retirada com {selected.representative}</p></div>
+            <div><span>Campanha selecionada</span><h2>{selected.title}</h2><p>Retirada com {selected.representative}</p></div>
             <div className="orders-email-actions">
               <button className="pickup-launch" type="button" title="Histórico de e-mails" aria-label="Histórico de e-mails" disabled={mode !== 'live'} onClick={() => setEmailHistoryOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">history</span></button>
               {selected.phase === 'ready_for_delivery' && <button className="pickup-launch" type="button" title="Avisar compradores" aria-label="Avisar compradores" disabled={mode !== 'live'} onClick={() => setPickupOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">mail</span></button>}
             </div>
           </header>
           <div className="orders-campaign-summary" aria-label="Informações gerais da campanha">
+            <article><span>Prazo</span><strong>Início: {selected.createdAt ? new Date(selected.createdAt).toLocaleDateString("pt-BR") : "Não informado"}</strong><small>Fim: {selected.deadlineAt ? new Date(selected.deadlineAt).toLocaleDateString("pt-BR") : selected.deadlineLabel}</small><small>Entrega não definida</small></article>
             <article><span>Preços base</span>{selected.basePrices?.length ? selected.basePrices.map((price) => <strong key={price.modelName}>{price.modelName}: {formatCents(price.minPriceCents)}{price.maxPriceCents !== price.minPriceCents && " a " + formatCents(price.maxPriceCents)}</strong>) : <strong>Não disponível</strong>}</article>
             <article><span>Peças pagas</span><strong>{ordersLoaded ? pieceCount + " peças" : "Carregando…"}</strong><small>{ordersLoaded && [...paidPieces].map(([model, count]) => model + ": " + count).join(" · ")}</small></article>
             <article><span>Pagamentos confirmados</span><strong>{formatCents(selected.paidTotalCents)}</strong><small>{ordersLoaded ? paidOrders.length + " pedidos pagos" : "Carregando pedidos…"}</small><small>{ordersLoaded ? paidCouponOrders + (paidCouponOrders === 1 ? " pedido pago com cupom" : " pedidos pagos com cupom") : "Carregando cupons…"}</small></article>

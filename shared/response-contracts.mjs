@@ -10,6 +10,7 @@ function adminCampaign(value) {
   const receiver = value.receiver;
   return string(value.code) && string(value.title) && campaignPhases.includes(value.phase)
     && string(value.deadlineAt) && Number.isFinite(Date.parse(value.deadlineAt))
+    && (value.createdAt === undefined || (string(value.createdAt) && Number.isFinite(Date.parse(value.createdAt))))
     && object(value.representative) && string(value.representative.name) && nullableString(value.representative.whatsapp)
     && nullableString(value.artFrontUrl) && nullableString(value.artBackUrl)
     && money(value.orderCount) && money(value.paidTotalCents) && typeof value.canDelete === 'boolean'

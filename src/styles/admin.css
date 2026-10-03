@@ -1913,3 +1913,26 @@ input[aria-invalid="true"] { border-color: #b83b3b; }
 .admin-orders-workspace .campaign-orders-scroll { max-height: 65dvh; overflow: auto; scrollbar-gutter: stable; }
 .admin-orders-workspace .campaign-orders-head { position: sticky; top: 0; z-index: 1; background: #fff; }
 .admin-orders-workspace .campaign-orders-scroll:focus-visible { outline: 2px solid #087fca; outline-offset: 2px; }
+.admin-orders-workspace .orders-flow-shell { grid-template-columns: 300px minmax(0, 1fr); }
+.admin-orders-workspace .orders-flow-shell:has(.orders-campaign-rail.is-collapsed) { grid-template-columns: 66px minmax(0, 1fr); }
+.orders-campaign-rail.orders-campaign-rail--list { padding: 16px 12px; }
+.orders-campaign-rail > header.orders-campaign-menu-header { display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 0 0 15px; }
+.orders-campaign-rail--list .orders-picker-launch { width: 42px; flex: 0 0 42px; justify-content: center; }
+.orders-campaign-menu-header h3 { margin: 0; font-size: .85rem; }
+.orders-campaign-rail.is-collapsed .orders-campaign-menu-header h3 { display: none; }
+.orders-campaign-rail [hidden] { display: none; }
+.orders-campaign-rail--list .orders-campaign-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.orders-campaign-rail--list .orders-campaign-list > button { width: 100%; height: auto; grid-template-columns: 74px minmax(0, 1fr); padding: 10px; gap: 10px; }
+.orders-campaign-rail--list .orders-campaign-list > button > img { width: 74px; height: 80px; object-fit: contain; }
+.orders-campaign-rail--list .orders-campaign-card-copy > strong { font-size: .75rem; line-height: 1.4; }
+.orders-campaign-rail--list .orders-campaign-card-copy > span { display: flex; flex-wrap: wrap; gap: 4px; font-size: .68rem; }
+.orders-campaign-rail--list .orders-campaign-card-copy b { color: #394044; font-weight: 600; }
+.admin-orders-workspace .orders-campaign-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .admin-orders-workspace .orders-campaign-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  .admin-orders-workspace .orders-flow-shell, .admin-orders-workspace .orders-flow-shell:has(.orders-campaign-rail.is-collapsed) { display: block; }
+  .orders-campaign-rail.orders-campaign-rail--list { border-right: 0; border-bottom: 1px solid #dce1de; padding: 12px 14px; }
+  .orders-campaign-rail.is-collapsed .orders-campaign-menu-header h3 { display: block; }
+  .admin-orders-workspace .orders-campaign-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .orders-campaign-rail--list .orders-picker-filters input, .orders-campaign-rail--list .orders-picker-filters select { font-size: 16px; }
+}
