@@ -200,8 +200,8 @@ export function Orders({ data }: { data: PanelData }) {
           <header className="orders-campaign-menu-header"><button className="orders-picker-launch" type="button" title={campaignMenuOpen ? 'Ocultar campanhas' : 'Mostrar campanhas'} aria-label={campaignMenuOpen ? 'Ocultar campanhas' : 'Mostrar campanhas'} aria-expanded={campaignMenuOpen} aria-controls="orders-campaign-menu" onClick={() => setCampaignMenuOpen(!campaignMenuOpen)}><span className="material-symbols-rounded" aria-hidden="true">menu</span></button><h3>Campanhas</h3></header>
           <div id="orders-campaign-menu" hidden={!campaignMenuOpen}>
             <div className="orders-picker-filters">
-              <label><span>Pesquisar campanha</span><input ref={pickerSearchRef} value={campaignSearch} onChange={(event) => setCampaignSearch(event.target.value)} placeholder="Nome ou código da campanha" /></label>
-              <label><span>Filtrar por fase</span><select value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value as 'all' | CampaignPhaseCode)}><option value="all">Todas as fases</option>{phaseOrder.map((phase) => <option key={phase} value={phase}>{phaseMeta[phase].label}</option>)}</select></label>
+              <label><input aria-label="Pesquisar campanha" ref={pickerSearchRef} value={campaignSearch} onChange={(event) => setCampaignSearch(event.target.value)} placeholder="Pesquisar nome ou código" /></label>
+              <label><select aria-label="Filtrar por fase" value={phaseFilter} onChange={(event) => setPhaseFilter(event.target.value as 'all' | CampaignPhaseCode)}><option value="all">Todas as fases</option>{phaseOrder.map((phase) => <option key={phase} value={phase}>{phaseMeta[phase].label}</option>)}</select></label>
             </div>
             <p className="orders-picker-count" role="status">{filteredCampaigns.length} de {campaigns.length} campanhas</p>
             <div className="orders-campaign-list">

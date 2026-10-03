@@ -1918,6 +1918,8 @@ input[aria-invalid="true"] { border-color: #b83b3b; }
 .orders-campaign-rail.orders-campaign-rail--list { padding: 16px 12px; }
 .orders-campaign-rail > header.orders-campaign-menu-header { display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 0 0 15px; }
 .orders-campaign-rail--list .orders-picker-launch { width: 42px; flex: 0 0 42px; justify-content: center; }
+.orders-campaign-rail--list .orders-picker-filters { gap: 9px; }
+.orders-campaign-rail--list .orders-picker-filters input, .orders-campaign-rail--list .orders-picker-filters select { min-height: 42px; padding: 10px; font-size: 13px; }
 .orders-campaign-menu-header h3 { margin: 0; font-size: .85rem; }
 .orders-campaign-rail.is-collapsed .orders-campaign-menu-header h3 { display: none; }
 .orders-campaign-rail [hidden] { display: none; }
