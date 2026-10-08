@@ -4,6 +4,7 @@ import { createInfinitePayCheckout, createOrderInApi, validateCampaignCoupon } f
 import type { CampaignCoupon } from "../../api";
 import type { PrivateCampaign, ShirtModelName, SizeCode } from "../../data";
 import { shirtModels, sizeGroupLabels } from "../../data";
+import { CampaignDeliveryInfo } from "../../components/CampaignDeliveryInfo";
 import { Brand } from "../../components/Brand";
 import { ContactInput } from "../../components/ContactInput";
 import { normalizeCustomerEmail, parseWhatsapp } from "../../../shared/contact.mjs";
@@ -25,6 +26,17 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
   const [size, setSize] = useState<SizeCode>(() => campaignSizes(campaign, initialModel)[0] ?? "M");
   const [quantity, setQuantity] = useState(1);
   const [cart, setCart] = useState<CartItem[]>(() => readCart(campaign));
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const cartDialog = useRef<HTMLDialogElement | null>(null);
+  useEffect(() => {
+    const dialog = cartDialog.current;
+    if (drawerOpen && dialog && !dialog.open) dialog.showModal();
+    if (!drawerOpen && dialog?.open) dialog.close();
+    if (!drawerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [drawerOpen]);
   const [cartMessage, setCartMessage] = useState("");
   const [couponInput, setCouponInput] = useState(initialCouponCode ?? "");
   const [appliedCoupon, setAppliedCoupon] = useState<CampaignCoupon | null>(null);
@@ -233,6 +245,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
       : [...current, nextItem]);
     setCartMessage(`${selectedModel.name}, ${selectedColor.name}, tamanho ${size} adicionado ao carrinho.`);
     setQuantity(1);
+    setDrawerOpen(true);
     return true;
   }
 
@@ -366,12 +379,29 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
         </div>
       </header>
 
+      {step === "model" && cartUnits > 0 && <button type="button" className="campaign-cart-launcher" aria-label={`Abrir carrinho, ${cartUnits} ${cartUnits === 1 ? "peça" : "peças"}`} aria-haspopup="dialog" onClick={() => setDrawerOpen(true)}><span className="material-symbols-rounded" aria-hidden="true">shopping_cart</span><span className="campaign-cart-badge" aria-hidden="true">{cartUnits}</span></button>}
+      <dialog ref={cartDialog} className="campaign-drawer-dialog" aria-labelledby="campaign-drawer-title" onClose={() => setDrawerOpen(false)} onClick={(event) => { if (event.target === event.currentTarget) setDrawerOpen(false); }}>
+        <section className="campaign-drawer-panel">
+          <header className="campaign-drawer-header"><h2 id="campaign-drawer-title">Seu carrinho <span>({cartUnits})</span></h2><button type="button" aria-label="Fechar carrinho" onClick={() => setDrawerOpen(false)}><span className="material-symbols-rounded" aria-hidden="true">close</span></button></header>
+          <div className="campaign-drawer-body">
+            {cart.length > 0 ? <><p className="campaign-drawer-feedback" role="status"><span className="material-symbols-rounded" aria-hidden="true">check_circle</span>{cartMessage || `${cartUnits} ${cartUnits === 1 ? "peça selecionada" : "peças selecionadas"}`}</p>{cart.map((item) => { const key = itemKey(item); const discount = (couponDiscountsByModel[item.modelName] ?? 0) * (couponAllocation.discountedQuantitiesByItem[key] ?? 0); return <article className="campaign-drawer-item" key={key}><div className="campaign-drawer-photo"><ArtThumbs campaign={campaign} label="Camisa selecionada" items={[item]} /></div><div className="campaign-drawer-copy"><strong>{item.modelName === "Comum" ? "Padrão" : item.modelName}</strong><b>{formatCents(item.quantity * item.unitPriceCents - discount)}</b><dl><div><dt>Cor:</dt><dd><i style={{ background: item.color.hex }} />{item.color.name}</dd></div><div><dt>Tamanho:</dt><dd>{item.size}</dd></div></dl><div className="campaign-drawer-quantity" aria-label={`Quantidade de ${item.modelName}, ${item.color.name}, ${item.size}`}><span>Quantidade:</span><button type="button" aria-label="Diminuir quantidade no carrinho" onClick={() => updateCartQuantity(key,item.quantity-1)}>−</button><output>{item.quantity}</output><button type="button" aria-label="Aumentar quantidade no carrinho" onClick={() => updateCartQuantity(key,item.quantity+1)}>+</button></div><button type="button" className="campaign-drawer-remove" onClick={() => setCart((current) => current.filter((line) => itemKey(line) !== key))}>Remover</button></div></article>; })}</> : <div className="campaign-drawer-empty"><span className="material-symbols-rounded" aria-hidden="true">shopping_cart</span><h3>Seu carrinho está vazio</h3><p>Escolha corte, cor e tamanho para adicionar sua primeira peça.</p></div>}
+          </div>
+          {cart.length > 0 ?                   <footer className="campaign-drawer-footer">
+                    {appliedCoupon && <><div className="campaign-discount-row"><span>Subtotal</span><b>{formatCents(cartSubtotal)}</b></div>{couponEligible ? <div className="campaign-discount-row is-saving"><span>Cupom {appliedCoupon.code}{couponMaximumDiscountQuantity ? ` · ${couponAllocation.discountedUnits} peças com desconto` : ""}</span><b>− {formatCents(cartDiscount)}</b></div> : <div className="campaign-discount-row"><span>Cupom {appliedCoupon.code} · a partir de {couponMinimumQuantity} peças</span><b>Faltam {couponMissingUnits}</b></div>}</>}
+                    <div><span>Total</span><strong>{formatCents(cartTotal)}</strong></div>
+                    <button type="button" disabled={Boolean(appliedCoupon && !couponEligible)} onClick={() => { setDrawerOpen(false); goToStep("details"); }}>Revisar pedido</button>
+                  </footer> : null}
+          <button type="button" className="campaign-drawer-continue" onClick={() => setDrawerOpen(false)}>Continuar escolhendo</button>
+        </section>
+      </dialog>
+
       {step === "model" ? (
         <main className="campaign-builder">
           <section className="campaign-builder-heading">
             <h1>{campaign.title}</h1>
             <div className="campaign-progress-copy"><strong>1 de 3</strong><span>·</span><span>Monte seu pedido</span></div>
             <div className="campaign-progress" aria-hidden="true"><span /></div>
+            <CampaignDeliveryInfo className="campaign-delivery-mobile" representative={campaign.representative} expectedOn={campaign.deliveryExpectedOn} note={campaign.deliveryNote} />
           </section>
           <form className="campaign-configurator" onSubmit={submitConfiguration}>
             <section className="campaign-art-stage">
@@ -420,20 +450,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
               </div>
               {selectedGalleryMedia.length > 1 && <div className="campaign-gallery-dots" role="group" aria-label="Escolher conteúdo da galeria">{selectedGalleryMedia.map((media, index) => <button className={galleryIndex === index ? "is-active" : ""} type="button" aria-label={`Ir para ${media.type === "mockup" ? "o mockup" : media.type === "video" ? "o vídeo" : `a foto ${selectedGalleryMedia.slice(0, index + 1).filter((item) => item.type === "image").length}`}`} aria-pressed={galleryIndex === index} onClick={() => goToGalleryItem(index)} key={`dot-${media.type === "mockup" ? "mockup" : media.url}`} />)}</div>}
               <p className="campaign-art-note">{selectedMedia?.type === "video" ? `Vídeo da camisa ${selectedColor.name}. Reprodução automática sem som.` : selectedMedia?.type === "image" ? `Foto real da camisa ${selectedColor.name}.` : art.mode === "legacy_mockup" ? "Imagem preservada da campanha original." : `${selectedModel.name === "Comum" ? "Padrão" : selectedModel.name} · ${selectedColor.name} · ${previewSide === "front" ? "Frente" : "Costas"}`}</p>
-              {cart.length > 0 && (
-                <section className="campaign-cart-preview" aria-labelledby="cart-preview-title">
-                  <header>
-                    <div><h2 id="cart-preview-title">Seu carrinho</h2><span>{cartUnits} {cartUnits === 1 ? "peça" : "peças"}</span></div>
-                    <button type="button" onClick={() => setCart([])}>Limpar</button>
-                  </header>
-                  <CartLines items={cart} discountsByModel={couponDiscountsByModel} discountedQuantitiesByItem={couponAllocation.discountedQuantitiesByItem} editable onQuantity={updateCartQuantity} onRemove={(key) => setCart((current) => current.filter((item) => itemKey(item) !== key))} />
-                  <footer className="campaign-cart-summary">
-                    {appliedCoupon && <><div className="campaign-discount-row"><span>Subtotal</span><b>{formatCents(cartSubtotal)}</b></div>{couponEligible ? <div className="campaign-discount-row is-saving"><span>Cupom {appliedCoupon.code}{couponMaximumDiscountQuantity ? ` · ${couponAllocation.discountedUnits} peças com desconto` : ""}</span><b>− {formatCents(cartDiscount)}</b></div> : <div className="campaign-discount-row"><span>Cupom {appliedCoupon.code} · a partir de {couponMinimumQuantity} peças</span><b>Faltam {couponMissingUnits}</b></div>}</>}
-                    <div><span>Total</span><strong>{formatCents(cartTotal)}</strong></div>
-                    <button type="button" disabled={Boolean(appliedCoupon && !couponEligible)} onClick={() => goToStep("details")}>Revisar pedido</button>
-                  </footer>
-                </section>
-              )}
+              <CampaignDeliveryInfo className="campaign-delivery-desktop" representative={campaign.representative} expectedOn={campaign.deliveryExpectedOn} note={campaign.deliveryNote} />
             </section>
             <section className="campaign-choice-stage campaign-cut-stage">
               <h2>1. Escolha o corte</h2>
@@ -472,7 +489,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
         <main className="campaign-checkout">
           <section className="campaign-checkout-heading"><h1>Revise e identifique</h1><div className="campaign-progress-copy"><strong>2 de 3</strong><span>·</span><span>Seus dados</span></div><div className="campaign-progress campaign-progress--details" aria-hidden="true"><span /></div></section>
           <form className="campaign-customer-form" onSubmit={submitCustomerDetails}>
-            <section className="checkout-order-review" aria-labelledby="order-review-title"><h2 id="order-review-title">Seu pedido</h2><div className="checkout-product-row"><ArtThumbs campaign={campaign} label={`Camisa da campanha ${campaign.title}`} items={cart} /><div className="checkout-product-copy"><CartLines items={cart} discountsByModel={couponDiscountsByModel} discountedQuantitiesByItem={couponAllocation.discountedQuantitiesByItem} /><div className="checkout-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span><span>Retirada com <b>{campaign.representative}</b></span></div>{appliedCoupon && <div className="checkout-discount"><span>Cupom {appliedCoupon.code}{couponMaximumDiscountQuantity ? ` · ${couponAllocation.discountedUnits} peças` : ""}</span><strong>− {formatCents(cartDiscount)}</strong></div>}<div className="checkout-total"><span>{cartUnits} {cartUnits === 1 ? "peça" : "peças"} · Total</span><strong>{formatCents(cartTotal)}</strong></div></div></div><button className="checkout-edit" type="button" onClick={() => goToStep("model")}>Editar carrinho</button></section>
+            <section className="checkout-order-review" aria-labelledby="order-review-title"><h2 id="order-review-title">Seu pedido</h2><div className="checkout-product-row"><ArtThumbs campaign={campaign} label={`Camisa da campanha ${campaign.title}`} items={cart} /><div className="checkout-product-copy"><CartLines items={cart} discountsByModel={couponDiscountsByModel} discountedQuantitiesByItem={couponAllocation.discountedQuantitiesByItem} /><CampaignDeliveryInfo representative={campaign.representative} expectedOn={campaign.deliveryExpectedOn} note={campaign.deliveryNote} />{appliedCoupon && <div className="checkout-discount"><span>Cupom {appliedCoupon.code}{couponMaximumDiscountQuantity ? ` · ${couponAllocation.discountedUnits} peças` : ""}</span><strong>− {formatCents(cartDiscount)}</strong></div>}<div className="checkout-total"><span>{cartUnits} {cartUnits === 1 ? "peça" : "peças"} · Total</span><strong>{formatCents(cartTotal)}</strong></div></div></div><button className="checkout-edit" type="button" onClick={() => goToStep("model")}>Editar carrinho</button></section>
             <section className="checkout-customer-fields" aria-labelledby="customer-fields-title"><h2 id="customer-fields-title">Quem vai retirar?</h2><label><span className="sr-only">Nome completo</span><input type="text" name="name" autoComplete="name" placeholder="Nome completo" value={customerName} onChange={(event) => setCustomerName(event.target.value)} required maxLength={160} pattern={".*\\S.*"} title="Informe seu nome completo." /></label><label><span className="sr-only">WhatsApp com DDD</span><ContactInput kind="phone" name="phone" placeholder="WhatsApp com DDD" value={customerPhone} onChange={setCustomerPhone} /></label><label><span className="sr-only">E-mail</span><ContactInput kind="email" name="email" placeholder="E-mail para confirmação" value={customerEmail} onChange={setCustomerEmail} /></label><p className="checkout-privacy"><span className="material-symbols-rounded" aria-hidden="true">lock</span><span>Seus dados serão usados para processar e acompanhar o pedido. <a href={buildRoute("politica-privacidade")} target="_blank">Leia a política de privacidade.</a></span></p></section>
             <button className="checkout-payment-button" type="submit">Ir para pagamento<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
           </form>
@@ -496,7 +513,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
           <section className="received-hero"><span className="received-hero-icon material-symbols-rounded" aria-hidden="true">schedule</span><p className="received-eyebrow">Pedido recebido</p><h1>Aguardando a confirmação do pagamento.</h1><p className="received-intro">Seu pedido está guardado como pendente. Ele será liberado somente depois que a InfinitePay confirmar o pagamento.</p><span className="received-status"><span className="material-symbols-rounded" aria-hidden="true">hourglass_top</span>Aguardando confirmação</span></section>
           {simulated && <p className="received-simulation" role="status"><span className="material-symbols-rounded" aria-hidden="true">science</span>Pedido simulado em desenvolvimento. Nada foi gravado no banco e este número não existe.</p>}
           <section className="received-payment-panel"><header><span className="material-symbols-rounded" aria-hidden="true">verified_user</span><div><h2>Pagamento seguro pela InfinitePay</h2><p>Pix ou cartão serão vinculados ao número do pedido e confirmados automaticamente.</p></div></header><dl className="received-payment-summary"><div><dt>Forma de pagamento</dt><dd>Escolhida na InfinitePay</dd></div><div><dt>Valor</dt><dd>{formatCents(cartTotal)}</dd></div><div><dt>Pedido</dt><dd>#{orderNumber}</dd></div></dl></section>
-          <div className="received-content"><section className="received-order-card"><header><div><small>Número do pedido</small><h2>#{orderNumber}</h2></div><button type="button" onClick={copyOrderNumber}><span className="material-symbols-rounded" aria-hidden="true">content_copy</span>Copiar</button></header><div className="received-product-row"><ArtThumbs campaign={campaign} label={`Camisa da campanha ${campaign.title}`} items={cart} /><div className="received-product-copy"><CartLines items={cart} discountsByModel={couponDiscountsByModel} discountedQuantitiesByItem={couponAllocation.discountedQuantitiesByItem} /><dl><div><dt>Total</dt><dd>{formatCents(cartTotal)}</dd></div></dl></div></div><p className="received-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span>Retirada com <strong>{campaign.representative}</strong></p></section><aside className="received-next-steps"><h2>Próximos passos</h2><ol><li className="is-complete"><span className="material-symbols-rounded" aria-hidden="true">check</span><div><strong>Pedido criado</strong><small>Seus dados e suas peças foram registrados.</small></div></li><li className="is-current"><span className="material-symbols-rounded" aria-hidden="true">payments</span><div><strong>Pagamento na InfinitePay</strong><small>Conclua pelo checkout seguro do provedor.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">verified</span><div><strong>Confirmação automática</strong><small>A InfinitePay atualiza o pedido pela integração.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">inventory_2</span><div><strong>Envio para produção</strong><small>Acontece somente depois da confirmação.</small></div></li></ol></aside></div>
+          <div className="received-content"><section className="received-order-card"><header><div><small>Número do pedido</small><h2>#{orderNumber}</h2></div><button type="button" onClick={copyOrderNumber}><span className="material-symbols-rounded" aria-hidden="true">content_copy</span>Copiar</button></header><div className="received-product-row"><ArtThumbs campaign={campaign} label={`Camisa da campanha ${campaign.title}`} items={cart} /><div className="received-product-copy"><CartLines items={cart} discountsByModel={couponDiscountsByModel} discountedQuantitiesByItem={couponAllocation.discountedQuantitiesByItem} /><dl><div><dt>Total</dt><dd>{formatCents(cartTotal)}</dd></div></dl></div></div><CampaignDeliveryInfo representative={campaign.representative} expectedOn={campaign.deliveryExpectedOn} note={campaign.deliveryNote} /></section><aside className="received-next-steps"><h2>Próximos passos</h2><ol><li className="is-complete"><span className="material-symbols-rounded" aria-hidden="true">check</span><div><strong>Pedido criado</strong><small>Seus dados e suas peças foram registrados.</small></div></li><li className="is-current"><span className="material-symbols-rounded" aria-hidden="true">payments</span><div><strong>Pagamento na InfinitePay</strong><small>Conclua pelo checkout seguro do provedor.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">verified</span><div><strong>Confirmação automática</strong><small>A InfinitePay atualiza o pedido pela integração.</small></div></li><li><span className="material-symbols-rounded" aria-hidden="true">inventory_2</span><div><strong>Envio para produção</strong><small>Acontece somente depois da confirmação.</small></div></li></ol></aside></div>
           <div className="received-actions"><button className="received-copy-action" type="button" onClick={copyOrderNumber}>Copiar número do pedido<span className="material-symbols-rounded" aria-hidden="true">content_copy</span></button><a className="received-back-action" href={buildRoute("acompanhar-pedido", undefined, orderNumber)}>Acompanhar pedido</a><p className="received-copy-status" role="status" aria-live="polite">{orderCopied ? "Número do pedido copiado." : "Guarde este número para acompanhar seu pedido."}</p></div>
         </main>
       )}

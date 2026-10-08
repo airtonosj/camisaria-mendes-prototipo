@@ -35,4 +35,6 @@ Não existe garantia absoluta contra indisponibilidade de banco, rede ou hospeda
 
 As alterações desta revisão permanecem locais, sem commit, push ou deploy. A publicação anterior da correção de `ANY_VALUE`, commit `e61415a2f8bbac624088e106e15d213b82472113`, foi validada no painel. Publicar esta revisão exige autorização específica.
 
+Atualização após autorização explícita: revisão publicada no commit `17a18e75221101e3d87bd906bb360652be391878`. Hostinger, health público e painel autenticado confirmados; CI Node 22 aprovado em MySQL e MariaDB na execução `37020412720`. Evidência consolidada em `qa-evidence/panel-review/publication.md`.
+
 Referência técnica: [isolamento por transação no MariaDB](https://mariadb.com/docs/server/reference/sql-statements/administrative-sql-statements/set-commands/set-transaction).

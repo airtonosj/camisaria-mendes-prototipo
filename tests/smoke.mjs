@@ -439,7 +439,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "025_campaign_receivers");
+  assert.equal(health.schema.current, "026_campaign_delivery");
   assert.equal(health.storage.ready, true);
   assert.equal(health.license.status, "active");
   step("health check valida conexão e versão do schema");

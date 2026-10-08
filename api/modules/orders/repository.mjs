@@ -11,7 +11,7 @@ export function createOrderQuery1(executor, values) {
  * @param {unknown[]} values
  */
 export function createOrderQuery2(executor, values) {
-  return executor.execute("SELECT id, phase FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE", values);
+  return executor.execute("SELECT id, phase, DATE_FORMAT(delivery_expected_on, '%Y-%m-%d') AS delivery_expected_on, delivery_note FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE", values);
 }
 
 /** Uses the caller's connection; the service owns the transaction.
@@ -41,8 +41,8 @@ export function createOrderQuery4(executor, values) {
 export function createOrderQuery5(executor, values) {
   return executor.execute(`INSERT INTO orders
         (order_number, idempotency_key, campaign_id, customer_name, customer_whatsapp, customer_email,
-         subtotal_cents, discount_cents, coupon_code, total_cents)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, values);
+         subtotal_cents, discount_cents, coupon_code, total_cents, delivery_expected_on, delivery_note, delivery_forecast_recorded)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`, values);
 }
 
 /** Uses the caller's connection; the service owns the transaction.
@@ -77,6 +77,8 @@ export function trackOrderQuery1(executor, values, fragment0) {
               ORDER BY p.confirmed_at DESC, p.id DESC LIMIT 1) AS payment_method,
             o.subtotal_cents, o.discount_cents, o.coupon_code, o.total_cents,
             o.created_at, o.paid_at, o.delivered_at,
+            DATE_FORMAT(o.delivery_expected_on, '%Y-%m-%d') AS purchased_delivery_expected_on, o.delivery_note AS purchased_delivery_note, o.delivery_forecast_recorded,
+            DATE_FORMAT(c.delivery_expected_on, '%Y-%m-%d') AS delivery_expected_on, c.delivery_note,
             c.code AS campaign_code, c.title AS campaign_title, c.phase AS campaign_phase,
             c.representative_name, c.pickup_instructions, c.art_front_url, c.art_back_url, c.art_render_mode,
             c.art_front_x, c.art_front_y, c.art_front_scale, c.art_front_rotation,

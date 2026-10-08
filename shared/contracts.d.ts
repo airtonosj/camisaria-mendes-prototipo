@@ -81,6 +81,8 @@ export type ApiCampaign = {
   subtitle: string | null;
   phase: string;
   deadlineAt: string;
+  deliveryExpectedOn?: string | null;
+  deliveryNote?: string | null;
   pickupInstructions: string;
   representativeName: string;
   representativeWhatsapp: string | null;
@@ -131,7 +133,11 @@ export type TrackedOrder = {
   discountCents: number;
   couponCode: string | null;
   totalCents: number;
+  deliveryForecastAtPurchase?: { expectedOn: string | null; note: string | null } | null;
   campaign: {
+    deliveryExpectedOn?: string | null;
+    deliveryNote?: string | null;
+    pickupInstructions?: string;
     code: string;
     title: string;
     representativeName: string;
@@ -198,6 +204,8 @@ export type ApiAdminCampaign = {
   subtitle: string | null;
   phase: CampaignPhaseCode;
   deadlineAt: string;
+  deliveryExpectedOn?: string | null;
+  deliveryNote?: string | null;
   pickupInstructions: string;
   representative: { name: string; whatsapp: string | null };
   artFrontUrl: string | null;
@@ -291,6 +299,8 @@ export type CreateCampaignPayload = {
   title: string;
   subtitle?: string;
   deadlineAt: string;
+  deliveryExpectedOn?: string | null;
+  deliveryNote?: string | null;
   pickupInstructions: string;
   representative: { name: string; whatsapp: string };
   artFrontUrl?: string | null;
@@ -313,6 +323,8 @@ export type UpdateCampaignPayload = {
   title?: string;
   subtitle?: string | null;
   deadlineAt?: string;
+  deliveryExpectedOn?: string | null;
+  deliveryNote?: string | null;
   pickupInstructions?: string;
   representative?: { name: string; whatsapp: string };
   artFrontUrl?: string;

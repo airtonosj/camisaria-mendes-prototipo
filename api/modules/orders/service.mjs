@@ -109,7 +109,7 @@ export async function createOrder({ idempotencyKey, body }) {
     const orderNumber = publicOrderNumber();
 
     const [orderResult] = await queries.createOrderQuery5(connection, [orderNumber, idempotencyKey, campaign.id, customerName, customerWhatsapp, customerEmail,
-        subtotalCents, discountCents, coupon?.code ?? null, totalCents]);
+        subtotalCents, discountCents, coupon?.code ?? null, totalCents, campaign.delivery_expected_on, campaign.delivery_note]);
     for (const item of pricedItems) {
       await queries.createOrderQuery6(connection, [orderResult.insertId, item.variantId, item.sizeId, item.quantity, prices.get(item.variantId), item.unitDiscountCents, item.discountedQuantity]);
     }
@@ -155,12 +155,15 @@ export async function trackOrder(requestUrl, orderNumber) {
     paidAt: order.paid_at,
     deliveredAt: order.delivered_at,
     customerName: order.customer_name,
+    deliveryForecastAtPurchase: order.delivery_forecast_recorded ? { expectedOn: order.purchased_delivery_expected_on, note: order.purchased_delivery_note } : null,
     campaign: {
       code: order.campaign_code,
       title: order.campaign_title,
       phase: order.campaign_phase,
       representativeName: order.representative_name,
       pickupInstructions: order.pickup_instructions,
+      deliveryExpectedOn: order.delivery_expected_on,
+      deliveryNote: order.delivery_note,
       artFrontUrl: order.art_front_url,
       artBackUrl: order.art_back_url,
       artRenderMode: order.art_render_mode,

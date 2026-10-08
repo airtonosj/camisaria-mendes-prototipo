@@ -92,8 +92,36 @@ Implementação: `35be302`. Documentação e evidências acompanham o commit seg
 - Novos ajustes permanecem locais. Não houve novo commit, push, deploy, compra nem envio real.
 - Gates finais MySQL 8.0.46 e MariaDB 11.8.9 aprovados sequencialmente: tipos, lint, 28 unitários, 8 integrações, build e 30 jornadas por banco, com encerramento normal. Capturas desktop/celular inspecionadas; MariaDB portátil encerrado.
 
+## Publicação da revisão (02/10/2026)
+
+- Usuário autorizou "faça a publicação". Commit `17a18e75221101e3d87bd906bb360652be391878` enviado ao branch conectado à Hostinger, implantação concluída e marcada como Atual.
+- Health público confirmou o commit, banco conectado, schema 025 pronto, armazenamento e licença saudáveis. Painel autenticado carregou após recarga completa, navegou para Campanhas e retornou à visão geral.
+- CI Node 22 aprovado nos dois bancos: execução `37020412720`. Evidência em `qa-evidence/panel-review/publication.md` e captura `published.png`.
+- Nenhuma migração nova, compra ou envio real. Alterações locais alheias preservadas.
+
+## Conta e recebedores: visual aprovado (02/10/2026)
+
+- Aba mais compacta, preservando azul, fonte Inter e superfícies do painel. Cadastro e edição agora usam diálogo nativo com o estilo compartilhado dos avisos de retirada.
+- Editar, remover e reativar usam somente ícones com nomes acessíveis. Remover abre confirmação e desativa para novas campanhas, preservando vínculos e histórico; não há exclusão física.
+- Confirmação da InfiniteTag mantida. Diálogo foca o nome, fecha com Esc/Cancelar, devolve foco à ação de origem e impede fechamento durante salvamento.
+- Validação: npm.cmd test (28 unitários e 8 integrações), build e diff --check aprovados. Jornada de recebedores em desktop/celular aprovada, incluindo edição, desativação, reativação e escolha na campanha. Capturas inspecionadas em qa-evidence/account-compact/.
+- Sem commit, push ou deploy. Próximo passo: publicação especificamente autorizada; produção não verificada nesta alteração.
+
 ## Pedidos: organização compacta aprovada (02/10/2026)
 
 - Implementação e verificações em [pedidos compactos](pedidos-compactos.md): seletor único com pesquisa/fase, preços base e totais pagos no cabeçalho, tabela simplificada e detalhes preservados em popup.
 - Cupons e valores usam o histórico da compra. Reembolso parcial permanece no domínio e aparece no filtro apenas quando existente; ações usam ícones com nomes acessíveis.
 - Publicação autorizada pelo usuário em 02/10/2026. Sem migração nova; validações locais aprovadas. Capturas em `qa-evidence/orders-compact/`; confirmação da implantação será registrada após a ativação.
+
+## Carrinho lateral aprovado (08/10/2026)
+
+- Aplicada localmente a organização aprovada: painel lateral, ícone flutuante com contador e Continuar escolhendo destacado.
+- Tipos, lint, 28 unitários, oito integrações e build aprovados. As 32 jornadas existentes passaram; a regressão nova passou em desktop/celular após corrigir o seletor do teste. Capturas inspecionadas.
+- Detalhes em [carrinho lateral](carrinho-lateral.md). Sem commit, push, deploy, compra ou envio real.
+
+## Prazo de entrega por campanha (08/10/2026)
+
+- Implementado o visual aprovado: informações agrupadas com ícones, data sem ano e, na escolha desktop, bloco abaixo da imagem. Campos opcionais de data/observação no cadastro e nos rascunhos; revisão e acompanhamento mostram a previsão.
+- Migração aditiva e reexecutável `026_campaign_delivery`. Novos pedidos preservam a previsão de compra na transação; pedidos antigos continuam sem snapshot. Consulta mostra a previsão atual e indica alterações.
+- Tipos, lint, 29 unitários, nove integrações e build aprovados. As 34 jornadas existentes passaram; as quatro novas passaram em desktop/celular após ajustar a navegação do teste sobre o menu lateral. Capturas inspecionadas em `qa-evidence/campaign-delivery/`.
+- Detalhes em [prazo de entrega](prazo-entrega.md). Alterações anteriores do carrinho preservadas. Sem commit, push, deploy, compra ou envio real; migração aplicada somente nos bancos locais de teste.

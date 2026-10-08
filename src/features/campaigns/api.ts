@@ -69,6 +69,8 @@ export function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
       ? "Prazo definido pela camisaria"
       : `Pedidos até ${deadline.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}`,
     pickup: campaign.pickupInstructions,
+    deliveryExpectedOn: campaign.deliveryExpectedOn ?? null,
+    deliveryNote: campaign.deliveryNote ?? null,
     representative: campaign.representativeName,
     representativeWhatsapp: campaign.representativeWhatsapp,
     colors,

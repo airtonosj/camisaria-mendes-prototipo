@@ -3,6 +3,7 @@ import { ApiRequestError, assetUrl, createInfinitePayCheckout, requestInfinitePa
 import { buildRoute } from '../navigation';
 import { shirtModels } from "../data";
 import type { CampaignArtMode, VariantArtwork } from "../data";
+import { CampaignDeliveryInfo } from "./CampaignDeliveryInfo";
 import { Brand } from "./Brand";
 import { ContactInput } from './ContactInput';
 import { ShirtMockupPreview } from "./ShirtMockupPreview";
@@ -22,6 +23,9 @@ type DemoOrder = {
   campaignCode?: string;
   campaignTitle?: string;
   representative?: string;
+  deliveryExpectedOn?: string | null;
+  deliveryNote?: string | null;
+  deliveryForecastAtPurchase?: { expectedOn: string | null; note: string | null } | null;
   modelName?: string;
   colorName?: string;
   size?: string;
@@ -199,6 +203,9 @@ export function OrderTrackingPage() {
         campaignCode: persisted.campaign.code,
         campaignTitle: persisted.campaign.title,
         representative: persisted.campaign.representativeName,
+        deliveryExpectedOn: persisted.campaign.deliveryExpectedOn,
+        deliveryNote: persisted.campaign.deliveryNote,
+        deliveryForecastAtPurchase: persisted.deliveryForecastAtPurchase,
         items: persisted.items.map((item) => ({
           modelName: item.modelName,
           colorName: item.color.name,
@@ -430,7 +437,7 @@ export function OrderTrackingPage() {
                   </div>
                 </div>
 
-                <p className="received-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span>Retirada com <strong>{displayedRepresentative}</strong></p>
+                <CampaignDeliveryInfo representative={displayedRepresentative} expectedOn={order.deliveryExpectedOn} note={order.deliveryNote} previous={order.deliveryForecastAtPurchase} />
               </section>
 
               <aside className="received-next-steps tracking-timeline" aria-labelledby="tracking-status-title">

@@ -1,4 +1,5 @@
 @import './styles/global.css';
 @import './styles/public.css';
 @import './styles/checkout.css';
+@import './styles/checkout-cart.css';
 @import './styles/admin.css';

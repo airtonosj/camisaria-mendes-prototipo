@@ -57,6 +57,8 @@ export type PrivateCampaign = {
   prices: Record<ShirtModelName, number>;
   sizes: Record<ShirtModelName, SizeCode[]>;
   deadline: string;
+  deliveryExpectedOn?: string | null;
+  deliveryNote?: string | null;
   pickup: string;
   representative: string;
   /** Contato do representante para dúvidas e retirada. Vem da campanha no banco. */

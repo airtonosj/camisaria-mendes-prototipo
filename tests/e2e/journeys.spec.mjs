@@ -120,6 +120,8 @@ test('campaign creation completes all four editor steps',async({page})=>{
  await page.getByLabel('Representante da turma').fill('Representante QA');
  await page.getByLabel('WhatsApp do representante').fill('98999991234');
  await page.getByLabel('Prazo final dos pedidos').fill(new Date(Date.now()+30*86400000).toISOString().slice(0,10));
+ await page.getByLabel('Entrega prevista (opcional)',{exact:true}).fill('2026-11-10');
+ await page.getByLabel('Observação sobre a entrega (opcional)',{exact:true}).fill('Camisas entregues ao representante de turma');
  await page.getByRole('button',{name:'Continuar',exact:true}).click();
  await page.getByRole('button',{name:'Continuar',exact:true}).click();
  await page.getByRole('button',{name:'Mockup Monte a estampa sobre a camisa.'}).click();
@@ -131,7 +133,10 @@ test('campaign creation completes all four editor steps',async({page})=>{
  await expect(page.getByRole('button',{name:'Publicar campanha',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Publicar campanha',exact:true}).click();
  const response=await created;expect(response.status()).toBe(201);
- expect((await response.json()).campaign.title).toBe(title);
+ const campaign=(await response.json()).campaign;
+ expect(campaign.title).toBe(title);
+ expect(campaign.deliveryExpectedOn).toBe('2026-11-10');
+ expect(campaign.deliveryNote).toBe('Camisas entregues ao representante de turma');
 });
 
 test('payment receiver is registered in the account tab and chosen for a campaign',async({page},testInfo)=>{

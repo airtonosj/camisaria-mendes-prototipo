@@ -1,3 +1,5 @@
+import { validDeliveryDate } from '../../../shared/delivery.mjs';
+
 import * as queries from './repository.mjs';
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -10,6 +12,12 @@ import { normalizeCampaignCode, suggestedCampaignCode, parseDeadline } from "./v
 import { couponDiscounts, couponPayload, activeCampaignCoupon, validateActiveCoupon, ensureCouponFitsCampaignPrices, applyCampaignCoupon } from "../coupons/service.mjs";
 import { assertCampaignReceiverChangeAllowed, defaultInfinitePayHandle, resolveCampaignReceiver } from "../receivers/service.mjs";
 import { findReceiverQuery } from "../receivers/repository.mjs";
+
+function parseDeliveryDate(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (!validDeliveryDate(value)) throw new ApiError(422, 'VALIDATION_ERROR', 'Informe uma data de entrega válida no formato AAAA-MM-DD.');
+  return value;
+}
 
 /** Resumo do recebedor para o painel. A página pública nunca recebe a conta de destino. */
 function campaignReceiverSummary(row) {
@@ -160,6 +168,8 @@ export async function getCampaign(code, { includeCoupon = false, includeReceiver
     subtitle: campaign.subtitle,
     phase: campaign.phase,
     deadlineAt: campaign.deadline_at,
+    deliveryExpectedOn: campaign.delivery_expected_on,
+    deliveryNote: campaign.delivery_note,
     pickupInstructions: campaign.pickup_instructions,
     representativeName: campaign.representative_name,
     // Contato do representante para dúvidas e retirada do pedido.
@@ -257,6 +267,8 @@ export async function listCampaigns() {
     subtitle: row.subtitle,
     phase: row.phase,
     deadlineAt: row.deadline_at,
+    deliveryExpectedOn: row.delivery_expected_on,
+    deliveryNote: row.delivery_note,
     createdAt: row.created_at,
     pickupInstructions: row.pickup_instructions,
     representative: { name: row.representative_name, whatsapp: row.representative_whatsapp },
@@ -613,7 +625,7 @@ export async function createCampaign({ staff, body }) {
     const { modelIds, colorIds, sizeIds } = await resolveCatalogIds(connection, models);
     const receiver = body.receiverId === undefined ? null : await resolveCampaignReceiver(connection, body.receiverId);
 
-    const [campaignResult] = await queries.createCampaignQuery2(connection, [code, title, subtitle, deadlineAt, pickupInstructions, representativeName, representativeWhatsapp, artFrontUrl, artBackUrl, artRenderMode, presentation.mockupEnabled, presentation.realPhotosEnabled, staff.id, receiver?.id ?? null]);
+    const [campaignResult] = await queries.createCampaignQuery2(connection, [code, title, subtitle, deadlineAt, pickupInstructions, representativeName, representativeWhatsapp, artFrontUrl, artBackUrl, artRenderMode, presentation.mockupEnabled, presentation.realPhotosEnabled, staff.id, receiver?.id ?? null, parseDeliveryDate(body.deliveryExpectedOn), optionalText(body.deliveryNote, 255)]);
     for (const model of models) {
       for (const color of model.colors) {
         await queries.createCampaignQuery3(connection, [campaignResult.insertId, modelIds.get(model.modelCode), colorIds.get(color.name), model.unitPriceCents]);
@@ -662,6 +674,8 @@ export async function updateCampaign({ body }, code) {
     if (body.title !== undefined) set("title", requireText(body.title, "title", 180));
     if (body.subtitle !== undefined) set("subtitle", optionalText(body.subtitle, 255));
     if (body.deadlineAt !== undefined) set("deadline_at", parseDeadline(body.deadlineAt));
+    if (body.deliveryExpectedOn !== undefined) set("delivery_expected_on", parseDeliveryDate(body.deliveryExpectedOn));
+    if (body.deliveryNote !== undefined) set("delivery_note", optionalText(body.deliveryNote, 255));
     if (body.pickupInstructions !== undefined) set("pickup_instructions", requireText(body.pickupInstructions, "pickupInstructions", 255));
     if (body.representative !== undefined) {
       const representative = body.representative ?? {};
