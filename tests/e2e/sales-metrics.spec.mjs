@@ -11,6 +11,7 @@ test('metrics panel loads, changes period and applies a custom range', async ({ 
   await login(page);
   await page.getByRole('button', { name: 'Métricas', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Onde as vendas param.' })).toBeVisible();
+  await expect(page.getByRole('img', { name: /Funil de compra/ })).toBeVisible();
   await page.getByRole('button', { name: 'Este ano', exact: true }).click();
   await expect(page.getByText('Pedidos pagos', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Personalizado', exact: true }).click();
