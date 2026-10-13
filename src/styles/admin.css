@@ -441,15 +441,11 @@
 .sales-panel > p { margin: 0; color: #697277; font-size: .59rem; line-height: 1.5; }
 .sales-funnel-utmify { display: grid; gap: 8px; margin-top: 19px; }
 .sales-funnel-utmify-stage { display: flex; justify-content: center; }
-.sales-funnel-utmify-bar { min-width: 196px; min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-radius: 5px; padding: 10px 15px; color: #fff; background: linear-gradient(100deg, #047abf, #159fde); box-shadow: 0 7px 15px rgba(7, 158, 232, .14); transition: width .2s ease; }
+.sales-funnel-utmify-bar { min-width: 196px; min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-radius: 5px; padding: 10px 15px; color: #fff; background: #087fca; box-shadow: 0 7px 15px rgba(7, 158, 232, .14); transition: width .2s ease; }
 .sales-funnel-utmify-bar > div { display: grid; gap: 3px; }
 .sales-funnel-utmify-bar span { font-size: .56rem; font-weight: 650; }
 .sales-funnel-utmify-bar strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
 .sales-funnel-utmify-bar small { border-left: 1px solid rgba(255,255,255,.35); padding-left: 13px; font-size: .51rem; font-weight: 700; text-align: right; }
-.sales-funnel-utmify-stage:nth-child(2) .sales-funnel-utmify-bar { background: linear-gradient(100deg, #0b87c9, #22a9e4); }
-.sales-funnel-utmify-stage:nth-child(3) .sales-funnel-utmify-bar { background: linear-gradient(100deg, #168fca, #3bb5e8); }
-.sales-funnel-utmify-stage:nth-child(4) .sales-funnel-utmify-bar { background: linear-gradient(100deg, #2998ce, #55bce9); }
-.sales-funnel-utmify-stage:nth-child(5) .sales-funnel-utmify-bar { background: linear-gradient(100deg, #45a7d2, #70c8ee); }
 .sales-funnel-utmify-bar strong, .sales-sources strong { text-align: right; font-variant-numeric: tabular-nums; }
 .sales-sources { margin-top: 14px; }
 .sales-sources > div { display: grid; grid-template-columns: minmax(0, 1fr) 58px 48px; gap: 6px; border-bottom: 1px solid #e8ecea; padding: 10px 0; color: #354045; font-size: .56rem; }
