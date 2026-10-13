@@ -5,3 +5,4 @@ export * from './features/reports/api';
 export * from './features/notifications/api';
 export * from './features/orders/api';
 export * from './features/campaigns/api';
+export * from './features/metrics/api';

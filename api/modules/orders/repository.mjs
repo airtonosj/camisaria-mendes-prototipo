@@ -41,8 +41,8 @@ export function createOrderQuery4(executor, values) {
 export function createOrderQuery5(executor, values) {
   return executor.execute(`INSERT INTO orders
         (order_number, idempotency_key, campaign_id, customer_name, customer_whatsapp, customer_email,
-         subtotal_cents, discount_cents, coupon_code, total_cents, delivery_expected_on, delivery_note, delivery_forecast_recorded)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`, values);
+         subtotal_cents, discount_cents, coupon_code, total_cents, delivery_expected_on, delivery_note, analytics_source, delivery_forecast_recorded)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`, values);
 }
 
 /** Uses the caller's connection; the service owns the transaction.

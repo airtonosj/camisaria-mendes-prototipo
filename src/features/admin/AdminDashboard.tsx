@@ -12,12 +12,14 @@ const Overview = lazy(() => import('./Overview').then(m => ({ default:m.Overview
 const Campaigns = lazy(() => import('../campaigns/Campaigns').then(m => ({ default:m.Campaigns })));
 const Orders = lazy(() => import('../orders/Orders').then(m => ({ default:m.Orders })));
 const Products = lazy(() => import('../campaigns/Products').then(m => ({ default:m.Products })));
+const SalesMetrics = lazy(() => import('../metrics/SalesMetrics').then(m => ({ default:m.SalesMetrics })));
 
 export const nav: Array<[AdminSection, string, string]> = [
   ["overview", "dashboard", "Visão geral"],
   ["campaigns", "campaign", "Campanhas"],
   ["orders", "receipt_long", "Pedidos"],
   ["products", "checkroom", "Produtos"],
+  ["metrics", "monitoring", "Métricas"],
   ["reports", "monitoring", "Relatórios"],
   ["account", "manage_accounts", "Conta"],
 ];
@@ -113,6 +115,7 @@ export function AdminDashboard() {
             {active === "campaigns" && <Campaigns data={data} />}
             {active === "orders" && <Orders data={data} />}
             {active === "products" && <Products />}
+            {active === "metrics" && <SalesMetrics campaigns={data.campaigns} />}
             {active === "reports" && <Reports data={data} />}
             {active === "account" && <Account user={user} onSaved={setUser} />}
           </Suspense>

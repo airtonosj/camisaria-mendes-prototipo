@@ -1,6 +1,7 @@
 import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { buildRoute } from '../../navigation';
 import { createInfinitePayCheckout, createOrderInApi, validateCampaignCoupon } from "../../api";
+import { recordCampaignMetric } from '../metrics/analytics';
 import type { CampaignCoupon } from "../../api";
 import type { PrivateCampaign, ShirtModelName, SizeCode } from "../../data";
 import { shirtModels, sizeGroupLabels } from "../../data";
@@ -96,6 +97,8 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
     if (cart.length) sessionStorage.setItem(cartStorageKey(campaign.code), JSON.stringify(cart));
     else sessionStorage.removeItem(cartStorageKey(campaign.code));
   }, [campaign.code, cart]);
+
+  useEffect(() => { recordCampaignMetric(campaign.code, 'campaign_view'); }, [campaign.code]);
 
   const selectedModel = availableModels.find((item) => item.name === model) ?? availableModels[0] ?? shirtModels[0];
   const activeModel = selectedModel.name;
@@ -244,6 +247,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
       ? current.map((item) => itemKey(item) === key ? { ...item, quantity: item.quantity + quantity } : item)
       : [...current, nextItem]);
     setCartMessage(`${selectedModel.name}, ${selectedColor.name}, tamanho ${size} adicionado ao carrinho.`);
+    recordCampaignMetric(campaign.code, 'cart_add');
     setQuantity(1);
     setDrawerOpen(true);
     return true;
@@ -306,6 +310,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
       return;
     }
     if (!cart.length) return goToStep("model");
+    recordCampaignMetric(campaign.code, 'order_review');
     goToStep("payment");
   }
 
@@ -323,6 +328,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
     setSubmittingOrder(true);
     try {
       if (resumePayment) {
+        recordCampaignMetric(campaign.code, 'checkout_open');
         const checkout = await createInfinitePayCheckout(resumePayment, customerPhone);
         window.location.assign(checkout.url);
         return;
@@ -350,6 +356,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
       });
       setOrderNumber(created.number);
       const checkout = await createInfinitePayCheckout(created.number, customerPhone);
+      recordCampaignMetric(campaign.code, 'checkout_open');
       sessionStorage.removeItem(cartStorageKey(campaign.code));
       setCart([]);
       window.location.assign(checkout.url);

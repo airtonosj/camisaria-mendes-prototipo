@@ -9,11 +9,17 @@ import { publicOrderNumber } from "../../http/settings.mjs";
 import { parseSingleOrderCoupon, validateActiveCoupon, ensureCouponFitsCampaignPrices } from "../coupons/service.mjs";
 import { resolveVariantArtwork } from "../campaigns/service.mjs";
 
+function analyticsSource(value) {
+  const source = String(value ?? 'direct').trim().toLowerCase();
+  return /^[a-z0-9_-]{1,48}$/.test(source) ? source : 'direct';
+}
+
 /** @param {{idempotencyKey:string, body:Omit<import("../../../shared/contracts").CreateOrderInput,"idempotencyKey">}} input Validated at the HTTP/service boundary. */
 export async function createOrder({ idempotencyKey, body }) {
   const campaignCode = requireText(body.campaignCode, "campaignCode", 40).toUpperCase();
   const couponCode = parseSingleOrderCoupon(body);
   const customer = body.customer ?? {};
+  const source = analyticsSource(body.analyticsSource);
   const customerName = requireText(customer.name, "customer.name", 160);
   const customerWhatsapp = normalizeWhatsapp(customer.whatsapp);
   const suppliedCustomerEmail = requireText(customer.email, "customer.email", 254);
@@ -109,7 +115,7 @@ export async function createOrder({ idempotencyKey, body }) {
     const orderNumber = publicOrderNumber();
 
     const [orderResult] = await queries.createOrderQuery5(connection, [orderNumber, idempotencyKey, campaign.id, customerName, customerWhatsapp, customerEmail,
-        subtotalCents, discountCents, coupon?.code ?? null, totalCents, campaign.delivery_expected_on, campaign.delivery_note]);
+        subtotalCents, discountCents, coupon?.code ?? null, totalCents, campaign.delivery_expected_on, campaign.delivery_note, source]);
     for (const item of pricedItems) {
       await queries.createOrderQuery6(connection, [orderResult.insertId, item.variantId, item.sizeId, item.quantity, prices.get(item.variantId), item.unitDiscountCents, item.discountedQuantity]);
     }

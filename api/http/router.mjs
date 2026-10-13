@@ -21,6 +21,7 @@ import { createOrder, changeDeliveryStatus, cancelOrder, registerOrderRefund } f
 import { listSizes, uploadArtwork, uploadVideo, serveUpload, serveShareImage, serveFrontend } from "../modules/media/service.mjs";
 import { productionReport, deliveryReport } from "../modules/reports/service.mjs";
 import { listReceivers, createReceiver, updateReceiver } from '../modules/receivers/http.mjs';
+import { recordMetricEvent, getSalesMetrics } from '../modules/metrics/http.mjs';
 
 import { buildVersion } from '../runtime/version.mjs';
 
@@ -85,6 +86,10 @@ export async function route(request, response) {
   }
   if (request.method === "GET" && path === "/api/settings") {
     sendJson(response, 200, publicSettings());
+    return;
+  }
+  if (request.method === "POST" && path === "/api/metrics/events") {
+    sendJson(response, 202, await recordMetricEvent(request));
     return;
   }
   if (request.method === "POST" && path === "/api/auth/login") {
@@ -302,6 +307,10 @@ export async function route(request, response) {
   if (request.method === "GET" && path === "/api/admin/reports/delivery") {
     await requireStaff(request);
     sendJson(response, 200, { rows: await deliveryReport(requestUrl) });
+    return;
+  }
+  if (request.method === "GET" && path === "/api/admin/metrics/sales") {
+    sendJson(response, 200, { metrics: await getSalesMetrics(request, requestUrl.searchParams) });
     return;
   }
   if ((request.method === "GET" || request.method === "HEAD") && !path.startsWith("/api/")) {

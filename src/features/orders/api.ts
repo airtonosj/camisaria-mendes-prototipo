@@ -10,6 +10,7 @@ export async function createOrderInApi(input: CreateOrderInput) {
       customer: input.customer,
       items: input.items,
       couponCode: input.couponCode || undefined,
+      analyticsSource: sessionStorage.getItem('camisaria-mendes-analytics-source') || 'direct',
     }),
   });
   return payload.order;

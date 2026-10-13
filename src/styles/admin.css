@@ -418,6 +418,61 @@
 .campaign-real-video-preview > span { position: absolute; inset: 0; display: grid; place-content: center; color: rgba(255, 255, 255, .8); font-size: 27px; pointer-events: none; }
 .campaign-real-video-status { min-width: 0; display: grid; gap: 5px; color: #495257; }
 .campaign-real-video-status strong { font-size: .54rem; }
+
+/* Métricas de venda */
+.sales-metrics-page .admin-page-intro { margin-bottom: 22px; }
+.sales-periods { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 11px; }
+.sales-periods button { min-height: 40px; border: 1px solid #d2dad6; cursor: pointer; padding: 0 15px; color: #536066; background: #fff; font-size: .62rem; font-weight: 700; }
+.sales-periods button.is-active { border-color: #087fca; color: #fff; background: #087fca; }
+.sales-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 210px)); gap: 10px; margin-bottom: 14px; }
+.sales-filters label { display: grid; gap: 6px; color: #586267; font-size: .58rem; font-weight: 700; }
+.sales-filters select, .sales-range-button { min-width: 0; min-height: 43px; border: 1px solid #cfd7d3; padding: 0 12px; color: #20272a; background: #fff; font: inherit; font-size: .64rem; }
+.sales-range-button { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; cursor: pointer; text-align: left; font-weight: 650; }
+.sales-range-button .material-symbols-rounded { color: #087fca; font-size: 19px; }
+.sales-metric-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.sales-metric-row article, .sales-panel { border: 1px solid #dce1de; background: #fff; }
+.sales-metric-row article { min-height: 119px; display: flex; flex-direction: column; padding: 18px; }
+.sales-metric-row span { color: #697277; font-size: .59rem; }
+.sales-metric-row strong { margin: 8px 0; color: #111518; font-size: 1.65rem; letter-spacing: -.055em; }
+.sales-metric-row small { margin-top: auto; color: #858d91; font-size: .53rem; }
+.sales-metrics-grid { display: grid; grid-template-columns: 1.13fr .87fr; gap: 13px; margin-top: 13px; }
+.sales-panel { min-width: 0; padding: 21px; }
+.sales-panel h3 { margin: 0 0 5px; color: #151a1d; font-size: 1rem; letter-spacing: -.03em; }
+.sales-panel > p { margin: 0; color: #697277; font-size: .59rem; line-height: 1.5; }
+.sales-funnel { display: grid; gap: 13px; margin-top: 19px; }
+.sales-funnel > div { display: grid; grid-template-columns: 130px minmax(0, 1fr) 38px; align-items: center; gap: 9px; color: #30383c; font-size: .56rem; }
+.sales-funnel progress { width: 100%; height: 12px; appearance: none; border: 0; background: #e8edeb; }
+.sales-funnel progress::-webkit-progress-bar { background: #e8edeb; }
+.sales-funnel progress::-webkit-progress-value { background: #079ee8; }
+.sales-funnel progress::-moz-progress-bar { background: #079ee8; }
+.sales-funnel strong, .sales-sources strong { text-align: right; font-variant-numeric: tabular-nums; }
+.sales-sources { margin-top: 14px; }
+.sales-sources > div { display: grid; grid-template-columns: minmax(0, 1fr) 58px 48px; gap: 6px; border-bottom: 1px solid #e8ecea; padding: 10px 0; color: #354045; font-size: .56rem; }
+.sales-sources > div:first-child { color: #768085; font-weight: 700; }
+.sales-insight { margin-top: 17px !important; border-left: 3px solid #079ee8; padding: 11px 12px; color: #087fca !important; background: #f0f9fd; }
+.sales-metrics-error { margin: 14px 0; border-left: 3px solid #b42318; padding: 12px; color: #8d332b; background: #fff1ef; font-size: .64rem; }
+.sales-range-dialog { width: min(390px, calc(100% - 30px)); border: 1px solid #d3dbd7; padding: 22px; color: #1b2124; background: #fff; }
+.sales-range-dialog::backdrop { background: rgba(7, 9, 11, .38); }
+.sales-range-dialog h3 { margin: 0 0 18px; font-size: 1.1rem; }
+.sales-range-dialog form > div { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sales-range-dialog label { display: grid; gap: 6px; color: #5c666b; font-size: .59rem; font-weight: 700; }
+.sales-range-dialog input { min-height: 42px; border: 1px solid #ccd5d1; padding: 0 9px; color: #1d2528; background: #fff; font: inherit; font-size: .66rem; }
+.sales-range-dialog footer { display: flex; justify-content: flex-end; gap: 9px; margin-top: 18px; }
+.sales-range-dialog footer button { min-height: 38px; border: 1px solid #cfd7d3; cursor: pointer; padding: 0 13px; color: #455156; background: #fff; font: inherit; font-size: .6rem; font-weight: 700; }
+.sales-range-dialog footer .primary-action { border-color: #087fca; color: #fff; background: #087fca; }
+
+@media (max-width: 700px) {
+  .sales-periods { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sales-periods button { min-height: 47px; padding: 0 9px; font-size: .68rem; }
+  .sales-periods button:last-child { grid-column: 1 / -1; }
+  .sales-filters { grid-template-columns: 1fr; max-width: none; gap: 11px; }
+  .sales-filters select, .sales-range-button { min-height: 48px; font-size: .75rem; }
+  .sales-metric-row { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sales-metric-row article { min-height: 112px; padding: 15px; }
+  .sales-metrics-grid { grid-template-columns: 1fr; gap: 9px; }
+  .sales-panel { padding: 17px; }
+  .sales-funnel > div { grid-template-columns: 105px minmax(0, 1fr) 36px; font-size: .53rem; }
+}
 .campaign-real-video-status small { color: #a83232; font-size: .5rem; line-height: 1.35; }
 .campaign-real-video-status progress { width: 100%; height: 7px; accent-color: #087fca; }
 .campaign-real-video-remove { grid-column: 1 / -1; justify-self: start; border: 0; cursor: pointer; padding: 0; color: #a32f2f; background: transparent; font-size: .51rem; font-weight: 700; }

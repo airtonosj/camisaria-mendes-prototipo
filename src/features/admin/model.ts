@@ -2,7 +2,7 @@ import { campaignPhases } from '../../../shared/domain.mjs';
 import type { CampaignPhaseCode, CampaignCoupon, CampaignCouponStats, CampaignReceiverSummary, DeliveryStatusCode, PaymentStatusCode } from "../../api";
 import type { SizeCode } from "../../data";
 
-export type AdminSection = "overview" | "campaigns" | "orders" | "products" | "reports" | "account";
+export type AdminSection = "overview" | "campaigns" | "orders" | "products" | "metrics" | "reports" | "account";
 
 /**
  * `demo` só existe em desenvolvimento. No site publicado, uma API fora do ar leva a

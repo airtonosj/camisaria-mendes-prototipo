@@ -22,6 +22,7 @@ import type { PrivateCampaign } from "./data";
  * fictícias não chegam ao arquivo publicado.
  */
 import { STAFF_SESSION_KEY } from './features/admin/session';
+import { captureAnalyticsSource } from './features/metrics/analytics';
 
 function normalizeCode(value: string | null) {
   return value?.trim().toUpperCase().replace(/\s+/g, "-") ?? "";
@@ -54,6 +55,8 @@ function AppRoutes() {
   const path = window.location.pathname.replace(/\/+$/, "");
   const isStaffPath = path.endsWith("/acesso-camisaria");
   const isTrackingPath = path.endsWith("/acompanhar-pedido");
+
+  useEffect(() => { captureAnalyticsSource(); }, [campaignCode]);
 
   const retryCampaign = useCallback(() => {
     setLookup("loading");
