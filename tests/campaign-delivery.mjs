@@ -30,7 +30,7 @@ try {
   const input = { campaignCode: body.code, customer: { name: 'Cliente QA', whatsapp: '98999990000', email: 'delivery@example.test' }, items: [{ variantId: created.variants[0].id, size, quantity: 1 }] };
   const idempotencyKey = randomUUID();
   const placed = await orders.createOrder({ idempotencyKey, body: input });
-  const lookup = new URL('http://localhost/?whatsapp=98999990000');
+  const lookup = '98999990000';
   let tracked = await orders.trackOrder(lookup, placed.order.order_number);
   assert.deepEqual(tracked.deliveryForecastAtPurchase, { expectedOn: '2026-11-10', note: body.deliveryNote });
   await campaigns.updateCampaign({ body: { title: 'Entrega QA corrigida' } }, body.code);

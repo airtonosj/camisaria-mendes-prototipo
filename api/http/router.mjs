@@ -204,9 +204,13 @@ export async function route(request, response) {
     return;
   }
   const trackingMatch = path.match(/^\/api\/orders\/([^/]+)$/);
-  if (request.method === "GET" && trackingMatch) {
-    sendJson(response, 200, { order: await trackOrder(requestUrl, trackingMatch[1].toUpperCase()) });
+  if (request.method === "POST" && trackingMatch) {
+    const body = await readJson(request);
+    sendJson(response, 200, { order: await trackOrder(body.whatsapp, trackingMatch[1].toUpperCase()) });
     return;
+  }
+  if (request.method === "GET" && trackingMatch) {
+    throw new ApiError(410, "ORDER_TRACKING_POST_REQUIRED", "Atualize a página para consultar seu pedido com segurança.");
   }
   if (request.method === "GET" && path === "/api/admin/receivers") {
     sendJson(response, 200, { receivers: await listReceivers(request) });

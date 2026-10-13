@@ -365,6 +365,10 @@ async function request(path, { method = "GET", token, headers = {}, body, expect
   return payload;
 }
 
+async function track(orderNumber, whatsapp, options = {}) {
+  return request(`/api/orders/${orderNumber}`, { method: 'POST', body: { whatsapp }, ...options });
+}
+
 async function assertCouponPaymentCountsForTest(orderNumber, campaignCode, token) {
   const connection = await mysql.createConnection({
     host: environment.DB_HOST, port: Number(environment.DB_PORT || 3306),
@@ -411,7 +415,7 @@ const waitForApi = child => waitForTestApi(child, baseUrl);
 
 async function waitForOrderStatus(orderNumber, whatsapp, expectedStatus) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    const payload = await request(`/api/orders/${orderNumber}?whatsapp=${whatsapp}`);
+    const payload = await track(orderNumber, whatsapp);
     if (payload.order.status === expectedStatus) return payload.order;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
@@ -633,7 +637,7 @@ try {
     assert.equal((await response.json()).error.code, "COUPON_EXHAUSTED");
   }
   assert.equal(discountedOrder.order.totalCents, 15970);
-  const trackedDiscountedOrder = await request(`/api/orders/${discountedOrder.order.number}?whatsapp=5598999992070`);
+  const trackedDiscountedOrder = await track(discountedOrder.order.number, "5598999992070");
   assert.equal(trackedDiscountedOrder.order.subtotalCents, 19970);
   assert.equal(trackedDiscountedOrder.order.discountCents, 4000);
   assert.equal(trackedDiscountedOrder.order.couponCode, "CORES-10");
@@ -679,7 +683,7 @@ try {
     body: cappedCouponOrderBody,
   });
   assert.equal(replacementCouponOrder.order.totalCents, 34940);
-  const trackedCappedCouponOrder = await request(`/api/orders/${replacementCouponOrder.order.number}?whatsapp=5598999992072`);
+  const trackedCappedCouponOrder = await track(replacementCouponOrder.order.number, "5598999992072");
   assert.equal(trackedCappedCouponOrder.order.subtotalCents, 40940);
   assert.equal(trackedCappedCouponOrder.order.discountCents, 6000);
   assert.deepEqual(trackedCappedCouponOrder.order.items.map((item) => item.unitDiscountCents), [0, 1500]);
@@ -708,7 +712,7 @@ try {
   await assertCouponPaymentCountsForTest(replacementCouponOrder.order.number, customCampaign.code, token);
   assert.ok(couponHistoryCampaigns.filter(campaign => campaign.code !== customCampaign.code)
     .every(campaign => campaign.couponHistory.every(coupon => coupon.id !== historicalCoupon.id)));
-  const preservedCouponOrder = await request(`/api/orders/${replacementCouponOrder.order.number}?whatsapp=5598999992072`);
+  const preservedCouponOrder = await track(replacementCouponOrder.order.number, "5598999992072");
   assert.equal(preservedCouponOrder.order.couponCode, "CORES-10");
   assert.equal(preservedCouponOrder.order.discountCents, 6000);
   assert.deepEqual(preservedCouponOrder.order.items.map((item) => item.discountedQuantity), [0, 4]);
@@ -934,7 +938,7 @@ try {
   assert.deepEqual(campaignWithoutOversized.realPhotos.find((gallery) => gallery.colorName === "Preto").urls, customCampaignPayload.realPhotos[1].urls);
   assert.equal(campaignWithoutOversized.realVideos.find((video) => video.colorName === "Preto").url, uploadedVideoForInactiveColor.url);
   step("foto e vídeo não são exigidos para a cor de um corte removido da campanha");
-  const preservedHistoricalOrder = await request(`/api/orders/${historicalOrder.order.number}?whatsapp=5598999992026`);
+  const preservedHistoricalOrder = await track(historicalOrder.order.number, "5598999992026");
   assert.equal(preservedHistoricalOrder.order.items[0].modelName, "Oversized");
   await request("/api/orders", {
     method: "POST",
@@ -1021,17 +1025,17 @@ try {
   assert.equal(firstReplay.order.number, firstCreated.order.number);
   step("pedido é persistido e repetição idempotente não duplica");
 
-  const pendingTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
+  const pendingTracking = await track(firstCreated.order.number, "98999991001");
   assert.equal(pendingTracking.order.status, "pending");
   assert.equal(pendingTracking.order.items.length, 2);
   assert.equal(pendingTracking.order.items.reduce((total, item) => total + item.quantity, 0), 3);
   // O pedido foi feito digitando so o DDD. Acompanhar digitando o codigo do pais, com
   // pontuacao, precisa encontrar o mesmo pedido -- e outro numero nao pode encontrar nada.
-  const trackingInternacional = await request(
-    `/api/orders/${firstCreated.order.number}?whatsapp=${encodeURIComponent("+55 (98) 99999-1001")}`,
+  const trackingInternacional = await track(
+    firstCreated.order.number, "+55 (98) 99999-1001",
   );
   assert.deepEqual(trackingInternacional, pendingTracking);
-  await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991002`, { expected: 404 });
+  await track(firstCreated.order.number, "98999991002", { expected: 404 });
   step("rastreio encontra o pedido com o WhatsApp em qualquer formato e recusa outro numero");
 
   const campaignOrders = await request(`/api/admin/campaigns/${campaign.code}/orders`, { token });
@@ -1049,7 +1053,7 @@ try {
     expected: 404,
     body: { status: "paid", note: "Confirmação do smoke test" },
   });
-  const stillPending = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
+  const stillPending = await track(firstCreated.order.number, "98999991001");
   assert.equal(stillPending.order.status, "pending");
   step("painel e API não oferecem confirmação manual de pagamento");
 
@@ -1120,14 +1124,14 @@ try {
   });
   assert.equal(browserReconciliation.duplicate, true);
   await waitForOrderStatus(firstCreated.order.number, "98999991001", "confirmed");
-  const paidTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
+  const paidTracking = await track(firstCreated.order.number, "98999991001");
   assert.equal(paidTracking.order.paymentMethod, "pix");
   const paidCampaignOrders = await request(`/api/admin/campaigns/${campaign.code}/orders`, { token });
   assert.equal(
     paidCampaignOrders.orders.find((order) => order.number === firstCreated.order.number)?.paymentMethod,
     "pix",
   );
-  assert.equal(fakeInfinitePay.checkRequests.length, 1);
+  assert.ok(fakeInfinitePay.checkRequests.length >= 2);
   assert.equal(fakeInfinitePay.checkRequests[0].order_nsu, firstCreated.order.number);
   assert.equal(fakeInfinitePay.checkRequests[0].transaction_nsu, transactionNsu);
   step("webhook e retorno reconciliam por payment_check e exibem a forma confirmada no pedido");
@@ -1174,6 +1178,7 @@ try {
   });
   await request("/api/payments/infinitepay/webhook", {
     method: "POST",
+    expected: 400,
     body: {
       invoice_slug: `divergent-${randomUUID()}`,
       amount: divergentCreated.order.totalCents + 1,
@@ -1182,7 +1187,7 @@ try {
     },
   });
   await new Promise((resolve) => setTimeout(resolve, 1250));
-  const divergentTracking = await request(`/api/orders/${divergentCreated.order.number}?whatsapp=5598999991003`);
+  const divergentTracking = await track(divergentCreated.order.number, "5598999991003");
   assert.equal(divergentTracking.order.status, "pending");
   production = await request(`/api/admin/reports/production?campaign=${campaign.code}`, { token });
   assert.equal(production.rows.reduce((total, row) => total + row.quantity, 0), 3);
@@ -1208,6 +1213,7 @@ try {
     boundedQueueTransactions.push(queuedTransaction);
     await request("/api/payments/infinitepay/webhook", {
       method: "POST",
+      expected: 400,
       body: {
         invoice_slug: `fila-${index}-${randomUUID()}`,
         transaction_nsu: queuedTransaction,
@@ -1218,7 +1224,7 @@ try {
   }
   await request("/api/payments/infinitepay/webhook", {
     method: "POST",
-    expected: 429,
+    expected: 400,
     body: {
       invoice_slug: `fila-bloqueada-${randomUUID()}`,
       transaction_nsu: randomUUID(),
@@ -1226,14 +1232,14 @@ try {
     },
   });
   const boundedEvents = await paymentEventsForTest(boundedQueueOrder.order.number);
-  assert.equal(boundedEvents.length, 4);
-  assert.ok(boundedEvents.every((event) => event.order_id));
-  const storedPayload = typeof boundedEvents[0].payload === "string" ? JSON.parse(boundedEvents[0].payload) : boundedEvents[0].payload;
-  assert.equal(Object.hasOwn(storedPayload, "items"), false);
+  assert.equal(boundedEvents.length, 0, 'Eventos sem confirmação do provedor não ocupam vagas.');
+  // A fila anterior ao deploy continua retentável e chega à dead letter.
+  await insertFuturePaymentEventForTest(boundedQueueOrder.order.number, boundedQueueTransactions[0], 'legado-invalido', boundedQueueOrder.order.totalCents);
+  await forcePaymentEventDueForTest(boundedQueueTransactions[0]);
   await forceFinalPaymentAttemptForTest(boundedQueueTransactions[0]);
   const deadLetter = await waitForDeadLetterForTest(boundedQueueOrder.order.number, boundedQueueTransactions[0]);
   assert.equal(Number(deadLetter.attempts), 6);
-  step("eventos públicos não conseguem criar uma fila de reconciliação ilimitada por pedido");
+  step("eventos falsos não ocupam a fila e eventos legados preservam as retentativas");
 
   const orderWithoutCheckout = await request("/api/orders", {
     method: "POST",
@@ -1277,15 +1283,7 @@ try {
     paid: false,
     amount: secondCreated.order.totalCents,
   });
-  await request("/api/payments/infinitepay/webhook", {
-    method: "POST",
-    body: {
-      invoice_slug: cancelledLateInvoice,
-      transaction_nsu: cancelledLateTransaction,
-      order_nsu: secondCreated.order.number,
-      amount: secondCreated.order.totalCents,
-    },
-  });
+  await insertFuturePaymentEventForTest(secondCreated.order.number, cancelledLateTransaction, cancelledLateInvoice, secondCreated.order.totalCents);
   await request(`/api/admin/orders/${secondCreated.order.number}/cancel`, {
     method: "PATCH",
     token,
@@ -1301,7 +1299,7 @@ try {
   await forcePaymentEventDueForTest(cancelledLateTransaction);
   const cancelledLateEvent = await waitForPaymentEventSettlementForTest(secondCreated.order.number, cancelledLateTransaction);
   assert.ok(cancelledLateEvent.dead_lettered_at);
-  const cancelledTracking = await request(`/api/orders/${secondCreated.order.number}?whatsapp=5598999991002`);
+  const cancelledTracking = await track(secondCreated.order.number, "5598999991002");
   assert.equal(cancelledTracking.order.status, "cancelled");
   assert.equal(cancelledTracking.order.paymentStatus, "pending");
   assert.equal(cancelledTracking.order.cancellationReason, "Pedido duplicado no smoke test");
@@ -1319,7 +1317,7 @@ try {
       body: { targetPhase },
     });
   }
-  let phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
+  let phaseTracking = await track(firstCreated.order.number, "98999991001");
   assert.equal(phaseTracking.order.status, "ready");
   await request(`/api/admin/campaigns/${campaign.code}/phase`, {
     method: "PATCH",
@@ -1332,14 +1330,14 @@ try {
     token,
     body: { targetPhase: "production", reason: "Validando retorno controlado" },
   });
-  phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
+  phaseTracking = await track(firstCreated.order.number, "98999991001");
   assert.equal(phaseTracking.order.status, "production");
   await request(`/api/admin/campaigns/${campaign.code}/phase`, {
     method: "PATCH",
     token,
     body: { targetPhase: "orders_closed", reason: "Validando retorno ao fechamento" },
   });
-  phaseTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
+  phaseTracking = await track(firstCreated.order.number, "98999991001");
   assert.equal(phaseTracking.order.status, "confirmed");
   await expireCampaignDeadlineForTest(campaign.code);
   await request(`/api/admin/campaigns/${campaign.code}/phase`, {
@@ -1373,7 +1371,7 @@ try {
     token,
     body: { status: "delivered", note: "Entrega do smoke test" },
   });
-  const deliveredTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
+  const deliveredTracking = await track(firstCreated.order.number, "98999991001");
   assert.equal(deliveredTracking.order.status, "delivered");
   const delivery = await request(`/api/admin/reports/delivery?campaign=${campaign.code}`, { token });
   assert.equal(delivery.rows.every((row) => row.orderNumber === firstCreated.order.number), true);
@@ -1412,7 +1410,7 @@ try {
     },
   });
   assert.equal(refund.refund.paymentStatus, "refunded");
-  const refundedTracking = await request(`/api/orders/${firstCreated.order.number}?whatsapp=98999991001`);
+  const refundedTracking = await track(firstCreated.order.number, "98999991001");
   assert.equal(refundedTracking.order.status, "cancelled");
   assert.equal(refundedTracking.order.paymentStatus, "refunded");
   assert.match(refundedTracking.order.cancellationReason, /Reembolso integral/);
@@ -1434,6 +1432,8 @@ try {
   step("reembolso integral expira checkout, encerra eventos tardios e retira o pedido da produção");
 
   const controlPage = await fetch(`${baseUrl}/controle-licenca`, { signal: AbortSignal.timeout(5000) });
+  assert.match(controlPage.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.equal(controlPage.headers.get('x-frame-options'), 'DENY');
   assert.equal(controlPage.status, 200);
   assert.match(controlPage.headers.get("x-robots-tag") ?? "", /noindex/);
   const initialLicense = await request("/api/license/control");
@@ -1458,8 +1458,11 @@ try {
 
   const suspendedPage = await fetch(`${baseUrl}/`, { signal: AbortSignal.timeout(5000) });
   assert.equal(suspendedPage.status, 503);
+  assert.match(suspendedPage.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.equal(suspendedPage.headers.get('x-frame-options'), 'DENY');
   assert.match(await suspendedPage.text(), /temporariamente suspenso/i);
   assert.equal((await request("/api/health")).license.status, "suspended");
+  assert.equal((await track(firstCreated.order.number, '98999991001')).order.number, firstCreated.order.number);
   await request("/api/admin/campaigns", { token });
   await request("/api/orders", {
     method: "POST",

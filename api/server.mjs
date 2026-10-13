@@ -9,8 +9,10 @@ import { reportStartupChecks, productionStartupErrors } from "./runtime/startup.
 import { cleanupStaleVideoParts } from "./modules/media/service.mjs";
 import { route } from "./http/router.mjs";
 import { observeRequest } from './http/telemetry.mjs';
+import { applySecurityHeaders } from './http/security-headers.mjs';
 
 export const server = http.createServer((request, response) => {
+  applySecurityHeaders(response);
   const requestId=observeRequest(request,response);
   route(request, response).catch((error) => {
     const knownError = error instanceof ApiError

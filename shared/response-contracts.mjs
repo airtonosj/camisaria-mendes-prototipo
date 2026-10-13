@@ -39,7 +39,7 @@ export function validApiResponse(path, method, payload) {
   if(method==='GET'&&route==='/admin/campaigns')return Array.isArray(payload.campaigns)&&payload.campaigns.every(adminCampaign);
   if(method==='POST'&&route==='/orders')return object(payload.order)&&string(payload.order.number)&&money(payload.order.totalCents)&&string(payload.order.paymentStatus);
   if(route.endsWith('/checkout'))return object(payload.checkout)&&string(payload.checkout.url)&&typeof payload.checkout.reused==='boolean';
-  if(method==='GET'&&/^\/orders\/[^/]+$/.test(route))return object(payload.order)&&string(payload.order.number)&&string(payload.order.status)&&Array.isArray(payload.order.items)&&money(payload.order.totalCents);
+  if((method==='GET'||method==='POST')&&/^\/orders\/[^/]+$/.test(route))return object(payload.order)&&string(payload.order.number)&&string(payload.order.status)&&Array.isArray(payload.order.items)&&money(payload.order.totalCents);
   if(method==='GET'&&/^\/(admin\/)?campaigns\/[^/]+$/.test(route))return campaign(payload.campaign);
   if(route.includes('/coupon')&&!route.includes('/admin/'))return coupon(payload.coupon);
   if(route==='/admin/reports/production')return Array.isArray(payload.rows)&&payload.rows.every(r=>object(r)&&string(r.campaignCode)&&Number.isFinite(r.quantity)&&object(r.color));

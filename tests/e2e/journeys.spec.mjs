@@ -23,13 +23,28 @@ test('checkout requires the name, creates one order, resumes and tracks it',asyn
  await page.getByRole('button',{name:/Pagar|pagamento/i}).last().click();
  const response=await created;expect(response.status()).toBe(201);const {order}=await response.json();
  await expect(page.getByRole('heading',{name:'Checkout fictício'})).toBeVisible();
- const result=await request.get(`/api/orders/${order.number}?whatsapp=98999991234`);expect(result.ok()).toBe(true);expect((await result.json()).order.paymentStatus).toBe('pending');
+ const result=await request.post(`/api/orders/${order.number}`,{data:{whatsapp:'98999991234'}});expect(result.ok()).toBe(true);expect((await result.json()).order.paymentStatus).toBe('pending');
  await page.goto(`/?campanha=MENDES-ENG-26&retomar=${order.number}`);await expect(page.getByText('Retomando o pagamento do pedido',{exact:false})).toBeVisible();
  await page.getByPlaceholder('WhatsApp com DDD').fill('98999991234');
  await page.screenshot({path:`qa-evidence/structure/after/resume-${testInfo.project.name}.png`,fullPage:true});
  const checkout=page.waitForResponse(r=>r.url().endsWith('/checkout'));await page.getByRole('button',{name:/Pagar|pagamento/i}).last().click();expect((await checkout).ok()).toBe(true);
  await expect(page.getByRole('heading',{name:'Checkout fictício'})).toBeVisible();
- await page.goto(`/?rota=acompanhar-pedido&pedido=${order.number}`);await page.locator('input[type=tel]').fill('98999991234');await page.getByRole('button',{name:/Consultar|Acompanhar/}).click();await expect(page.getByText(order.number,{exact:false}).first()).toBeVisible();
+ await page.goto(`/?rota=acompanhar-pedido&pedido=${order.number}`);await page.locator('input[type=tel]').fill('98999991234');
+ const tracked=page.waitForRequest(r=>r.url().endsWith(`/api/orders/${order.number}`)&&r.method()==='POST');
+ await page.getByRole('button',{name:/Consultar|Acompanhar/}).click();
+ const lookup=await tracked;expect(new URL(lookup.url()).search).toBe('');expect(Object.keys(lookup.postDataJSON())).toEqual(['whatsapp']);expect(lookup.postDataJSON().whatsapp.replace(/\D/g,'')).toBe('98999991234');
+ await expect(page.getByText(order.number,{exact:false}).first()).toBeVisible();
+ expect((await request.get(`/api/orders/${order.number}?whatsapp=98999991234`)).status()).toBe(410);
+});
+
+test('production HTML and fallback responses prevent framing',async({page,request})=>{
+ for(const path of ['/', '/index.html', '/acesso-camisaria/', '/?rota=acompanhar-pedido', '/unknown-spa-path', '/api/missing']){
+  const response=await request.get(path);expect(response.headers()['content-security-policy']).toContain("frame-ancestors 'none'");expect(response.headers()['x-frame-options']).toBe('DENY');
+ }
+ await page.route('http://localhost:4186/frame-test',route=>route.fulfill({contentType:'text/html',body:'<iframe src="http://127.0.0.1:4186/acesso-camisaria/"></iframe>'}));
+ await page.goto('http://localhost:4186/frame-test');
+ await expect(page.locator('iframe')).toBeVisible();
+ await expect(page.frameLocator('iframe').locator('input[type=email]')).toHaveCount(0);
 });
 test('staff login and required password change preserve access restrictions',async({page})=>{
  await login(page,'change@example.test');await expect(page.getByText(/senha provisória/i).first()).toBeVisible();

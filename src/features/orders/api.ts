@@ -40,13 +40,13 @@ export async function requestInfinitePayReconciliation(input: {
       receipt_url: input.receiptUrl,
       capture_method: input.captureMethod,
     }),
-  });
+  }, 15000);
 }
 
 export async function trackOrderInApi(orderNumber: string, whatsapp: string) {
-  const query = new URLSearchParams({ whatsapp });
   const payload = await request<{ order: TrackedOrder }>(
-    `/orders/${encodeURIComponent(orderNumber)}?${query.toString()}`,
+    `/orders/${encodeURIComponent(orderNumber)}`,
+    { method: "POST", body: JSON.stringify({ whatsapp }) },
   );
   return payload.order;
 }

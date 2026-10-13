@@ -1,4 +1,5 @@
 import { startWorker } from './runtime/worker.mjs';
+import { randomUUID } from 'node:crypto';
 import { config } from "./config.mjs";
 import { pool, withTransaction } from "./database.mjs";
 import { checkInfinitePayPayment, createInfinitePayLink, InfinitePayRequestError, normalizeInfinitePayEvent } from "./infinitepay.mjs";
@@ -13,6 +14,10 @@ const maxReconciliationAttempts = 6;
 const deadLetterRetentionDays = 30;
 const deadLetterCleanupIntervalMs = 60 * 60 * 1000;
 let lastDeadLetterCleanupAt = 0;
+let admissionChecksInFlight = 0;
+const maxAdmissionChecksInFlight = 8;
+const verifiedEventTypes = "'verified_webhook', 'verified_browser_reconciliation'";
+const providerCheckedTypes = new Set(['verified_webhook', 'verified_browser_reconciliation']);
 
 class TerminalPaymentStateError extends Error {}
 
@@ -207,11 +212,61 @@ export async function enqueueInfinitePayEvent(payload, source = "webhook") {
     ...(event.paidAmount === null ? {} : { paid_amount: event.paidAmount }),
     ...(event.captureMethod === null ? {} : { capture_method: event.captureMethod }),
   };
+  // Read without holding a transaction across the provider request. Only paid,
+  // amount-matched candidates may consume durable queue capacity. Legacy rows
+  // remain available to the existing worker and do not count against this lane.
+  const [snapshots] = await pool.execute(
+    `SELECT o.id, o.status, o.payment_status, o.total_cents,
+            pc.status AS checkout_status, pc.handle, pc.checkout_url
+       FROM orders o LEFT JOIN payment_checkouts pc ON pc.order_id = o.id AND pc.provider = ?
+      WHERE o.order_number = ? LIMIT 1`,
+    [provider, event.orderNsu],
+  );
+  const snapshot = snapshots[0];
+  if (!snapshot) throw new PaymentIntegrationError(400, "ORDER_NOT_FOUND", "Pedido informado pela InfinitePay não existe.");
+  const [existing] = await pool.execute(
+    "SELECT order_id, event_type, processed_at FROM payment_events WHERE provider = ? AND provider_event_id = ? LIMIT 1",
+    [provider, event.transactionNsu],
+  );
+  if (existing[0] && Number(existing[0].order_id) !== Number(snapshot.id)
+      && (existing[0].processed_at || providerCheckedTypes.has(existing[0].event_type))) {
+    throw new PaymentIntegrationError(409, "PAYMENT_TRANSACTION_IN_USE", "A transação já pertence a outro pedido.");
+  }
+  if (existing[0]?.processed_at && Number(existing[0].order_id) === Number(snapshot.id)) return { accepted: true, duplicate: true };
+  if (snapshot.status !== "active" || !["pending", "failed"].includes(snapshot.payment_status)
+      || snapshot.checkout_status !== "pending" || !snapshot.checkout_url) {
+    throw new PaymentIntegrationError(409, "PAYMENT_EVENT_NOT_EXPECTED", "Este pedido não possui um checkout pendente para reconciliação.");
+  }
+  // Keep external verification bounded. A 400 asks InfinitePay to retry rather
+  // than acknowledging an event that was not durably accepted.
+  if (admissionChecksInFlight >= maxAdmissionChecksInFlight) {
+    throw new PaymentIntegrationError(400, "PAYMENT_VERIFICATION_BUSY", "A conferência está ocupada. Tente novamente em instantes.");
+  }
+  let checked;
+  admissionChecksInFlight += 1;
+  try {
+    checked = await checkInfinitePayPayment({
+      handle: snapshot.handle ?? null, orderNsu: event.orderNsu,
+      transactionNsu: event.transactionNsu, invoiceSlug: event.invoiceSlug,
+    });
+  } catch (error) {
+    if (!(error instanceof InfinitePayRequestError)) throw error;
+    throw new PaymentIntegrationError(400, "PAYMENT_VERIFICATION_UNAVAILABLE", "A confirmação está temporariamente indisponível. Tente novamente.");
+  } finally {
+    admissionChecksInFlight -= 1;
+  }
+  if (checked?.success !== true || checked?.paid !== true) {
+    throw new PaymentIntegrationError(400, "PAYMENT_NOT_CONFIRMED", "O provedor ainda não confirmou este pagamento.");
+  }
+  const checkedAmount = Number(checked.amount);
+  if (!Number.isSafeInteger(checkedAmount) || checkedAmount < 1 || checkedAmount !== Number(snapshot.total_cents)) {
+    throw new PaymentIntegrationError(400, "PAYMENT_AMOUNT_MISMATCH", "O pagamento não passou na conferência de valor.");
+  }
   return withTransaction(async (connection) => {
     // O bloqueio do pedido serializa a contagem e a inserção, impedindo que
     // requisições concorrentes ultrapassem os limites da fila.
     const [orders] = await connection.execute(
-      `SELECT id, status, payment_status
+      `SELECT id, status, payment_status, total_cents
          FROM orders
         WHERE order_number = ?
         LIMIT 1 FOR UPDATE`,
@@ -223,16 +278,21 @@ export async function enqueueInfinitePayEvent(payload, source = "webhook") {
     const order = orders[0];
 
     const [duplicates] = await connection.execute(
-      "SELECT id FROM payment_events WHERE provider = ? AND provider_event_id = ? LIMIT 1",
+      "SELECT id, order_id, event_type, processed_at, locked_at FROM payment_events WHERE provider = ? AND provider_event_id = ? LIMIT 1 FOR UPDATE",
       [provider, event.transactionNsu],
     );
-    if (duplicates.length > 0) return { accepted: true, duplicate: true };
+    let duplicate = duplicates[0];
+    if (duplicate && Number(duplicate.order_id) !== Number(order.id)
+        && (duplicate.processed_at || providerCheckedTypes.has(duplicate.event_type))) {
+      throw new PaymentIntegrationError(409, "PAYMENT_TRANSACTION_IN_USE", "A transação já pertence a outro pedido.");
+    }
+    if (duplicate?.processed_at && Number(duplicate.order_id) === Number(order.id)) return { accepted: true, duplicate: true };
 
     const [checkouts] = await connection.execute(
-      `SELECT status
+      `SELECT status, handle, checkout_url
          FROM payment_checkouts
         WHERE order_id = ? AND provider = ? AND checkout_url IS NOT NULL
-        LIMIT 1`,
+        LIMIT 1 FOR UPDATE`,
       [order.id, provider],
     );
     if (order.status !== "active" || !["pending", "failed"].includes(order.payment_status) || checkouts[0]?.status !== "pending") {
@@ -242,20 +302,52 @@ export async function enqueueInfinitePayEvent(payload, source = "webhook") {
         "Este pedido não possui um checkout pendente para reconciliação.",
       );
     }
+    if (Number(order.total_cents) !== checkedAmount || checkouts[0].handle !== snapshot.handle
+        || checkouts[0].checkout_url !== snapshot.checkout_url) {
+      throw new PaymentIntegrationError(400, "PAYMENT_CHECKOUT_CHANGED", "O checkout mudou durante a conferência. Tente novamente.");
+    }
+    if (duplicate && Number(duplicate.order_id) !== Number(order.id)) {
+      if (duplicate.locked_at) {
+        throw new PaymentIntegrationError(400, "PAYMENT_VERIFICATION_BUSY", "A conferência está ocupada. Tente novamente em instantes.");
+      }
+      // Preserve the old row, order and original payload as dead-letter history.
+      // Its unverified reservation is not ownership of a provider transaction.
+      await connection.execute(
+        `UPDATE payment_events SET provider_event_id = ?, dead_lettered_at = CURRENT_TIMESTAMP(3),
+           processing_error = 'Reserva legada substituída após conferência do provedor.' WHERE id = ?`,
+        [`legacy-${randomUUID()}`, duplicate.id],
+      );
+      duplicate = undefined;
+    }
+    if (duplicate) {
+      if (providerCheckedTypes.has(duplicate.event_type)) return { accepted: true, duplicate: true };
+      // A pre-deploy forged event must not reserve a legitimate transaction ID.
+      // Never replace a payload while an old worker is using that row.
+      if (duplicate.locked_at) {
+        throw new PaymentIntegrationError(400, "PAYMENT_VERIFICATION_BUSY", "A conferência está ocupada. Tente novamente em instantes.");
+      }
+      await connection.execute(
+        `UPDATE payment_events SET payload = ?, event_type = ?, attempts = 0,
+           available_at = CURRENT_TIMESTAMP(3), dead_lettered_at = NULL, processing_error = NULL
+         WHERE id = ?`,
+        [JSON.stringify(canonicalPayload), source === "webhook" ? "verified_webhook" : "verified_browser_reconciliation", duplicate.id],
+      );
+      return { accepted: true, duplicate: true };
+    }
 
     const [queueRows] = await connection.execute(
       `SELECT
          SUM(processed_at IS NULL AND dead_lettered_at IS NULL) AS pending_count,
          SUM(received_at >= DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 1 DAY)) AS recent_count
        FROM payment_events
-       WHERE provider = ? AND order_id = ?`,
+       WHERE provider = ? AND order_id = ? AND event_type IN (${verifiedEventTypes})`,
       [provider, order.id],
     );
     const pendingCount = Number(queueRows[0]?.pending_count ?? 0);
     const recentCount = Number(queueRows[0]?.recent_count ?? 0);
     if (pendingCount >= maxPendingEventsPerOrder || recentCount >= maxEventsPerOrderPerDay) {
       throw new PaymentIntegrationError(
-        429,
+        400,
         "PAYMENT_EVENT_QUEUE_LIMIT",
         "Muitas tentativas de reconciliação foram recebidas para este pedido. Aguarde a confirmação automática.",
       );
@@ -269,7 +361,7 @@ export async function enqueueInfinitePayEvent(payload, source = "webhook") {
         provider,
         order.id,
         event.transactionNsu,
-        source === "webhook" ? "payment_approved" : "browser_reconciliation",
+        source === "webhook" ? "verified_webhook" : "verified_browser_reconciliation",
         JSON.stringify(canonicalPayload),
       ],
     );
@@ -306,7 +398,8 @@ export async function processInfinitePayEvents({ limit = 10 } = {}) {
   await pruneExpiredDeadLetters();
   const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit), 10) || 10));
   const [candidates] = await pool.execute(
-    `SELECT id, attempts FROM payment_events WHERE provider = ? AND ${queueCondition()} ORDER BY available_at, id LIMIT ${safeLimit}`,
+    `SELECT id, attempts FROM payment_events WHERE provider = ? AND ${queueCondition()}
+       ORDER BY (event_type IN (${verifiedEventTypes})) DESC, available_at, id LIMIT ${safeLimit}`,
     [provider],
   );
   const result = { processed: 0, paid: 0, failed: 0 };

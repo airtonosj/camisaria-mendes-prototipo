@@ -8,7 +8,7 @@ async function readRequestJson(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
 }
 
-export async function startFakeInfinitePay(environment, { beforeLinkResponse } = {}) {
+export async function startFakeInfinitePay(environment, { beforeLinkResponse, beforeCheckResponse } = {}) {
   const server = http.createServer(async (request, response) => {
     const body = await readRequestJson(request);
     response.setHeader("Content-Type", "application/json");
@@ -34,6 +34,14 @@ export async function startFakeInfinitePay(environment, { beforeLinkResponse } =
     }
     if (request.method === "POST" && request.url === "/payment_check") {
       fakeInfinitePay.checkRequests.push(body);
+      if (beforeCheckResponse) {
+        const override = await beforeCheckResponse(body);
+        if (override) {
+          response.statusCode = override.status;
+          response.end(JSON.stringify(override.body));
+          return;
+        }
+      }
       response.end(JSON.stringify(fakeInfinitePay.checks.get(body.transaction_nsu) ?? {
         success: true,
         paid: false,

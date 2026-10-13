@@ -17,6 +17,8 @@ export function administrativeFrontendAllowedDuringSuspension(requestUrl, path) 
 }
 
 export function mutationAllowedDuringSuspension(method, path) {
+  // Tracking remains read-only even though its private input now travels in JSON.
+  if (method === "POST" && /^\/api\/orders\/[^/]+$/.test(path)) return true;
   if (path.startsWith("/api/auth/")) return true;
   if (method === "PATCH" && path === "/api/admin/account") return true;
   if (method === "POST" && new Set([

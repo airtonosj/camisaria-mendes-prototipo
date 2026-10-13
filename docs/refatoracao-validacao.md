@@ -79,3 +79,7 @@ Diagnóstico somente leitura autorizado no servidor de produção MariaDB 11.8.9
 ## Revisão extensa após a publicação (02/10/2026)
 
 Gates finais completos aprovados em MySQL 8.0.46 e MariaDB 11.8.9, sequencialmente: tipos, lint, 28 unitários, oito integrações, build e 30 jornadas desktop/celular por banco, com encerramento normal. Cobertura da listagem com 52 campanhas, 2.423 pedidos, agrupamento estrito, duas collations e dez leituras concorrentes; oito pedidos disputam o último uso de cupom. Falhas HTTP, conexão, resposta inválida e timeout têm regressões de recuperação no navegador. Correções adicionais e limites descritos na [revisão do carregamento](revisao-carregamento-painel.md). Ajustes locais, sem nova publicação; CI com os dois bancos preparado, ainda sem execução remota.
+
+## Segurança — 13/10/2026
+
+`check:release` aprovado sequencialmente em Node 24.18/MySQL 8.0.46, Node 24.18/MariaDB 11.8.9 e Node 22.23.3/MariaDB 11.8.9: tipos, lint, 31 unitários, 10 integrações, build e 40 jornadas desktop/celular por rodada. Regressões cobrem consulta sem telefone na URL, anti-framing, admissão de pagamento pelo provedor e recuperação da fila anterior ao deploy. Artefato, compatibilidade e limitações registrados em [correções de segurança](correcoes-seguranca.md). Trabalho local; produção e CI remota não foram alteradas.

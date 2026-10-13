@@ -125,3 +125,12 @@ Implementação: `35be302`. Documentação e evidências acompanham o commit seg
 - Migração aditiva e reexecutável `026_campaign_delivery`. Novos pedidos preservam a previsão de compra na transação; pedidos antigos continuam sem snapshot. Consulta mostra a previsão atual e indica alterações.
 - Tipos, lint, 29 unitários, nove integrações e build aprovados. As 34 jornadas existentes passaram; as quatro novas passaram em desktop/celular após ajustar a navegação do teste sobre o menu lateral. Capturas inspecionadas em `qa-evidence/campaign-delivery/`.
 - Detalhes em [prazo de entrega](prazo-entrega.md). Alterações anteriores do carrinho preservadas. Sem commit, push, deploy, compra ou envio real; migração aplicada somente nos bancos locais de teste.
+
+## Correções de segurança (13/10/2026)
+
+- Acompanhamento por POST com WhatsApp no corpo; GET antigo pede recarga. Link público, formato da resposta, histórico e consulta durante suspensão preservados.
+- Headers anti-framing globais no Node e configuração equivalente no Nginx alternativo, preservando a CSP das páginas de licença.
+- Admissão de novos eventos InfinitePay exige conferência do provedor antes de ocupar a fila. Eventos legados continuam processáveis; reservas falsas legadas em outro pedido são recuperadas após conferência, conservando a entrada antiga como histórico.
+- Gates completos sequenciais aprovados: Node 24/MySQL 8.0.46, Node 24/MariaDB 11.8.9 e Node 22.23.3/MariaDB 11.8.9; em cada rodada, 31 unitários, 10 integrações, build e 40 jornadas desktop/celular.
+- Sem nova migração de segurança ou variável obrigatória; a base já inclui a 026. Publicar frontend e backend juntos e recarregar abas antigas. Detalhes, regressões, versão do artefato e limites em [correções de segurança](correcoes-seguranca.md).
+- Alterações locais, sem commit, push, deploy, compra ou envio real. A validação após CDN/Hostinger continua sendo etapa de publicação.

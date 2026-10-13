@@ -133,8 +133,8 @@ export function effectiveOrderStatus(order) {
   return "confirmed";
 }
 
-export async function trackOrder(requestUrl, orderNumber) {
-  const whatsapp = normalizeWhatsapp(requestUrl.searchParams.get("whatsapp"));
+export async function trackOrder(phone, orderNumber) {
+  const whatsapp = normalizeWhatsapp(phone);
   const lookup = whatsappLookupValues(whatsapp);
   const [rows] = await queries.trackOrderQuery1(pool, [orderNumber, ...lookup], lookup.map(() => "?").join(", "));
   if (rows.length === 0) throw new ApiError(404, "ORDER_NOT_FOUND", "Pedido não encontrado com os dados informados.");
