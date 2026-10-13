@@ -19,7 +19,7 @@ export const nav: Array<[AdminSection, string, string]> = [
   ["campaigns", "campaign", "Campanhas"],
   ["orders", "receipt_long", "Pedidos"],
   ["products", "checkroom", "Produtos"],
-  ["metrics", "query_stats", "Métricas"],
+  ["metrics", "timeline", "Métricas"],
   ["reports", "monitoring", "Relatórios"],
   ["account", "manage_accounts", "Conta"],
 ];
