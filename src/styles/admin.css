@@ -439,13 +439,18 @@
 .sales-panel { min-width: 0; padding: 21px; }
 .sales-panel h3 { margin: 0 0 5px; color: #151a1d; font-size: 1rem; letter-spacing: -.03em; }
 .sales-panel > p { margin: 0; color: #697277; font-size: .59rem; line-height: 1.5; }
-.sales-funnel-chart { display: grid; justify-items: center; gap: 5px; margin: 19px auto 0; }
-.sales-funnel-stage { min-width: 170px; min-height: 39px; display: flex; align-items: center; justify-content: space-between; gap: 12px; clip-path: polygon(6% 0, 94% 0, 100% 100%, 0 100%); padding: 0 19px; color: #fff; background: linear-gradient(90deg, #087fca, #079ee8); font-size: .58rem; font-weight: 700; transition: width .2s ease; }
-.sales-funnel-stage:nth-child(2) { opacity: .88; }
-.sales-funnel-stage:nth-child(3) { opacity: .76; }
-.sales-funnel-stage:nth-child(4) { opacity: .64; }
-.sales-funnel-stage:nth-child(5) { opacity: .52; }
-.sales-funnel-stage strong, .sales-sources strong { text-align: right; font-variant-numeric: tabular-nums; }
+.sales-funnel-utmify { display: grid; gap: 8px; margin-top: 19px; }
+.sales-funnel-utmify-stage { display: flex; justify-content: center; }
+.sales-funnel-utmify-bar { min-width: 196px; min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-radius: 5px; padding: 10px 15px; color: #fff; background: linear-gradient(100deg, #047abf, #159fde); box-shadow: 0 7px 15px rgba(7, 158, 232, .14); transition: width .2s ease; }
+.sales-funnel-utmify-bar > div { display: grid; gap: 3px; }
+.sales-funnel-utmify-bar span { font-size: .56rem; font-weight: 650; }
+.sales-funnel-utmify-bar strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
+.sales-funnel-utmify-bar small { border-left: 1px solid rgba(255,255,255,.35); padding-left: 13px; font-size: .51rem; font-weight: 700; text-align: right; }
+.sales-funnel-utmify-stage:nth-child(2) .sales-funnel-utmify-bar { background: linear-gradient(100deg, #0b87c9, #22a9e4); }
+.sales-funnel-utmify-stage:nth-child(3) .sales-funnel-utmify-bar { background: linear-gradient(100deg, #168fca, #3bb5e8); }
+.sales-funnel-utmify-stage:nth-child(4) .sales-funnel-utmify-bar { background: linear-gradient(100deg, #2998ce, #55bce9); }
+.sales-funnel-utmify-stage:nth-child(5) .sales-funnel-utmify-bar { background: linear-gradient(100deg, #45a7d2, #70c8ee); }
+.sales-funnel-utmify-bar strong, .sales-sources strong { text-align: right; font-variant-numeric: tabular-nums; }
 .sales-sources { margin-top: 14px; }
 .sales-sources > div { display: grid; grid-template-columns: minmax(0, 1fr) 58px 48px; gap: 6px; border-bottom: 1px solid #e8ecea; padding: 10px 0; color: #354045; font-size: .56rem; }
 .sales-sources > div:first-child { color: #768085; font-weight: 700; }
@@ -471,7 +476,7 @@
   .sales-metric-row article { min-height: 112px; padding: 15px; }
   .sales-metrics-grid { grid-template-columns: 1fr; gap: 9px; }
   .sales-panel { padding: 17px; }
-  .sales-funnel-stage { min-width: 155px; min-height: 42px; padding: 0 17px; font-size: .56rem; }
+  .sales-funnel-utmify-bar { min-width: 174px; min-height: 61px; padding: 10px 13px; }
 }
 .campaign-real-video-status small { color: #a83232; font-size: .5rem; line-height: 1.35; }
 .campaign-real-video-status progress { width: 100%; height: 7px; accent-color: #087fca; }
