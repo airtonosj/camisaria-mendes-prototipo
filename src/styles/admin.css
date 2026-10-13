@@ -1529,7 +1529,7 @@
 }
 
 @media screen and (max-width: 580px) {
-  .admin-sidebar nav { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .admin-sidebar nav { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .admin-sidebar .admin-nav-label { font-size: .56rem; }
 }
 
