@@ -35,13 +35,18 @@ test('delivery forecast is editable, shown under the desktop image, grouped in r
     await page.getByRole('button', { name: 'Salvar alterações', exact: true }).click();
     expect((await saved).status()).toBe(200);
     const campaign = (await (await request.get(`/api/campaigns/${code}`)).json()).campaign;
+    const deadlineText = `Pedidos até ${new Date(campaign.deadlineAt).toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
     expect(campaign.deliveryExpectedOn).toBe('2026-11-10');
     expect(campaign.deliveryNote).toBe(note);
     await page.goto(`/?campanha=${code}`);
     const display = page.locator(testInfo.project.name === 'desktop' ? '.campaign-delivery-desktop' : '.campaign-delivery-mobile');
     await expect(display).toBeVisible();
     await expect(display).toContainText('Entrega prevista para 10 de novembro');
-    await expect(display).not.toContainText('2026');
+    await expect(display).toContainText(deadlineText);
+    await expect(page.locator('.campaign-private-meta')).not.toContainText(deadlineText);
+    const deliveryRows = display.locator(':scope > div');
+    await expect(deliveryRows.nth(1)).toContainText('Entrega prevista para 10 de novembro');
+    await expect(deliveryRows.nth(2)).toContainText(deadlineText);
     if (testInfo.project.name === 'desktop') {
       const image = await page.locator('.campaign-media-carousel').boundingBox();
       const info = await display.boundingBox();
@@ -53,7 +58,8 @@ test('delivery forecast is editable, shown under the desktop image, grouped in r
     await page.getByRole('dialog', { name: /Seu carrinho/ }).getByRole('button', { name: 'Revisar pedido', exact: true }).click();
     const group = page.locator('.checkout-order-review .campaign-delivery-info');
     await expect(group).toContainText(note);
-    expect(await group.locator(':scope > div').count()).toBe(3);
+    await expect(group.locator(':scope > div').nth(2)).toContainText(deadlineText);
+    expect(await group.locator(':scope > div').count()).toBe(4);
     expect(await group.locator(':scope > div').evaluateAll(rows => rows.every(row => globalThis.getComputedStyle(row).borderTopWidth === '0px' && globalThis.getComputedStyle(row).borderBottomWidth === '0px'))).toBe(true);
     expect(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth)).toBe(true);
     await page.screenshot({ path: `qa-evidence/campaign-delivery/review-${testInfo.project.name}.png`, fullPage: true });
