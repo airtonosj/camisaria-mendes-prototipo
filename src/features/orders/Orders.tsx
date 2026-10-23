@@ -16,11 +16,11 @@ export function Orders({ data }: { data: PanelData }) {
   const [pickupOpen, setPickupOpen] = useState(false);
   const [emailHistoryOpen, setEmailHistoryOpen] = useState(false);
   const { campaigns, orders, mode, loadOrders, reload } = data;
-  const [selectedCode, setSelectedCode] = useState(campaigns[0]?.code ?? "");
+  const [selectedCode, setSelectedCode] = useState(campaigns.find((campaign) => campaign.phase === "receiving_orders")?.code ?? campaigns[0]?.code ?? "");
   const [search, setSearch] = useState("");
   const [paymentFilter, setPaymentFilter] = useState<"all" | PaymentStatusCode>("paid");
   const [campaignSearch, setCampaignSearch] = useState("");
-  const [phaseFilter, setPhaseFilter] = useState<"all" | CampaignPhaseCode>("all");
+  const [phaseFilter, setPhaseFilter] = useState<"all" | CampaignPhaseCode>("receiving_orders");
   const [campaignMenuOpen, setCampaignMenuOpen] = useState(true);
   const pickerSearchRef = useRef<HTMLInputElement>(null);
   const [feedback, setFeedback] = useState("");
@@ -35,7 +35,7 @@ export function Orders({ data }: { data: PanelData }) {
   const [viewingOrderNumber, setViewingOrderNumber] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const selected = campaigns.find((campaign) => campaign.code === selectedCode) ?? campaigns[0];
+  const selected = campaigns.find((campaign) => campaign.code === selectedCode) ?? campaigns.find((campaign) => campaign.phase === "receiving_orders") ?? campaigns[0];
 
   const orderCampaignCode = selected?.code;
   useEffect(() => {

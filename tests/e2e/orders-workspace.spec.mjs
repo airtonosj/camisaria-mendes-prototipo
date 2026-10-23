@@ -27,6 +27,12 @@ test('orders workspace keeps paid defaults, one campaign selector and historical
   await expect(page).toHaveURL(/rota=admin/);
   await page.getByRole('button', { name: 'Pedidos', exact: true }).click();
   await page.mouse.move(1000, 100);
+  const phase = page.getByLabel('Filtrar por fase');
+  await expect(phase).toHaveValue('receiving_orders');
+  await expect(page.locator('.orders-campaign-list button').first()).toContainText('Recebendo pedidos');
+  await phase.selectOption('all');
+  await expect(phase).toHaveValue('all');
+  await phase.selectOption('receiving_orders');
   const payment = page.getByLabel('Filtrar por pagamento');
   await expect(payment).toHaveValue('paid');
   await expect(page.locator('.campaign-orders-row')).toHaveCount(2);
