@@ -443,7 +443,7 @@ const api = startApi();
 try {
   const health = await waitForApi(api.child);
   assert.equal(health.schema.ready, true);
-  assert.equal(health.schema.current, "027_sales_metrics");
+  assert.equal(health.schema.current, "030_public_campaigns");
   assert.equal(health.storage.ready, true);
   assert.equal(health.license.status, "active");
   step("health check valida conexão e versão do schema");

@@ -37,6 +37,11 @@ export function validApiResponse(path, method, payload) {
   if(!object(payload))return false;
   const route=path.split('?')[0];
   if(method==='GET'&&route==='/admin/campaigns')return Array.isArray(payload.campaigns)&&payload.campaigns.every(adminCampaign);
+  if(method==='GET'&&route==='/campaigns/public')return Array.isArray(payload.campaigns)
+    && payload.campaigns.every(item=>object(item)&&string(item.code)&&string(item.title)&&nullableString(item.subtitle)
+      && string(item.deadlineAt)&&nullableString(item.imageUrl))
+    && money(payload.total)&&Number.isSafeInteger(payload.page)&&payload.page>0
+    && Number.isSafeInteger(payload.pageSize)&&payload.pageSize>0;
   if(method==='POST'&&route==='/orders')return object(payload.order)&&string(payload.order.number)&&money(payload.order.totalCents)&&string(payload.order.paymentStatus);
   if(route.endsWith('/checkout'))return object(payload.checkout)&&string(payload.checkout.url)&&typeof payload.checkout.reused==='boolean';
   if((method==='GET'||method==='POST')&&/^\/orders\/[^/]+$/.test(route))return object(payload.order)&&string(payload.order.number)&&string(payload.order.status)&&Array.isArray(payload.order.items)&&money(payload.order.totalCents);

@@ -84,6 +84,7 @@ export async function campaignPreviewHtml(html, requestUrl, publicAppUrl, getCam
     ...Object.entries(properties).map(([property, value]) =>
       `<meta property="${property}" content="${escapeHtml(value)}" />`),
     `<meta name="twitter:card" content="${image ? "summary_large_image" : "summary"}" />`,
+    campaign.isPublic ? `<link rel="canonical" href="${escapeHtml(canonical.href)}" />` : `<meta name="robots" content="noindex" />`,
   ].join("\n    ");
   return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(title)}</title>`)
     .replace(/<meta\s+name="description"\s+content="[^"]*"\s*\/?\s*>/i,

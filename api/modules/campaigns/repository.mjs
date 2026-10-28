@@ -3,7 +3,7 @@
  * @param {unknown[]} values
  */
 export function getCampaignQuery1(executor, values) {
-  return executor.execute(`SELECT id, code, title, subtitle, phase, deadline_at, DATE_FORMAT(delivery_expected_on, '%Y-%m-%d') AS delivery_expected_on, delivery_note, pickup_instructions,
+  return executor.execute(`SELECT id, code, title, subtitle, phase, is_public, deadline_at, DATE_FORMAT(delivery_expected_on, '%Y-%m-%d') AS delivery_expected_on, delivery_note, pickup_instructions,
             representative_name, representative_whatsapp, art_front_url, art_back_url, art_render_mode,
             mockup_enabled, real_photos_enabled,
             art_front_x, art_front_y, art_front_scale, art_front_rotation,
@@ -87,6 +87,40 @@ export function getPublicCampaignCouponQuery1(executor, values) {
   return executor.execute("SELECT id FROM campaigns WHERE code = ? LIMIT 1", values);
 }
 
+export function countPublicCampaigns(executor, values) {
+  return executor.execute(`SELECT COUNT(*) AS total FROM campaigns
+    WHERE is_public = TRUE AND phase = 'receiving_orders' AND deadline_at >= UTC_TIMESTAMP(3)
+      AND (? = '' OR title LIKE CONCAT('%', ?, '%') OR code LIKE CONCAT('%', ?, '%'))`, values);
+}
+
+export function publicCampaignSitemap(executor) {
+  return executor.query(`SELECT code FROM campaigns
+    WHERE is_public = TRUE AND phase = 'receiving_orders' AND deadline_at >= UTC_TIMESTAMP(3)
+    ORDER BY id DESC LIMIT 49998`);
+}
+
+export function listPublicCampaigns(executor, values) {
+  return executor.query(`SELECT c.code, c.title, c.subtitle, c.deadline_at,
+    COALESCE(
+      CASE WHEN c.real_photos_enabled THEN
+        (SELECT ccp.photo_url FROM campaign_color_photos ccp
+          JOIN campaign_variants cv ON cv.campaign_id = c.id AND cv.color_id = ccp.color_id AND cv.active = TRUE
+          WHERE ccp.campaign_id = c.id ORDER BY ccp.sort_order, ccp.id LIMIT 1)
+      END,
+      CASE WHEN c.mockup_enabled THEN
+        (SELECT cva.front_url FROM campaign_variant_artworks cva
+          JOIN campaign_variants cv ON cv.id = cva.campaign_variant_id AND cv.active = TRUE
+          WHERE cv.campaign_id = c.id AND cva.artwork_mode = 'variant_mockup' AND cva.front_url IS NOT NULL
+          ORDER BY cv.id LIMIT 1)
+      END,
+      CASE WHEN c.mockup_enabled THEN c.art_front_url END
+    ) AS image_url
+    FROM campaigns c
+    WHERE c.is_public = TRUE AND c.phase = 'receiving_orders' AND c.deadline_at >= UTC_TIMESTAMP(3)
+      AND (? = '' OR c.title LIKE CONCAT('%', ?, '%') OR c.code LIKE CONCAT('%', ?, '%'))
+    ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?`, values);
+}
+
 /** Uses the caller's connection; the service owns the transaction.
  * @param {import('mysql2/promise').Pool | import('mysql2/promise').PoolConnection} executor
  * @param {unknown[]} values
@@ -94,7 +128,7 @@ export function getPublicCampaignCouponQuery1(executor, values) {
 export function listCampaignsQuery1(executor, values) {
   // Aggregate orders before joining: one row per campaign, including under
   // MariaDB ONLY_FULL_GROUP_BY (which cannot infer MySQL's functional dependencies).
-  return executor.execute(`SELECT c.id, c.code, c.title, c.subtitle, c.phase, c.created_at, c.deadline_at, DATE_FORMAT(c.delivery_expected_on, '%Y-%m-%d') AS delivery_expected_on, c.delivery_note, c.pickup_instructions,
+  return executor.execute(`SELECT c.id, c.code, c.title, c.subtitle, c.phase, c.is_public, c.created_at, c.deadline_at, DATE_FORMAT(c.delivery_expected_on, '%Y-%m-%d') AS delivery_expected_on, c.delivery_note, c.pickup_instructions,
             c.representative_name, c.representative_whatsapp, c.art_front_url, c.art_back_url, c.art_render_mode,
             COALESCE(
               c.art_front_url,
@@ -392,8 +426,8 @@ export function createCampaignQuery2(executor, values) {
   return executor.execute(`INSERT INTO campaigns
         (code, title, subtitle, deadline_at, pickup_instructions, representative_name,
          representative_whatsapp, art_front_url, art_back_url, art_render_mode,
-         mockup_enabled, real_photos_enabled, created_by_user_id, receiver_id, delivery_expected_on, delivery_note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, values);
+         mockup_enabled, real_photos_enabled, created_by_user_id, receiver_id, delivery_expected_on, delivery_note, is_public)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, values);
 }
 
 /** Uses the caller's connection; the service owns the transaction.
@@ -420,7 +454,7 @@ export function createCampaignQuery4(executor, values) {
  * @param {unknown[]} values
  */
 export function updateCampaignQuery1(executor, values) {
-  return executor.execute("SELECT id, phase, art_front_url, art_back_url, art_render_mode, mockup_enabled, real_photos_enabled, receiver_id FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE", values);
+  return executor.execute("SELECT id, phase, is_public, art_front_url, art_back_url, art_render_mode, mockup_enabled, real_photos_enabled, receiver_id FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE", values);
 }
 
 /** Uses the caller's connection; the service owns the transaction.

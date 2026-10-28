@@ -87,6 +87,15 @@ export async function fetchCampaignFromApi(code: string) {
   return mapCampaign(payload.campaign);
 }
 
+export type PublicCampaignSummary = { code: string; title: string; subtitle: string | null; deadlineAt: string; imageUrl: string | null };
+export type PublicCampaignCatalog = { campaigns: PublicCampaignSummary[]; total: number; page: number; pageSize: number };
+
+export async function fetchPublicCampaigns(page = 1, search = '') {
+  const query = new URLSearchParams({ pagina: String(page) });
+  if (search) query.set('busca', search);
+  return request<PublicCampaignCatalog>(`/campaigns/public?${query.toString()}`);
+}
+
 export async function validateCampaignCoupon(campaignCode: string, couponCode: string) {
   const query = new URLSearchParams({ code: couponCode });
   const payload = await request<{ coupon: CampaignCoupon }>(

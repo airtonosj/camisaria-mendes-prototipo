@@ -167,6 +167,7 @@ export async function getCampaign(code, { includeCoupon = false, includeReceiver
     title: campaign.title,
     subtitle: campaign.subtitle,
     phase: campaign.phase,
+    isPublic: Boolean(campaign.is_public),
     deadlineAt: campaign.deadline_at,
     deliveryExpectedOn: campaign.delivery_expected_on,
     deliveryNote: campaign.delivery_note,
@@ -231,6 +232,24 @@ export async function getPublicCampaignCoupon(campaignCode, rawCouponCode) {
   };
 }
 
+export async function publicCampaignCatalog({ page = 1, search = '', limit = 12 } = {}) {
+  const safePage = Number.isSafeInteger(page) && page > 0 && page <= 10000 ? page : 1;
+  const safeLimit = Number.isSafeInteger(limit) && limit > 0 && limit <= 12 ? limit : 12;
+  const term = String(search).trim().slice(0, 80).replace(/[\\%_]/g, '\\$&');
+  const filter = [term, term, term];
+  const [[count]] = await queries.countPublicCampaigns(pool, filter);
+  const [rows] = await queries.listPublicCampaigns(pool, [...filter, safeLimit, (safePage - 1) * safeLimit]);
+  return { campaigns: rows.map((row) => ({
+    code: row.code, title: row.title, subtitle: row.subtitle,
+    deadlineAt: row.deadline_at, imageUrl: row.image_url,
+  })), total: Number(count.total), page: safePage, pageSize: safeLimit };
+}
+
+export async function publicCampaignSitemap() {
+  const [rows] = await queries.publicCampaignSitemap(pool);
+  return rows.map((row) => row.code);
+}
+
 export async function listCampaigns() {
   const [rows] = await queries.listCampaignsQuery1(pool, []);
   const [couponRows] = await queries.listCampaignsQuery2(pool, []);
@@ -266,6 +285,7 @@ export async function listCampaigns() {
     title: row.title,
     subtitle: row.subtitle,
     phase: row.phase,
+    isPublic: Boolean(row.is_public),
     deadlineAt: row.deadline_at,
     deliveryExpectedOn: row.delivery_expected_on,
     deliveryNote: row.delivery_note,
@@ -618,6 +638,9 @@ export async function createCampaign({ staff, body }) {
   const artBackUrl = optionalText(body.artBackUrl, 2048);
   const artRenderMode = artworkConfig ? parseArtRenderMode(artworkConfig.mode) : body.artRenderMode === undefined ? "legacy_mockup" : parseArtRenderMode(body.artRenderMode);
   const models = parseCampaignModels(body.models);
+  if (body.isPublic !== undefined && typeof body.isPublic !== 'boolean') {
+    throw new ApiError(422, 'VALIDATION_ERROR', 'Visibilidade inválida.');
+  }
 
   await withTransaction(async (connection) => {
     const [existing] = await queries.createCampaignQuery1(connection, [code]);
@@ -625,7 +648,7 @@ export async function createCampaign({ staff, body }) {
     const { modelIds, colorIds, sizeIds } = await resolveCatalogIds(connection, models);
     const receiver = body.receiverId === undefined ? null : await resolveCampaignReceiver(connection, body.receiverId);
 
-    const [campaignResult] = await queries.createCampaignQuery2(connection, [code, title, subtitle, deadlineAt, pickupInstructions, representativeName, representativeWhatsapp, artFrontUrl, artBackUrl, artRenderMode, presentation.mockupEnabled, presentation.realPhotosEnabled, staff.id, receiver?.id ?? null, parseDeliveryDate(body.deliveryExpectedOn), optionalText(body.deliveryNote, 255)]);
+    const [campaignResult] = await queries.createCampaignQuery2(connection, [code, title, subtitle, deadlineAt, pickupInstructions, representativeName, representativeWhatsapp, artFrontUrl, artBackUrl, artRenderMode, presentation.mockupEnabled, presentation.realPhotosEnabled, staff.id, receiver?.id ?? null, parseDeliveryDate(body.deliveryExpectedOn), optionalText(body.deliveryNote, 255), body.isPublic === true]);
     for (const model of models) {
       for (const color of model.colors) {
         await queries.createCampaignQuery3(connection, [campaignResult.insertId, modelIds.get(model.modelCode), colorIds.get(color.name), model.unitPriceCents]);
@@ -673,6 +696,10 @@ export async function updateCampaign({ body }, code) {
 
     if (body.title !== undefined) set("title", requireText(body.title, "title", 180));
     if (body.subtitle !== undefined) set("subtitle", optionalText(body.subtitle, 255));
+    if (body.isPublic !== undefined) {
+      if (typeof body.isPublic !== 'boolean') throw new ApiError(422, 'VALIDATION_ERROR', 'Visibilidade inválida.');
+      set('is_public', body.isPublic);
+    }
     if (body.deadlineAt !== undefined) set("deadline_at", parseDeadline(body.deadlineAt));
     if (body.deliveryExpectedOn !== undefined) set("delivery_expected_on", parseDeliveryDate(body.deliveryExpectedOn));
     if (body.deliveryNote !== undefined) set("delivery_note", optionalText(body.deliveryNote, 255));

@@ -4,10 +4,11 @@ import { heroShirts, whatsappCampaignUrl } from "../data";
 import { portfolioCampaigns } from '../portfolio';
 import { Brand } from "./Brand";
 import { Header } from "./Header";
+import { PublicCampaignHome } from './PublicCampaigns';
 
 const steps = [
   ["01", "chat", "O representante entra em contato", "Fala com a gente pelo WhatsApp e conta a ideia da turma."],
-  ["02", "edit_square", "A Camisaria cria e abre a campanha", "Desenvolvemos a arte e abrimos a campanha privada só para a turma."],
+  ["02", "edit_square", "A Camisaria cria e abre a campanha", "Desenvolvemos a arte e abrimos a campanha para receber os pedidos."],
   ["03", "share", "Você compartilha o acesso", "Recebe um link, código ou QR Code para divulgar entre os colegas."],
   ["04", "checkroom", "Pedidos vão para produção e entrega", "Após o prazo, os pedidos seguem para produção e chegam na sua turma."],
 ];
@@ -54,7 +55,7 @@ export function LandingPage() {
           <div className="container code-panel-grid">
             <div>
               <h2>Já recebeu o acesso da sua turma?</h2>
-              <p>Campanhas ativas não são listadas publicamente.</p>
+              <p>Use o código para abrir sua campanha.</p>
               <a className="code-panel-track" href={buildRoute("acompanhar-pedido")}>Já fez o pedido? Acompanhe aqui<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></a>
             </div>
             <form onSubmit={openCampaign}>
@@ -65,6 +66,7 @@ export function LandingPage() {
           </div>
         </section>
 
+        <PublicCampaignHome />
         <section className="portfolio-section" id="mostruario">
           <div className="container">
             <div className="editorial-heading">
@@ -135,6 +137,7 @@ export function LandingPage() {
           <Brand compact />
           <nav aria-label="Navegação do rodapé">
             <a href="#inicio">Início</a>
+            <a href="/campanhas">Campanhas</a>
             <a href="#mostruario">Mostruário</a>
             <a href="#como-funciona">Como funciona</a>
             <a href="#sobre">Sobre nós</a>

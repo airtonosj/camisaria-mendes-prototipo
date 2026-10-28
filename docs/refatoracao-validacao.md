@@ -83,3 +83,9 @@ Gates finais completos aprovados em MySQL 8.0.46 e MariaDB 11.8.9, sequencialmen
 ## Segurança — 13/10/2026
 
 `check:release` aprovado sequencialmente em Node 24.18/MySQL 8.0.46, Node 24.18/MariaDB 11.8.9 e Node 22.23.3/MariaDB 11.8.9: tipos, lint, 31 unitários, 10 integrações, build e 40 jornadas desktop/celular por rodada. Regressões cobrem consulta sem telefone na URL, anti-framing, admissão de pagamento pelo provedor e recuperação da fila anterior ao deploy. Artefato, compatibilidade e limitações registrados em [correções de segurança](correcoes-seguranca.md). Trabalho local; produção e CI remota não foram alteradas.
+
+## Campanhas públicas — 28/10/2026
+
+Release candidata baseada em `4ba0c7e401e3ce758425f43b24d80b458cd141ec` (versão em produção antes desta publicação, schema `027_sales_metrics`). Escopo: migração `030_public_campaigns`, opção de visibilidade no painel, catálogo paginado com fotos de venda, navegação pública e HTML/sitemap para buscadores. Campanhas existentes continuam privadas por padrão. O usuário confirmou backup atual do banco de dados e dos uploads antes da ativação.
+
+Gate local `npm.cmd run check:release` em MySQL 8.0.46 com banco `_test` e provedores falsos: tipos e lint aprovados, 35 testes unitários, 12 suítes de integração, build de produção e 48 jornadas desktop/celular aprovados. A CI remota será conferida após o push. `dist/version.json` local identifica `4ba0c7e401e3ce758425f43b24d80b458cd141ec`, `dirty: true`, `builtAt: 2026-10-28T11:46:06.918Z`; o commit e o artefato publicados deverão ser conferidos separadamente. Não houve compra, envio ou alteração de campanha real nos testes.

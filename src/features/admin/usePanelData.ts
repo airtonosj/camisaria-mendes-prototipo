@@ -32,6 +32,7 @@ export function usePanelData(): PanelData {
         setCampaigns(
           list.map((campaign) => ({
             code: campaign.code,
+            isPublic: campaign.isPublic === true,
             title: campaign.title,
             subtitle: campaign.subtitle,
             phase: campaign.phase,

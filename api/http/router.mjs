@@ -14,7 +14,8 @@ import { orderWindowMs, maxOrderAttempts, paymentEventWindowMs, maxPaymentEventA
 import { assertLicenseControlEnabled, enforceLicenseState } from "./license.mjs";
 import { login, updateAccount, requestPasswordReset, confirmPasswordReset } from '../modules/account/http.mjs';
 import { publicSettings } from "./settings.mjs";
-import { getCampaign, getPublicCampaignCoupon, listCampaigns } from '../modules/campaigns/service.mjs';
+import { getCampaign, getPublicCampaignCoupon, listCampaigns, publicCampaignCatalog, publicCampaignSitemap } from '../modules/campaigns/service.mjs';
+import { config } from '../config.mjs';
 import { createCampaign, updateCampaign, deleteCampaign, changeCampaignPhase } from '../modules/campaigns/http.mjs';
 import { trackOrder, listCampaignOrders } from '../modules/orders/service.mjs';
 import { createOrder, changeDeliveryStatus, cancelOrder, registerOrderRefund } from '../modules/orders/http.mjs';
@@ -74,6 +75,25 @@ export async function route(request, response) {
     return;
   }
   if (await enforceLicenseState(request, response, requestUrl, path)) return;
+  if (request.method === 'GET' && path === '/robots.txt') {
+    const sitemap = new URL('/sitemap.xml', config.publicAppUrl);
+    response.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' });
+    response.end(`User-agent: *\nAllow: /\nSitemap: ${sitemap.href}\n`);
+    return;
+  }
+  if (request.method === 'GET' && path === '/sitemap.xml') {
+    const base = new URL(config.publicAppUrl);
+    const urls = [new URL('/', base), new URL('/campanhas', base)];
+    for (const code of await publicCampaignSitemap()) {
+      const url = new URL('/', base);
+      url.searchParams.set('campanha', code);
+      urls.push(url);
+    }
+    const xml = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map((url) => `<url><loc>${url.href.replace(/&/g, '&amp;')}</loc></url>`).join('')}</urlset>`;
+    response.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'no-cache' });
+    response.end(xml);
+    return;
+  }
   const uploadMatch = path.match(/^\/uploads\/([^/]+)$/);
   if ((request.method === "GET" || request.method === "HEAD") && uploadMatch) {
     await serveUpload(request, response, uploadMatch[1]);
@@ -149,6 +169,13 @@ export async function route(request, response) {
     return;
   }
   const publicCampaignMatch = path.match(/^\/api\/campaigns\/([^/]+)$/);
+  if (request.method === 'GET' && path === '/api/campaigns/public') {
+    sendJson(response, 200, await publicCampaignCatalog({
+      page: Number(requestUrl.searchParams.get('pagina') || 1),
+      search: requestUrl.searchParams.get('busca') || '',
+    }));
+    return;
+  }
   if (request.method === "GET" && publicCampaignMatch) {
     sendJson(response, 200, { campaign: await getCampaign(publicCampaignMatch[1].toUpperCase()) });
     return;

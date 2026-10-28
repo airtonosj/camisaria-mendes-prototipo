@@ -55,6 +55,7 @@ export function effectiveDelivery(order: PanelOrder, phase: CampaignPhaseCode): 
 }
 
 export type PanelCampaign = {
+  isPublic?: boolean;
   basePrices?: Array<{ modelName: string; minPriceCents: number; maxPriceCents: number }>;
   code: string;
   title: string;

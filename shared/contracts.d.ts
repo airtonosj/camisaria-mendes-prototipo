@@ -77,6 +77,7 @@ export type ApiCampaignSize = {
 
 export type ApiCampaign = {
   code: string;
+  isPublic?: boolean;
   title: string;
   subtitle: string | null;
   phase: string;
@@ -200,6 +201,7 @@ export type ApiAdminCampaign = {
   createdAt?: string;
   basePrices?: Array<{ modelName: string; minPriceCents: number; maxPriceCents: number }>;
   code: string;
+  isPublic?: boolean;
   title: string;
   subtitle: string | null;
   phase: CampaignPhaseCode;
@@ -296,6 +298,7 @@ export type CampaignModelPayload = { modelCode: string; unitPriceCents: number; 
 
 export type CreateCampaignPayload = {
   code?: string;
+  isPublic?: boolean;
   title: string;
   subtitle?: string;
   deadlineAt: string;
@@ -321,6 +324,7 @@ export type CreateCampaignPayload = {
  */
 export type UpdateCampaignPayload = {
   title?: string;
+  isPublic?: boolean;
   subtitle?: string | null;
   deadlineAt?: string;
   deliveryExpectedOn?: string | null;

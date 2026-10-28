@@ -9,6 +9,7 @@ import { requireStaff } from "../../http/auth.mjs";
 import { config } from "../../config.mjs";
 import { getCampaign } from "../campaigns/service.mjs";
 import { campaignPreviewHtml, campaignShareSource, renderShareImage } from "./campaign-preview.mjs";
+import { publicCampaignDocumentHtml } from './public-campaign-html.mjs';
 
 export async function listSizes() {
   const [rows] = await pool.execute(
@@ -243,7 +244,8 @@ export async function serveFrontend(request, response, requestPath) {
 
   const extension = path.extname(filePath).toLowerCase();
   if (filePath === path.join(frontendDirectory, "index.html")) {
-    file = Buffer.from(await campaignPreviewHtml(file.toString("utf8"), request.url, config.publicAppUrl, getCampaign));
+    const previewed = await campaignPreviewHtml(file.toString("utf8"), request.url, config.publicAppUrl, getCampaign);
+    file = Buffer.from(await publicCampaignDocumentHtml(previewed, request.url, config.publicAppUrl));
   }
   const immutableAsset = relativeToFrontend.startsWith(`assets${path.sep}`);
   response.writeHead(200, {

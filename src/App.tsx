@@ -4,6 +4,7 @@ const AdminDashboard = lazy(() => import('./components/AdminDashboard').then(m =
 const CamisariaAccessPage = lazy(() => import('./components/CamisariaAccessPage').then(m => ({ default:m.CamisariaAccessPage })));
 import { CampaignAccessPage } from "./components/CampaignAccessPage";
 import { LandingPage } from "./components/LandingPage";
+import { PublicCampaignListing } from './components/PublicCampaigns';
 const OrderTrackingPage = lazy(() => import('./components/OrderTrackingPage').then(m => ({ default:m.OrderTrackingPage })));
 import { PoliciesPage } from "./components/PoliciesPage";
 const PrivateCampaignPage = lazy(() => import('./components/PrivateCampaignPage').then(m => ({ default:m.PrivateCampaignPage })));
@@ -109,6 +110,8 @@ function AppRoutes() {
   if (route === "acesso-campanha") {
     return <CampaignAccessPage invalidCampaignCode={campaignCode ?? undefined} />;
   }
+
+  if (path === '/campanhas') return <PublicCampaignListing />;
 
   if (route === "acompanhar-pedido" || isTrackingPath) {
     return <OrderTrackingPage />;
