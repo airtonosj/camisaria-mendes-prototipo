@@ -236,12 +236,20 @@ export async function publicCampaignCatalog({ page = 1, search = '', limit = 12 
   const safePage = Number.isSafeInteger(page) && page > 0 && page <= 10000 ? page : 1;
   const safeLimit = Number.isSafeInteger(limit) && limit > 0 && limit <= 12 ? limit : 12;
   const term = String(search).trim().slice(0, 80).replace(/[\\%_]/g, '\\$&');
-  const filter = [term, term, term];
-  const [[count]] = await queries.countPublicCampaigns(pool, filter);
-  const [rows] = await queries.listPublicCampaigns(pool, [...filter, safeLimit, (safePage - 1) * safeLimit]);
+  const [[count]] = await queries.countPublicCampaigns(pool, term);
+  const [rows] = await queries.listPublicCampaigns(pool, { term, limit: safeLimit, offset: (safePage - 1) * safeLimit });
+  const ids = rows.map((row) => row.id);
+  const [photos] = ids.length ? await queries.publicCampaignPhotos(pool, ids) : [[]];
+  const [artworks] = ids.length ? await queries.publicCampaignArtworks(pool, ids) : [[]];
+  const firstPhoto = new Map();
+  const firstArtwork = new Map();
+  for (const photo of photos) if (!firstPhoto.has(photo.campaign_id)) firstPhoto.set(photo.campaign_id, photo.photo_url);
+  for (const artwork of artworks) if (!firstArtwork.has(artwork.campaign_id)) firstArtwork.set(artwork.campaign_id, artwork.front_url);
   return { campaigns: rows.map((row) => ({
     code: row.code, title: row.title, subtitle: row.subtitle,
-    deadlineAt: row.deadline_at, imageUrl: row.image_url,
+    deadlineAt: row.deadline_at,
+    imageUrl: (row.real_photos_enabled && firstPhoto.get(row.id))
+      || (row.mockup_enabled && (firstArtwork.get(row.id) || row.art_front_url)) || null,
   })), total: Number(count.total), page: safePage, pageSize: safeLimit };
 }
 

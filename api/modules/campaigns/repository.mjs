@@ -87,10 +87,11 @@ export function getPublicCampaignCouponQuery1(executor, values) {
   return executor.execute("SELECT id FROM campaigns WHERE code = ? LIMIT 1", values);
 }
 
-export function countPublicCampaigns(executor, values) {
-  return executor.execute(`SELECT COUNT(*) AS total FROM campaigns
-    WHERE is_public = TRUE AND phase = 'receiving_orders' AND deadline_at >= UTC_TIMESTAMP(3)
-      AND (? = '' OR title LIKE CONCAT('%', ?, '%') OR code LIKE CONCAT('%', ?, '%'))`, values);
+export function countPublicCampaigns(executor, term) {
+  const search = term ? ' AND (title LIKE ? OR code LIKE ?)' : '';
+  const values = term ? [`%${term}%`, `%${term}%`] : [];
+  return executor.query(`SELECT COUNT(*) AS total FROM campaigns
+    WHERE is_public = TRUE AND phase = 'receiving_orders' AND deadline_at >= UTC_TIMESTAMP(3)${search}`, values);
 }
 
 export function publicCampaignSitemap(executor) {
@@ -99,26 +100,28 @@ export function publicCampaignSitemap(executor) {
     ORDER BY id DESC LIMIT 49998`);
 }
 
-export function listPublicCampaigns(executor, values) {
-  return executor.query(`SELECT c.code, c.title, c.subtitle, c.deadline_at,
-    COALESCE(
-      CASE WHEN c.real_photos_enabled THEN
-        (SELECT ccp.photo_url FROM campaign_color_photos ccp
-          JOIN campaign_variants cv ON cv.campaign_id = c.id AND cv.color_id = ccp.color_id AND cv.active = TRUE
-          WHERE ccp.campaign_id = c.id ORDER BY ccp.sort_order, ccp.id LIMIT 1)
-      END,
-      CASE WHEN c.mockup_enabled THEN
-        (SELECT cva.front_url FROM campaign_variant_artworks cva
-          JOIN campaign_variants cv ON cv.id = cva.campaign_variant_id AND cv.active = TRUE
-          WHERE cv.campaign_id = c.id AND cva.artwork_mode = 'variant_mockup' AND cva.front_url IS NOT NULL
-          ORDER BY cv.id LIMIT 1)
-      END,
-      CASE WHEN c.mockup_enabled THEN c.art_front_url END
-    ) AS image_url
+export function listPublicCampaigns(executor, { term, limit, offset }) {
+  const search = term ? ' AND (c.title LIKE ? OR c.code LIKE ?)' : '';
+  const values = term ? [`%${term}%`, `%${term}%`, limit, offset] : [limit, offset];
+  return executor.query(`SELECT c.id, c.code, c.title, c.subtitle, c.deadline_at,
+    c.real_photos_enabled, c.mockup_enabled, c.art_front_url
     FROM campaigns c
     WHERE c.is_public = TRUE AND c.phase = 'receiving_orders' AND c.deadline_at >= UTC_TIMESTAMP(3)
-      AND (? = '' OR c.title LIKE CONCAT('%', ?, '%') OR c.code LIKE CONCAT('%', ?, '%'))
+      ${search}
     ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?`, values);
+}
+
+export function publicCampaignPhotos(executor, ids) {
+  return executor.query(`SELECT ccp.campaign_id, ccp.photo_url FROM campaign_color_photos ccp
+    JOIN campaign_variants cv ON cv.campaign_id = ccp.campaign_id AND cv.color_id = ccp.color_id AND cv.active = TRUE
+    WHERE ccp.campaign_id IN (?) ORDER BY ccp.campaign_id, ccp.sort_order, ccp.id`, [ids]);
+}
+
+export function publicCampaignArtworks(executor, ids) {
+  return executor.query(`SELECT cv.campaign_id, cva.front_url FROM campaign_variant_artworks cva
+    JOIN campaign_variants cv ON cv.id = cva.campaign_variant_id AND cv.active = TRUE
+    WHERE cv.campaign_id IN (?) AND cva.artwork_mode = 'variant_mockup' AND cva.front_url IS NOT NULL
+    ORDER BY cv.campaign_id, cv.id`, [ids]);
 }
 
 /** Uses the caller's connection; the service owns the transaction.
