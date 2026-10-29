@@ -23,6 +23,23 @@ try {
     models: [{ modelCode: variant.model.code, unitPriceCents: 5990, colors: [variant.color], sizes: [size] }],
   };
   const created = await campaigns.createCampaign({ staff, body });
+  const [[storedBlue]] = await pool.execute("SELECT hex_color FROM colors WHERE name = 'Azul' LIMIT 1");
+  assert.ok(storedBlue, 'o catálogo de teste precisa conter Azul');
+  await assert.rejects(
+    campaigns.createCampaign({ staff, body: {
+      ...body, code: 'MENDES-COLOR-COLLATION-26',
+      models: [{ ...body.models[0], colors: [{ name: 'Ázul', hex: storedBlue.hex_color }] }],
+    } }),
+    error => error.status === 409 && error.code === 'COLOR_NAME_CONFLICT',
+  );
+  const twoBlueTones = await campaigns.createCampaign({ staff, body: {
+    ...body, code: 'MENDES-TWO-BLUES-26',
+    models: [{ ...body.models[0], colors: [
+      { name: 'Azul', hex: storedBlue.hex_color },
+      { name: 'Azul Turquesa', hex: '#40E0D0' },
+    ] }],
+  } });
+  assert.deepEqual(twoBlueTones.variants.map(item => item.color.name).sort(), ['Azul', 'Azul Turquesa']);
   assert.equal(created.deliveryExpectedOn, body.deliveryExpectedOn);
   assert.equal(created.deliveryNote, body.deliveryNote);
   const publicCampaign = await campaigns.getCampaign(body.code);

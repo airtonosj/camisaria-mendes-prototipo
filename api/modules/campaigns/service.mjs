@@ -374,6 +374,14 @@ export async function resolveCatalogIds(connection, models) {
   const colorNames = [...colorDefinitions.values()].map((color) => color.name);
   const [colorRows] = await queries.resolveCatalogIdsQuery2(connection, colorNames, colorNames.map(() => "?").join(", "));
   const storedColors = new Map(colorRows.map((row) => [row.name.toLocaleLowerCase("pt-BR"), row]));
+  // The database collation can equate names that JavaScript keeps distinct
+  // (for example Azul and Ázul). Reject that collision before INSERT.
+  for (const row of colorRows) {
+    const key = row.name.toLocaleLowerCase("pt-BR");
+    if (!colorDefinitions.has(key)) {
+      throw new ApiError(409, "COLOR_NAME_CONFLICT", `A cor ${row.name} já está cadastrada. Escolha outro nome para a nova cor.`);
+    }
+  }
   const colorIdsByKey = new Map();
   for (const [key, color] of colorDefinitions) {
     const stored = storedColors.get(key);
@@ -386,7 +394,15 @@ export async function resolveCatalogIds(connection, models) {
       continue;
     }
     if (!color.hex) throw new ApiError(422, "INVALID_COLOR", `A cor ${color.name} não está cadastrada e precisa informar o código HEX.`);
-    const [created] = await queries.resolveCatalogIdsQuery4(connection, [color.name, color.hex]);
+    let created;
+    try {
+      [created] = await queries.resolveCatalogIdsQuery4(connection, [color.name, color.hex]);
+    } catch (error) {
+      if (error.code === "ER_DUP_ENTRY") {
+        throw new ApiError(409, "COLOR_NAME_CONFLICT", `A cor ${color.name} já está cadastrada com um nome equivalente. Escolha outro nome.`);
+      }
+      throw error;
+    }
     colorIdsByKey.set(key, created.insertId);
   }
   const colorIds = new Map(models.flatMap((model) => model.colors.map((color) => [color.name, colorIdsByKey.get(color.name.toLocaleLowerCase("pt-BR"))])));
