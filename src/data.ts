@@ -1,13 +1,19 @@
-import campaignAdmin from "../assets/campaign-admin-v2.png";
-import campaignEngineering from "../assets/campaign-engineering-v2.png";
-import campaignLaw from "../assets/campaign-law.png";
-import campaignNursing from "../assets/campaign-nursing-v2.png";
-import shirtBabyLook from "../assets/shirt-babylook.png";
-import shirtBabyLookBack from "../assets/shirt-babylook-back.png";
-import shirtCommon from "../assets/shirt-common.png";
-import shirtCommonBack from "../assets/shirt-common-back.png";
-import shirtOversized from "../assets/shirt-oversized.png";
-import shirtOversizedBack from "../assets/shirt-oversized-back.png";
+import type { ArtworkTransform, VariantArtwork } from '../shared/artwork';
+export type { ArtworkTransform, ArtworkAsset, VariantArtwork } from '../shared/artwork';
+import campaignAdmin from "../assets/campaign-admin-v2.webp";
+import campaignEngineering from "../assets/campaign-engineering-v2.webp";
+import campaignLaw from "../assets/campaign-law.webp";
+import campaignNursing from "../assets/campaign-nursing-v2.webp";
+import logoMendes from "../assets/logo-mendes.webp";
+import shirtBabyLook from "../assets/shirt-babylook.webp";
+import shirtCommon from "../assets/shirt-common.webp";
+import shirtCommonBack from "../assets/shirt-common-back.webp";
+import shirtOversized from "../assets/shirt-oversized.webp";
+import shirtOversizedBack from "../assets/shirt-oversized-back.webp";
+import shirtStandardMockup from "../assets/mockups/standard-front-v1.webp";
+import shirtStandardMockupBack from "../assets/mockups/standard-back-v1.webp";
+import shirtOversizedMockup from "../assets/mockups/oversized-front-v1.webp";
+import shirtOversizedMockupBack from "../assets/mockups/oversized-back-v1.webp";
 
 export type ShowcaseCampaign = {
   course: string;
@@ -18,41 +24,117 @@ export type ShowcaseCampaign = {
   year: string;
 };
 
+/** O corte da peça. Baby look não é corte: é um grupo de tamanhos. */
+export type ShirtModelName = "Comum" | "Oversized";
+/** O nome vem do cadastro da campanha: além das opções padrão, a camisaria pode criar outras. */
+export type ShirtColorName = string;
+export type ShirtColorOption = { name: ShirtColorName; hex: string };
+export type SizeGroup = "standard" | "baby_look";
+/** Inclui códigos antigos para que pedidos históricos continuem legíveis. */
+export type SizeCode = "PP" | "P" | "M" | "G" | "GG" | "EXGG" | "XG" | "PPB" | "PB" | "MB" | "GB" | "GGB" | "XGB";
+
+/**
+ * `overlay` é a arte transparente que o site aplica sobre o mockup colorido.
+ * `legacy_mockup` preserva campanhas antigas que já enviaram a foto completa da peça.
+ */
+export type CampaignArtMode = "overlay" | "variant_mockup" | "legacy_mockup";
+
+export type CampaignArt = {
+  front: string;
+  back: string | null;
+  mode?: CampaignArtMode;
+  frontTransform?: ArtworkTransform;
+  backTransform?: ArtworkTransform;
+};
+
 export type PrivateCampaign = {
   code: string;
   title: string;
   subtitle: string;
-  image: string;
+  art: CampaignArt;
+  /** Cortes oferecidos nesta campanha. Ausente apenas em dados demonstrativos antigos. */
+  models?: ShirtModelName[];
   prices: Record<ShirtModelName, number>;
+  sizes: Record<ShirtModelName, SizeCode[]>;
   deadline: string;
+  deliveryExpectedOn?: string | null;
+  deliveryNote?: string | null;
   pickup: string;
   representative: string;
-  modelImages?: Record<ShirtModelName, { front: string; back: string }>;
+  /** Contato do representante para dúvidas e retirada. Vem da campanha no banco. */
+  representativeWhatsapp?: string | null;
   colors?: Record<ShirtModelName, ShirtColorOption[]>;
   variantIds?: Partial<Record<ShirtModelName, Partial<Record<ShirtColorName, number>>>>;
+  variantArtworks?: Record<number, VariantArtwork>;
+  /** Galeria opcional de fotos reais, compartilhada entre os cortes que usam a cor. */
+  realPhotos?: Partial<Record<ShirtColorName, string[]>>;
+  /** Vídeo opcional da galeria, no máximo um por cor. */
+  realVideos?: Partial<Record<ShirtColorName, { url: string; posterUrl?: string; durationSeconds?: number; bytes: number }>>;
+  presentation?: { mockupEnabled: boolean; realPhotosEnabled: boolean };
 };
 
-export type ShirtModelName = "Comum" | "Oversized" | "Baby Look";
-export type ShirtColorName = "Preto" | "Branco" | "Azul Royal" | "Azul Marinho" | "Bordô" | "Verde";
-export type ShirtColorOption = { name: ShirtColorName; hex: string };
-
 export const shirtColors: ShirtColorOption[] = [
-  { name: "Preto", hex: "#111315" },
   { name: "Branco", hex: "#f3f3ef" },
-  { name: "Azul Royal", hex: "#1468b8" },
-  { name: "Azul Marinho", hex: "#17365d" },
+  { name: "Preto", hex: "#111315" },
+  { name: "Off-white", hex: "#e8e1d4" },
+  { name: "Azul", hex: "#1468b8" },
   { name: "Bordô", hex: "#6f1833" },
-  { name: "Verde", hex: "#27704b" },
 ];
+
+export const sizeCatalog: Array<{ code: SizeCode; group: SizeGroup }> = [
+  { code: "PP", group: "standard" },
+  { code: "P", group: "standard" },
+  { code: "M", group: "standard" },
+  { code: "G", group: "standard" },
+  { code: "GG", group: "standard" },
+  { code: "EXGG", group: "standard" },
+  { code: "XG", group: "standard" },
+  { code: "PB", group: "baby_look" },
+  { code: "MB", group: "baby_look" },
+  { code: "GB", group: "baby_look" },
+];
+
+export const sizeGroupLabels: Record<SizeGroup, string> = {
+  standard: "Tradicional",
+  baby_look: "Baby look",
+};
+
+export function sizesInGroup(group: SizeGroup) {
+  return sizeCatalog.filter((size) => size.group === group).map((size) => size.code);
+}
+
+/** Grade comercial permitida em campanhas novas e no checkout. */
+export const campaignSizesByModel: Record<ShirtModelName, SizeCode[]> = {
+  Comum: ["P", "M", "G", "GG", "EXGG", "PB", "MB", "GB"],
+  Oversized: ["PP", "P", "M", "G", "GG", "XG"],
+};
+
+export function campaignSizesInGroup(model: ShirtModelName, group: SizeGroup) {
+  const groupSizes = new Set(sizesInGroup(group));
+  return campaignSizesByModel[model].filter((size) => groupSizes.has(size));
+}
+
+/** Ordena qualquer lista de tamanhos pela ordem do catálogo, não pela ordem de clique. */
+export function sortSizes(codes: SizeCode[]) {
+  const order = new Map(sizeCatalog.map((size, index) => [size.code, index]));
+  return [...codes].sort((left, right) => (order.get(left) ?? 0) - (order.get(right) ?? 0));
+}
 
 function colorsByName(names: ShirtColorName[]) {
   return names.map((name) => shirtColors.find((color) => color.name === name) as ShirtColorOption);
 }
 
 export const defaultCampaignColors: Record<ShirtModelName, ShirtColorOption[]> = {
-  Comum: colorsByName(["Preto", "Branco", "Azul Royal", "Azul Marinho"]),
-  Oversized: colorsByName(["Preto", "Branco", "Azul Royal"]),
-  "Baby Look": colorsByName(["Preto", "Branco", "Azul Royal", "Bordô"]),
+  Comum: colorsByName(["Branco", "Preto", "Off-white", "Azul", "Bordô"]),
+  Oversized: colorsByName(["Branco", "Preto", "Off-white", "Azul", "Bordô"]),
+};
+
+/**
+ * Pré-seleção usada ao criar campanha. Cada corte recebe somente sua grade comercial.
+ */
+export const defaultCampaignSizes: Record<ShirtModelName, SizeCode[]> = {
+  Comum: [...campaignSizesByModel.Comum],
+  Oversized: [...campaignSizesByModel.Oversized],
 };
 
 export const DEMO_CAMPAIGNS_STORAGE_KEY = "camisaria-mendes-demo-campaigns";
@@ -97,23 +179,29 @@ export const privateCampaigns: Record<string, PrivateCampaign> = {
     code: "MENDES-ENG-26",
     title: "Engenharia Civil — Turma 2026",
     subtitle: "Campanha exclusiva para os alunos da turma",
-    image: campaignEngineering,
-    prices: { Comum: 59.9, Oversized: 69.9, "Baby Look": 62.9 },
+    art: { front: campaignEngineering, back: null, mode: "legacy_mockup" },
+    models: ["Comum", "Oversized"],
+    prices: { Comum: 59.9, Oversized: 69.9 },
+    sizes: {
+      Comum: [...defaultCampaignSizes.Comum],
+      Oversized: [...defaultCampaignSizes.Oversized],
+    },
     deadline: "Pedidos até 31 de agosto de 2026",
     pickup: "Retirada com o representante da turma",
     representative: "Lucas Pereira",
     colors: {
-      Comum: colorsByName(["Preto", "Branco", "Azul Marinho"]),
-      Oversized: colorsByName(["Branco", "Preto", "Azul Royal"]),
-      "Baby Look": colorsByName(["Azul Royal", "Preto", "Bordô"]),
+      Comum: colorsByName(["Preto", "Branco", "Azul"]),
+      Oversized: colorsByName(["Branco", "Preto", "Azul"]),
     },
   },
   "MENDES-ADS-26": {
     code: "MENDES-ADS-26",
     title: "Análise e Desenvolvimento de Sistemas — 2026.2",
     subtitle: "Campanha exclusiva para os alunos da turma",
-    image: campaignAdmin,
-    prices: { Comum: 59.9, Oversized: 69.9, "Baby Look": 62.9 },
+    art: { front: logoMendes, back: null, mode: "overlay" },
+    models: ["Comum", "Oversized"],
+    prices: { Comum: 59.9, Oversized: 69.9 },
+    sizes: defaultCampaignSizes,
     deadline: "Pedidos até 12 de setembro de 2026",
     pickup: "Retirada com o representante da turma",
     representative: "Carla Sousa",
@@ -128,10 +216,41 @@ export const privateCodeAliases: Record<string, string> = {
   "MENDES-ADS-26": "MENDES-ADS-26",
 };
 
-export const shirtModels: Array<{ name: ShirtModelName; image: string; backImage: string; description: string }> = [
-  { name: "Comum", image: shirtCommon, backImage: shirtCommonBack, description: "Caimento tradicional" },
-  { name: "Oversized", image: shirtOversized, backImage: shirtOversizedBack, description: "Amplo e contemporâneo" },
-  { name: "Baby Look", image: shirtBabyLook, backImage: shirtBabyLookBack, description: "Modelagem ajustada" },
+/**
+ * Composição decorativa do herói da landing. São três peças porque o arranjo fica melhor
+ * assim — não é o catálogo de cortes. Baby look aparece aqui como peça fotografada,
+ * enquanto no domínio continua sendo um grupo de tamanhos.
+ */
+export const heroShirts = [shirtCommon, shirtOversized, shirtBabyLook];
+
+/** Fotos de catálogo, usadas só como reserva quando a campanha ainda não tem arte. */
+export const shirtModels: Array<{
+  name: ShirtModelName;
+  code: string;
+  image: string;
+  backImage: string;
+  mockupImage: string;
+  mockupBackImage: string;
+  description: string;
+}> = [
+  {
+    name: "Comum",
+    code: "common",
+    image: shirtCommon,
+    backImage: shirtCommonBack,
+    mockupImage: shirtStandardMockup,
+    mockupBackImage: shirtStandardMockupBack,
+    description: "Caimento tradicional",
+  },
+  {
+    name: "Oversized",
+    code: "oversized",
+    image: shirtOversized,
+    backImage: shirtOversizedBack,
+    mockupImage: shirtOversizedMockup,
+    mockupBackImage: shirtOversizedMockupBack,
+    description: "Amplo e contemporâneo",
+  },
 ];
 
 export const whatsappCampaignUrl =

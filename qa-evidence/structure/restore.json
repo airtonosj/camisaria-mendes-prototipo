@@ -1,0 +1,47 @@
+{
+  "ok": true,
+  "targetDatabase": "camisaria_1790615199133_restore_test",
+  "comparisons": {
+    "schema_migrations": {
+      "source": 24,
+      "restored": 24
+    },
+    "campaigns": {
+      "source": 5,
+      "restored": 5
+    },
+    "campaign_variant_artworks": {
+      "source": 4,
+      "restored": 4
+    },
+    "campaign_color_photos": {
+      "source": 4,
+      "restored": 4
+    },
+    "campaign_color_videos": {
+      "source": 1,
+      "restored": 1
+    },
+    "orders": {
+      "source": 10,
+      "restored": 10
+    },
+    "payments": {
+      "source": 1,
+      "restored": 1
+    },
+    "order_refunds": {
+      "source": 1,
+      "restored": 1
+    },
+    "users": {
+      "source": 3,
+      "restored": 3
+    }
+  },
+  "uploads": {
+    "files": 8,
+    "bytes": 100877,
+    "restoredTo": "C:\\Users\\EDECON~1\\AppData\\Local\\Temp\\restore-rehearsal-1790615199133\\restored-uploads"
+  }
+}

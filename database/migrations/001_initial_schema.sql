@@ -194,12 +194,11 @@ INSERT INTO shirt_models (code, name, sort_order) VALUES
 ON DUPLICATE KEY UPDATE name = VALUES(name), sort_order = VALUES(sort_order), active = TRUE;
 
 INSERT INTO colors (name, hex_color) VALUES
-  ('Preto', '#111315'),
   ('Branco', '#F3F3EF'),
-  ('Azul Royal', '#1468B8'),
-  ('Azul Marinho', '#17365D'),
-  ('Bordô', '#6F1833'),
-  ('Verde', '#27704B')
+  ('Preto', '#111315'),
+  ('Off-white', '#E8E1D4'),
+  ('Azul', '#1468B8'),
+  ('Bordô', '#6F1833')
 ON DUPLICATE KEY UPDATE hex_color = VALUES(hex_color), active = TRUE;
 
 CREATE OR REPLACE VIEW v_production_report AS

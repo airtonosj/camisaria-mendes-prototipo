@@ -1,17 +1,17 @@
 import { FormEvent, useState } from "react";
-import { buildRoute } from "../App";
-import { privateCodeAliases, shirtModels, showcaseCampaigns, whatsappCampaignUrl } from "../data";
+import { buildRoute } from '../navigation';
+import { heroShirts, whatsappCampaignUrl } from "../data";
+import { portfolioCampaigns } from '../portfolio';
 import { Brand } from "./Brand";
 import { Header } from "./Header";
+import { PublicCampaignHome } from './PublicCampaigns';
 
 const steps = [
   ["01", "chat", "O representante entra em contato", "Fala com a gente pelo WhatsApp e conta a ideia da turma."],
-  ["02", "edit_square", "A Camisaria cria e abre a campanha", "Desenvolvemos a arte e abrimos a campanha privada só para a turma."],
+  ["02", "edit_square", "A Camisaria cria e abre a campanha", "Desenvolvemos a arte e abrimos a campanha para receber os pedidos."],
   ["03", "share", "Você compartilha o acesso", "Recebe um link, código ou QR Code para divulgar entre os colegas."],
   ["04", "checkroom", "Pedidos vão para produção e entrega", "Após o prazo, os pedidos seguem para produção e chegam na sua turma."],
 ];
-
-const portfolioCampaigns = [showcaseCampaigns[1], showcaseCampaigns[2], showcaseCampaigns[0], showcaseCampaigns[3]];
 
 export function LandingPage() {
   const [code, setCode] = useState("");
@@ -20,12 +20,13 @@ export function LandingPage() {
   function openCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalized = code.trim().toUpperCase().replace(/\s+/g, "-");
-    const campaign = privateCodeAliases[normalized];
-    if (!campaign) {
-      setError("Confira o código com o representante da turma.");
+    if (!normalized) {
+      setError("Digite o código enviado pelo representante da turma.");
       return;
     }
-    window.location.assign(buildRoute(undefined, campaign));
+    // Campanhas são criadas pelo painel e validadas pela API. Uma lista embutida
+    // aqui rejeitaria qualquer código novo antes mesmo de consultar o servidor.
+    window.location.assign(buildRoute(undefined, normalized));
   }
 
   return (
@@ -40,10 +41,10 @@ export function LandingPage() {
               <p>Mais que uma camiseta.<br />Um símbolo do que vocês vivem juntos.</p>
               <a className="editorial-link" href="#mostruario">Conheça nosso trabalho<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></a>
             </div>
-            <div className="hero-products" aria-label="Modelos de camisa da Camisaria Mendes">
-              {shirtModels.map((model, index) => (
-                <figure className={`hero-product hero-product--${index + 1}`} key={model.name}>
-                  <img src={model.image} alt={`Camisa ${model.name}`} />
+            <div className="hero-products" aria-label="Camisas da Camisaria Mendes">
+              {heroShirts.map((image, index) => (
+                <figure className={`hero-product hero-product--${index + 1}`} key={image}>
+                  <img src={image} alt="" />
                 </figure>
               ))}
             </div>
@@ -54,7 +55,7 @@ export function LandingPage() {
           <div className="container code-panel-grid">
             <div>
               <h2>Já recebeu o acesso da sua turma?</h2>
-              <p>Campanhas ativas não são listadas publicamente.</p>
+              <p>Use o código para abrir sua campanha.</p>
               <a className="code-panel-track" href={buildRoute("acompanhar-pedido")}>Já fez o pedido? Acompanhe aqui<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></a>
             </div>
             <form onSubmit={openCampaign}>
@@ -65,17 +66,17 @@ export function LandingPage() {
           </div>
         </section>
 
+        <PublicCampaignHome />
         <section className="portfolio-section" id="mostruario">
           <div className="container">
             <div className="editorial-heading">
-              <div><span className="kicker">Mostruário</span><h2>Campanhas que<br />já vestimos.</h2></div>
-              <a className="portfolio-all" href="#mostruario">Ver todas as campanhas<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></a>
+              <div><span className="kicker">Mostruário</span><h2>Campanhas com a<br />nossa assinatura.</h2></div>
             </div>
             <div className="portfolio-grid">
               {portfolioCampaigns.map((campaign) => (
-                <article className="portfolio-item" key={campaign.course}>
-                  <div className="portfolio-image"><img src={campaign.image} alt={`Projeto concluído de ${campaign.course}`} /></div>
-                  <div className="portfolio-title"><div><h3>{campaign.course}</h3><small>{campaign.group} <i>•</i> {campaign.year}</small></div></div>
+                <article className="portfolio-item" key={campaign.title}>
+                  <div className="portfolio-image"><img src={campaign.image} alt={campaign.alt} width={1024} height={1024} loading="lazy" decoding="async" /></div>
+                  <div className="portfolio-title"><h3>{campaign.title}</h3><small>{campaign.subtitle}</small></div>
                 </article>
               ))}
             </div>
@@ -87,7 +88,7 @@ export function LandingPage() {
             <div className="process-grid">
               <div className="process-heading">
                 <span className="kicker">Como funciona</span>
-                <h2>Simples, do<br />primeiro contato<br />à entrega.</h2>
+                <h2>Simples, do <br />primeiro contato <br />à entrega.</h2>
               </div>
               {steps.map(([number, icon, title, text]) => (
                 <article className="process-step" key={number}>
@@ -136,6 +137,7 @@ export function LandingPage() {
           <Brand compact />
           <nav aria-label="Navegação do rodapé">
             <a href="#inicio">Início</a>
+            <a href="/campanhas">Campanhas</a>
             <a href="#mostruario">Mostruário</a>
             <a href="#como-funciona">Como funciona</a>
             <a href="#sobre">Sobre nós</a>
@@ -143,7 +145,7 @@ export function LandingPage() {
             <a href={buildRoute("acompanhar-pedido")}>Acompanhar pedido</a>
           </nav>
           <div className="footer-meta">
-            <p className="footer-legal">© 2018–2026 Camisaria Mendes. Todos os direitos reservados.</p>
+            <div><p className="footer-legal">© 2018–2026 Camisaria Mendes. Todos os direitos reservados.</p><nav className="footer-policy-links" aria-label="Informações legais"><a href={buildRoute("politica-privacidade")}>Privacidade</a><a href={buildRoute("politica-trocas")}>Trocas e reembolso</a><a href={buildRoute("politica-atendimento")}>Atendimento</a></nav></div>
             <p className="footer-tagline">Camisetas que representam sua história.</p>
           </div>
         </div>

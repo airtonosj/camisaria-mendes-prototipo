@@ -1,0 +1,533 @@
+import { startWorker } from './runtime/worker.mjs';
+import { randomUUID } from 'node:crypto';
+import { config } from "./config.mjs";
+import { pool, withTransaction } from "./database.mjs";
+import { checkInfinitePayPayment, createInfinitePayLink, InfinitePayRequestError, normalizeInfinitePayEvent } from "./infinitepay.mjs";
+import { whatsappLookupValues } from "./phone.mjs";
+
+const provider = "infinitepay";
+const staleLockMinutes = 10;
+const retryDelayMinutes = 2;
+const maxPendingEventsPerOrder = 4;
+const maxEventsPerOrderPerDay = 8;
+const maxReconciliationAttempts = 6;
+const deadLetterRetentionDays = 30;
+const deadLetterCleanupIntervalMs = 60 * 60 * 1000;
+let lastDeadLetterCleanupAt = 0;
+let admissionChecksInFlight = 0;
+const maxAdmissionChecksInFlight = 8;
+const verifiedEventTypes = "'verified_webhook', 'verified_browser_reconciliation'";
+const providerCheckedTypes = new Set(['verified_webhook', 'verified_browser_reconciliation']);
+
+class TerminalPaymentStateError extends Error {}
+
+export class PaymentIntegrationError extends Error {
+  constructor(status, code, message, details) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
+function publicUrl(parameters = {}) {
+  const url = new URL(config.publicAppUrl);
+  for (const [key, value] of Object.entries(parameters)) url.searchParams.set(key, value);
+  return url.toString();
+}
+
+function webhookUrl() {
+  const url = new URL(config.publicAppUrl);
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/api/payments/infinitepay/webhook`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+function integrationReady() {
+  if (config.payments.provider !== provider || !config.payments.infinitePay.checkoutEnabled) {
+    throw new PaymentIntegrationError(503, "PAYMENT_CHECKOUT_DISABLED", "O checkout ainda não foi liberado pela camisaria.");
+  }
+  if (!config.payments.infinitePay.handle) {
+    throw new PaymentIntegrationError(503, "PAYMENT_ACCOUNT_UNCONFIGURED", "A conta InfinitePay ainda não foi configurada.");
+  }
+}
+
+export async function createCheckoutForOrder(orderNumber, whatsapp) {
+  integrationReady();
+  const lookup = whatsappLookupValues(whatsapp);
+  const prepared = await withTransaction(async (connection) => {
+    // A seleção da conta e a reserva do checkout são atômicas com as edições
+    // da campanha e do recebedor. A chamada de rede ocorre após o commit.
+    const [orders] = await connection.execute(
+      `SELECT o.id, o.order_number, o.customer_name, o.customer_whatsapp, o.customer_email,
+              o.status, o.payment_status, o.total_cents, c.title AS campaign_title,
+              pr.infinitepay_handle AS receiver_handle
+         FROM orders o
+         JOIN campaigns c ON c.id = o.campaign_id
+         LEFT JOIN payment_receivers pr ON pr.id = c.receiver_id
+        WHERE o.order_number = ? AND o.customer_whatsapp IN (${lookup.map(() => "?").join(", ")}) LIMIT 1 FOR UPDATE`,
+      [orderNumber, ...lookup],
+    );
+    if (orders.length === 0) {
+      throw new PaymentIntegrationError(404, "ORDER_NOT_FOUND", "Pedido não encontrado com os dados informados.");
+    }
+    const order = orders[0];
+    if (order.status !== "active") {
+      throw new PaymentIntegrationError(409, "ORDER_CANCELLED", "Este pedido foi cancelado e não pode receber um novo checkout.");
+    }
+    if (order.payment_status === "paid") {
+      throw new PaymentIntegrationError(409, "ORDER_ALREADY_PAID", "Este pedido já está pago.");
+    }
+    if (["refunded", "partially_refunded"].includes(order.payment_status)) {
+      throw new PaymentIntegrationError(409, "ORDER_PAYMENT_CLOSED", "Este pedido possui historico de reembolso e precisa de atendimento da camisaria.");
+    }
+
+    // O dinheiro vai para o recebedor da campanha; sem recebedor, para a conta padrão.
+    const handle = order.receiver_handle || config.payments.infinitePay.handle;
+    const [existingRows] = await connection.execute(
+      "SELECT checkout_url, status, handle FROM payment_checkouts WHERE order_id = ? AND provider = ? LIMIT 1",
+      [order.id, provider],
+    );
+    // Um link pendente continua valendo mesmo que a conta padrão mude: o handle dele está
+    // gravado e a conferência usa essa conta. A troca de recebedor da campanha é recusada
+    // enquanto houver link assim (RECEIVER_IN_USE), então aqui ele sempre é da conta certa.
+    if (existingRows[0]?.checkout_url && existingRows[0].status === "pending") {
+      return { url: existingRows[0].checkout_url, reused: true };
+    }
+
+    const [items] = await connection.execute(
+      `SELECT oi.quantity, oi.unit_price_cents, oi.unit_discount_cents, oi.discounted_quantity,
+              sm.name AS model_name, co.name AS color_name, sz.code AS size_code
+         FROM order_items oi
+         JOIN campaign_variants cv ON cv.id = oi.campaign_variant_id
+         JOIN shirt_models sm ON sm.id = cv.shirt_model_id
+         JOIN colors co ON co.id = cv.color_id
+         JOIN sizes sz ON sz.id = oi.size_id
+        WHERE oi.order_id = ? ORDER BY oi.id`,
+      [order.id],
+    );
+    const computedTotal = items.reduce(
+      (total, item) => total
+        + Number(item.quantity) * Number(item.unit_price_cents)
+        - Number(item.discounted_quantity) * Number(item.unit_discount_cents),
+      0,
+    );
+    if (items.length === 0 || computedTotal !== Number(order.total_cents)) {
+      throw new PaymentIntegrationError(409, "ORDER_TOTAL_INVALID", "O pedido não passou na conferência de valor antes do checkout.");
+    }
+
+    await connection.execute(
+      `INSERT INTO payment_checkouts (order_id, provider, status, amount_cents)
+       VALUES (?, ?, 'pending', ?)
+       ON DUPLICATE KEY UPDATE amount_cents = VALUES(amount_cents)`,
+      [order.id, provider, order.total_cents],
+    );
+    const [claim] = await connection.execute(
+      `UPDATE payment_checkouts
+          SET locked_at = CURRENT_TIMESTAMP(3), handle = ?, last_error = NULL
+        WHERE order_id = ? AND provider = ? AND checkout_url IS NULL
+          AND (locked_at IS NULL OR locked_at < DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL ${staleLockMinutes} MINUTE))`,
+      [handle, order.id, provider],
+    );
+    if (claim.affectedRows !== 1) {
+      throw new PaymentIntegrationError(409, "CHECKOUT_IN_PROGRESS", "O checkout deste pedido já está sendo preparado. Tente novamente em instantes.");
+    }
+    return { order, handle, items };
+  });
+  if (prepared.reused) return prepared;
+  const { order, handle, items } = prepared;
+
+  try {
+    const checkout = await createInfinitePayLink({
+      handle,
+      orderNumber: order.order_number,
+      customer: {
+        name: order.customer_name,
+        email: order.customer_email,
+        phone: order.customer_whatsapp,
+      },
+      items: items.flatMap((item) => {
+        const quantity = Number(item.quantity);
+        const discountedQuantity = Number(item.discounted_quantity);
+        const regularQuantity = quantity - discountedQuantity;
+        const description = `${item.model_name} - ${item.color_name} - ${item.size_code}`;
+        return [
+          ...(discountedQuantity > 0 ? [{
+            quantity: discountedQuantity,
+            unitPriceCents: Number(item.unit_price_cents) - Number(item.unit_discount_cents),
+            description: `${description} (com desconto)`.slice(0, 120),
+          }] : []),
+          ...(regularQuantity > 0 ? [{
+            quantity: regularQuantity,
+            unitPriceCents: Number(item.unit_price_cents),
+            description: description.slice(0, 120),
+          }] : []),
+        ];
+      }),
+      redirectUrl: publicUrl({ rota: "acompanhar-pedido", pedido: order.order_number }),
+      webhookUrl: webhookUrl(),
+    });
+    await pool.execute(
+      `UPDATE payment_checkouts
+          SET checkout_url = ?, handle = ?, status = 'pending', raw_response = ?, locked_at = NULL, last_error = NULL
+        WHERE order_id = ? AND provider = ?`,
+      [checkout.url, handle, JSON.stringify(checkout.response), order.id, provider],
+    );
+    return { url: checkout.url, reused: false };
+  } catch (error) {
+    // Guarde o motivo tecnico junto do pedido. Sem o codigo e o corpo da recusa, uma
+    // falha de checkout nao deixa rastro depois que o cliente sai da tela.
+    const failure = error instanceof InfinitePayRequestError
+      ? `${error.code} ${JSON.stringify(error.details ?? {})}`
+      : String(error?.message ?? error);
+    await pool.execute(
+      `UPDATE payment_checkouts SET locked_at = NULL, last_error = ? WHERE order_id = ? AND provider = ?`,
+      [failure.slice(0, 500), order.id, provider],
+    );
+    if (error instanceof InfinitePayRequestError) {
+      throw new PaymentIntegrationError(502, error.code, error.message, error.details);
+    }
+    throw error;
+  }
+}
+
+export async function enqueueInfinitePayEvent(payload, source = "webhook") {
+  integrationReady();
+  let event;
+  try {
+    event = normalizeInfinitePayEvent(payload, source);
+  } catch (error) {
+    if (error instanceof InfinitePayRequestError) {
+      throw new PaymentIntegrationError(400, error.code, error.message, error.details);
+    }
+    throw error;
+  }
+  const canonicalPayload = {
+    order_nsu: event.orderNsu,
+    transaction_nsu: event.transactionNsu,
+    invoice_slug: event.invoiceSlug,
+    receipt_url: event.receiptUrl,
+    ...(event.amount === null ? {} : { amount: event.amount }),
+    ...(event.paidAmount === null ? {} : { paid_amount: event.paidAmount }),
+    ...(event.captureMethod === null ? {} : { capture_method: event.captureMethod }),
+  };
+  // Read without holding a transaction across the provider request. Only paid,
+  // amount-matched candidates may consume durable queue capacity. Legacy rows
+  // remain available to the existing worker and do not count against this lane.
+  const [snapshots] = await pool.execute(
+    `SELECT o.id, o.status, o.payment_status, o.total_cents,
+            pc.status AS checkout_status, pc.handle, pc.checkout_url
+       FROM orders o LEFT JOIN payment_checkouts pc ON pc.order_id = o.id AND pc.provider = ?
+      WHERE o.order_number = ? LIMIT 1`,
+    [provider, event.orderNsu],
+  );
+  const snapshot = snapshots[0];
+  if (!snapshot) throw new PaymentIntegrationError(400, "ORDER_NOT_FOUND", "Pedido informado pela InfinitePay não existe.");
+  const [existing] = await pool.execute(
+    "SELECT order_id, event_type, processed_at FROM payment_events WHERE provider = ? AND provider_event_id = ? LIMIT 1",
+    [provider, event.transactionNsu],
+  );
+  if (existing[0] && Number(existing[0].order_id) !== Number(snapshot.id)
+      && (existing[0].processed_at || providerCheckedTypes.has(existing[0].event_type))) {
+    throw new PaymentIntegrationError(409, "PAYMENT_TRANSACTION_IN_USE", "A transação já pertence a outro pedido.");
+  }
+  if (existing[0]?.processed_at && Number(existing[0].order_id) === Number(snapshot.id)) return { accepted: true, duplicate: true };
+  if (snapshot.status !== "active" || !["pending", "failed"].includes(snapshot.payment_status)
+      || snapshot.checkout_status !== "pending" || !snapshot.checkout_url) {
+    throw new PaymentIntegrationError(409, "PAYMENT_EVENT_NOT_EXPECTED", "Este pedido não possui um checkout pendente para reconciliação.");
+  }
+  // Keep external verification bounded. A 400 asks InfinitePay to retry rather
+  // than acknowledging an event that was not durably accepted.
+  if (admissionChecksInFlight >= maxAdmissionChecksInFlight) {
+    throw new PaymentIntegrationError(400, "PAYMENT_VERIFICATION_BUSY", "A conferência está ocupada. Tente novamente em instantes.");
+  }
+  let checked;
+  admissionChecksInFlight += 1;
+  try {
+    checked = await checkInfinitePayPayment({
+      handle: snapshot.handle ?? null, orderNsu: event.orderNsu,
+      transactionNsu: event.transactionNsu, invoiceSlug: event.invoiceSlug,
+    });
+  } catch (error) {
+    if (!(error instanceof InfinitePayRequestError)) throw error;
+    throw new PaymentIntegrationError(400, "PAYMENT_VERIFICATION_UNAVAILABLE", "A confirmação está temporariamente indisponível. Tente novamente.");
+  } finally {
+    admissionChecksInFlight -= 1;
+  }
+  if (checked?.success !== true || checked?.paid !== true) {
+    throw new PaymentIntegrationError(400, "PAYMENT_NOT_CONFIRMED", "O provedor ainda não confirmou este pagamento.");
+  }
+  const checkedAmount = Number(checked.amount);
+  if (!Number.isSafeInteger(checkedAmount) || checkedAmount < 1 || checkedAmount !== Number(snapshot.total_cents)) {
+    throw new PaymentIntegrationError(400, "PAYMENT_AMOUNT_MISMATCH", "O pagamento não passou na conferência de valor.");
+  }
+  return withTransaction(async (connection) => {
+    // O bloqueio do pedido serializa a contagem e a inserção, impedindo que
+    // requisições concorrentes ultrapassem os limites da fila.
+    const [orders] = await connection.execute(
+      `SELECT id, status, payment_status, total_cents
+         FROM orders
+        WHERE order_number = ?
+        LIMIT 1 FOR UPDATE`,
+      [event.orderNsu],
+    );
+    if (orders.length === 0) {
+      throw new PaymentIntegrationError(400, "ORDER_NOT_FOUND", "Pedido informado pela InfinitePay não existe.");
+    }
+    const order = orders[0];
+
+    const [duplicates] = await connection.execute(
+      "SELECT id, order_id, event_type, processed_at, locked_at FROM payment_events WHERE provider = ? AND provider_event_id = ? LIMIT 1 FOR UPDATE",
+      [provider, event.transactionNsu],
+    );
+    let duplicate = duplicates[0];
+    if (duplicate && Number(duplicate.order_id) !== Number(order.id)
+        && (duplicate.processed_at || providerCheckedTypes.has(duplicate.event_type))) {
+      throw new PaymentIntegrationError(409, "PAYMENT_TRANSACTION_IN_USE", "A transação já pertence a outro pedido.");
+    }
+    if (duplicate?.processed_at && Number(duplicate.order_id) === Number(order.id)) return { accepted: true, duplicate: true };
+
+    const [checkouts] = await connection.execute(
+      `SELECT status, handle, checkout_url
+         FROM payment_checkouts
+        WHERE order_id = ? AND provider = ? AND checkout_url IS NOT NULL
+        LIMIT 1 FOR UPDATE`,
+      [order.id, provider],
+    );
+    if (order.status !== "active" || !["pending", "failed"].includes(order.payment_status) || checkouts[0]?.status !== "pending") {
+      throw new PaymentIntegrationError(
+        409,
+        "PAYMENT_EVENT_NOT_EXPECTED",
+        "Este pedido não possui um checkout pendente para reconciliação.",
+      );
+    }
+    if (Number(order.total_cents) !== checkedAmount || checkouts[0].handle !== snapshot.handle
+        || checkouts[0].checkout_url !== snapshot.checkout_url) {
+      throw new PaymentIntegrationError(400, "PAYMENT_CHECKOUT_CHANGED", "O checkout mudou durante a conferência. Tente novamente.");
+    }
+    if (duplicate && Number(duplicate.order_id) !== Number(order.id)) {
+      if (duplicate.locked_at) {
+        throw new PaymentIntegrationError(400, "PAYMENT_VERIFICATION_BUSY", "A conferência está ocupada. Tente novamente em instantes.");
+      }
+      // Preserve the old row, order and original payload as dead-letter history.
+      // Its unverified reservation is not ownership of a provider transaction.
+      await connection.execute(
+        `UPDATE payment_events SET provider_event_id = ?, dead_lettered_at = CURRENT_TIMESTAMP(3),
+           processing_error = 'Reserva legada substituída após conferência do provedor.' WHERE id = ?`,
+        [`legacy-${randomUUID()}`, duplicate.id],
+      );
+      duplicate = undefined;
+    }
+    if (duplicate) {
+      if (providerCheckedTypes.has(duplicate.event_type)) return { accepted: true, duplicate: true };
+      // A pre-deploy forged event must not reserve a legitimate transaction ID.
+      // Never replace a payload while an old worker is using that row.
+      if (duplicate.locked_at) {
+        throw new PaymentIntegrationError(400, "PAYMENT_VERIFICATION_BUSY", "A conferência está ocupada. Tente novamente em instantes.");
+      }
+      await connection.execute(
+        `UPDATE payment_events SET payload = ?, event_type = ?, attempts = 0,
+           available_at = CURRENT_TIMESTAMP(3), dead_lettered_at = NULL, processing_error = NULL
+         WHERE id = ?`,
+        [JSON.stringify(canonicalPayload), source === "webhook" ? "verified_webhook" : "verified_browser_reconciliation", duplicate.id],
+      );
+      return { accepted: true, duplicate: true };
+    }
+
+    const [queueRows] = await connection.execute(
+      `SELECT
+         SUM(processed_at IS NULL AND dead_lettered_at IS NULL) AS pending_count,
+         SUM(received_at >= DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 1 DAY)) AS recent_count
+       FROM payment_events
+       WHERE provider = ? AND order_id = ? AND event_type IN (${verifiedEventTypes})`,
+      [provider, order.id],
+    );
+    const pendingCount = Number(queueRows[0]?.pending_count ?? 0);
+    const recentCount = Number(queueRows[0]?.recent_count ?? 0);
+    if (pendingCount >= maxPendingEventsPerOrder || recentCount >= maxEventsPerOrderPerDay) {
+      throw new PaymentIntegrationError(
+        400,
+        "PAYMENT_EVENT_QUEUE_LIMIT",
+        "Muitas tentativas de reconciliação foram recebidas para este pedido. Aguarde a confirmação automática.",
+      );
+    }
+
+    const [insert] = await connection.execute(
+      `INSERT IGNORE INTO payment_events
+        (provider, order_id, provider_event_id, event_type, signature_valid, payload, available_at)
+       VALUES (?, ?, ?, ?, FALSE, ?, CURRENT_TIMESTAMP(3))`,
+      [
+        provider,
+        order.id,
+        event.transactionNsu,
+        source === "webhook" ? "verified_webhook" : "verified_browser_reconciliation",
+        JSON.stringify(canonicalPayload),
+      ],
+    );
+    return { accepted: true, duplicate: insert.affectedRows === 0 };
+  });
+}
+
+function queueCondition() {
+  return `processed_at IS NULL AND dead_lettered_at IS NULL AND available_at <= CURRENT_TIMESTAMP(3)
+    AND (locked_at IS NULL OR locked_at < DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL ${staleLockMinutes} MINUTE))`;
+}
+
+function verifiedCaptureMethod(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized.length > 0 && normalized.length <= 40 && /^[a-z0-9_-]+$/.test(normalized)
+    ? normalized
+    : null;
+}
+
+async function pruneExpiredDeadLetters() {
+  const now = Date.now();
+  if (now - lastDeadLetterCleanupAt < deadLetterCleanupIntervalMs) return;
+  lastDeadLetterCleanupAt = now;
+  await pool.execute(
+    `DELETE FROM payment_events
+      WHERE dead_lettered_at IS NOT NULL
+        AND dead_lettered_at < DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL ${deadLetterRetentionDays} DAY)
+      LIMIT 500`,
+  );
+}
+
+export async function processInfinitePayEvents({ limit = 10 } = {}) {
+  await pruneExpiredDeadLetters();
+  const safeLimit = Math.max(1, Math.min(50, Number.parseInt(String(limit), 10) || 10));
+  const [candidates] = await pool.execute(
+    `SELECT id, attempts FROM payment_events WHERE provider = ? AND ${queueCondition()}
+       ORDER BY (event_type IN (${verifiedEventTypes})) DESC, available_at, id LIMIT ${safeLimit}`,
+    [provider],
+  );
+  const result = { processed: 0, paid: 0, failed: 0 };
+
+  for (const candidate of candidates) {
+    const [claim] = await pool.execute(
+      `UPDATE payment_events
+          SET locked_at = CURRENT_TIMESTAMP(3), attempts = attempts + 1, processing_error = NULL
+        WHERE id = ? AND provider = ? AND ${queueCondition()}`,
+      [candidate.id, provider],
+    );
+    if (claim.affectedRows !== 1) continue;
+    result.processed += 1;
+
+    try {
+      const [rows] = await pool.execute("SELECT payload FROM payment_events WHERE id = ? LIMIT 1", [candidate.id]);
+      if (rows.length !== 1) throw new Error("Evento InfinitePay não encontrado.");
+      const payload = typeof rows[0].payload === "string" ? JSON.parse(rows[0].payload) : rows[0].payload;
+      const event = normalizeInfinitePayEvent(payload, "queue");
+      // A conferência consulta a conta que emitiu o link. Checkouts anteriores ao
+      // recebedor por campanha não têm handle gravado e usam a conta padrão.
+      const [checkoutRows] = await pool.execute(
+        `SELECT pc.handle FROM payment_checkouts pc JOIN orders o ON o.id = pc.order_id
+          WHERE o.order_number = ? AND pc.provider = ? LIMIT 1`,
+        [event.orderNsu, provider],
+      );
+      const checked = await checkInfinitePayPayment({
+        handle: checkoutRows[0]?.handle ?? null,
+        orderNsu: event.orderNsu,
+        transactionNsu: event.transactionNsu,
+        invoiceSlug: event.invoiceSlug,
+      });
+      if (checked?.success !== true || checked?.paid !== true) {
+        throw new Error("payment_check ainda não confirmou o pagamento.");
+      }
+      const checkedAmount = Number(checked.amount);
+      if (!Number.isSafeInteger(checkedAmount) || checkedAmount < 1) {
+        throw new Error("payment_check devolveu um valor inválido.");
+      }
+
+      await withTransaction(async (connection) => {
+        const [orders] = await connection.execute(
+          "SELECT id, status, payment_status, total_cents FROM orders WHERE order_number = ? LIMIT 1 FOR UPDATE",
+          [event.orderNsu],
+        );
+        if (orders.length !== 1) throw new Error("Pedido do pagamento não existe.");
+        const order = orders[0];
+        if (order.status !== "active" || !["pending", "failed"].includes(order.payment_status)) {
+          throw new TerminalPaymentStateError(
+            `Pedido não aceita pagamento: status=${order.status}, payment_status=${order.payment_status}.`,
+          );
+        }
+        if (Number(order.total_cents) !== checkedAmount) {
+          throw new Error(`Valor divergente: pedido=${order.total_cents}, InfinitePay=${checkedAmount}.`);
+        }
+        const [transactions] = await connection.execute(
+          "SELECT order_id FROM payments WHERE provider = ? AND provider_transaction_id = ? LIMIT 1 FOR UPDATE",
+          [provider, event.transactionNsu],
+        );
+        if (transactions.length > 0 && Number(transactions[0].order_id) !== Number(order.id)) {
+          throw new Error("A transação InfinitePay já pertence a outro pedido.");
+        }
+        const rawResponse = JSON.stringify({ event: payload, payment_check: checked });
+        // A forma exibida vem exclusivamente do payment_check server-to-server. O
+        // capture_method recebido pelo navegador/webhook nunca é usado como prova.
+        const captureMethod = verifiedCaptureMethod(checked.capture_method);
+        await connection.execute(
+          `INSERT INTO payments
+            (order_id, provider, provider_order_id, provider_transaction_id, status, amount_cents, capture_method, raw_response, confirmed_at)
+           VALUES (?, ?, ?, ?, 'paid', ?, ?, ?, CURRENT_TIMESTAMP(3))
+           ON DUPLICATE KEY UPDATE status = 'paid', amount_cents = VALUES(amount_cents),
+             capture_method = COALESCE(VALUES(capture_method), capture_method), raw_response = VALUES(raw_response),
+             confirmed_at = COALESCE(confirmed_at, CURRENT_TIMESTAMP(3))`,
+          [order.id, provider, event.invoiceSlug, event.transactionNsu, checkedAmount, captureMethod, rawResponse],
+        );
+        const [orderUpdate] = await connection.execute(
+          `UPDATE orders SET payment_status = 'paid', paid_at = COALESCE(paid_at, CURRENT_TIMESTAMP(3))
+            WHERE id = ? AND status = 'active' AND payment_status IN ('pending', 'failed')`,
+          [order.id],
+        );
+        if (orderUpdate.affectedRows !== 1) {
+          throw new TerminalPaymentStateError("O estado do pedido mudou durante a confirmação do pagamento.");
+        }
+        await connection.execute(
+          `UPDATE payment_checkouts SET status = 'paid', locked_at = NULL, last_error = NULL
+            WHERE order_id = ? AND provider = ?`,
+          [order.id, provider],
+        );
+        await connection.execute(
+          `UPDATE payment_events SET signature_valid = TRUE, processed_at = CURRENT_TIMESTAMP(3),
+             processing_error = NULL, locked_at = NULL WHERE id = ?`,
+          [candidate.id],
+        );
+      });
+      result.paid += 1;
+    } catch (error) {
+      const processingError = String(error?.message ?? error).slice(0, 500);
+      const attempts = Number(candidate.attempts) + 1;
+      if (error instanceof TerminalPaymentStateError || attempts >= maxReconciliationAttempts) {
+        await pool.execute(
+          `UPDATE payment_events
+              SET locked_at = NULL, processing_error = ?, dead_lettered_at = CURRENT_TIMESTAMP(3)
+            WHERE id = ? AND processed_at IS NULL AND dead_lettered_at IS NULL`,
+          [
+            (error instanceof TerminalPaymentStateError
+              ? `Reconciliação encerrada. ${processingError}`
+              : `Limite de ${maxReconciliationAttempts} tentativas atingido. ${processingError}`).slice(0, 500),
+            candidate.id,
+          ],
+        );
+      } else {
+        const delayMinutes = Math.min(60, retryDelayMinutes * (2 ** Math.max(0, attempts - 1)));
+        const availableAt = new Date(Date.now() + delayMinutes * 60 * 1000);
+        await pool.execute(
+          `UPDATE payment_events
+              SET locked_at = NULL, processing_error = ?, available_at = ?
+            WHERE id = ? AND processed_at IS NULL AND dead_lettered_at IS NULL`,
+          [processingError, availableAt, candidate.id],
+        );
+      }
+      result.failed += 1;
+      console.error(`Falha ao reconciliar evento InfinitePay ${candidate.id}:`, { code: error.code ?? "WORKER_ERROR" });
+    }
+  }
+  return result;
+}
+
+export function startInfinitePayReconciliationWorker() {
+ if(!(config.payments.provider === provider && config.payments.infinitePay.checkoutEnabled))return async()=>{};
+ return startWorker(async()=>{await processInfinitePayEvents();},config.payments.infinitePay.reconciliationIntervalMs,error=>console.error('Worker falhou:',{code:error.code??'WORKER_ERROR'}));
+}

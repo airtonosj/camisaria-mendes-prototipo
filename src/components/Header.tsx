@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { buildRoute } from "../App";
+import { buildRoute } from '../navigation';
 import { Brand } from "./Brand";
 
 const links = [
   ["#inicio", "Início"],
+  ["/campanhas", "Campanhas"],
   ["#mostruario", "Mostruário"],
   ["#como-funciona", "Como funciona"],
   ["#sobre", "Sobre nós"],
@@ -18,12 +19,17 @@ export function Header() {
       <div className="container header-inner">
         <Brand compact />
         <nav className="desktop-nav" aria-label="Navegação principal">
-          {links.map(([href, label], index) => <a className={index === 0 ? "is-current" : ""} href={href} key={href}>{label}</a>)}
+          {links.map(([href, label], index) => <a className={(index === 0 && window.location.pathname === '/') || (href === '/campanhas' && window.location.pathname === '/campanhas') ? "is-current" : ""} href={href.startsWith('#') && window.location.pathname !== '/' ? `/${href}` : href} key={href}>{label}</a>)}
         </nav>
-        <a className="header-code-link" href={buildRoute("acesso-campanha")}>
-          Tenho um código
-          <span className="material-symbols-rounded" aria-hidden="true">radio_button_checked</span>
-        </a>
+        <div className="header-actions">
+          <a className="header-order-link" href={buildRoute("acompanhar-pedido")}>
+            Consulte seu pedido
+          </a>
+          <a className="header-code-link" href={buildRoute("acesso-campanha")}>
+            Tenho um código
+            <span className="material-symbols-rounded" aria-hidden="true">radio_button_checked</span>
+          </a>
+        </div>
         <button
           className="menu-button"
           type="button"
@@ -35,9 +41,9 @@ export function Header() {
         </button>
       </div>
       <nav className={`mobile-nav ${open ? "is-open" : ""}`} aria-label="Navegação mobile">
-        {links.map(([href, label]) => <a href={href} key={href} onClick={() => setOpen(false)}>{label}</a>)}
+        {links.map(([href, label]) => <a href={href.startsWith('#') && window.location.pathname !== '/' ? `/${href}` : href} key={href} onClick={() => setOpen(false)}>{label}</a>)}
         <a href={buildRoute("acesso-campanha")} onClick={() => setOpen(false)}>Tenho um código</a>
-        <a href={buildRoute("acompanhar-pedido")} onClick={() => setOpen(false)}>Acompanhar pedido</a>
+        <a href={buildRoute("acompanhar-pedido")} onClick={() => setOpen(false)}>Consulte seu pedido</a>
       </nav>
     </header>
   );

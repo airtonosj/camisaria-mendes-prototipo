@@ -1,0 +1,71 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+export const projectDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function readEnvFile(filename = ".env") {
+  const envPath = path.join(projectDirectory, filename);
+  if (!fs.existsSync(envPath)) return {};
+  const values = {};
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator < 1) continue;
+    const key = trimmed.slice(0, separator).trim();
+    const value = trimmed.slice(separator + 1).trim().replace(/^(['"])(.*)\1$/, "$2");
+    values[key] = value;
+  }
+  return values;
+}
+
+export function testEnvironment() {
+  const fromFile = readEnvFile();
+  const base = { ...fromFile, ...readEnvFile('.env.test.local'), ...process.env };
+  const primaryDatabase = base.DB_NAME || "camisaria_mendes";
+  const testDatabase = base.TEST_DB_NAME || `${primaryDatabase}_test`;
+  if (!/^[A-Za-z0-9_]+_test$/.test(testDatabase)) {
+    throw new Error("TEST_DB_NAME precisa terminar em `_test` e conter apenas letras, números e sublinhado.");
+  }
+  if (testDatabase === primaryDatabase) {
+    throw new Error("O banco de teste não pode ser o banco principal.");
+  }
+  const host = base.TEST_DB_HOST || '127.0.0.1';
+  if (!['127.0.0.1', 'localhost', '::1'].includes(host)) throw new Error('Testes exigem MySQL local.');
+  if (!base.TEST_DB_USER || base.TEST_DB_PASSWORD === undefined) throw new Error('Configure TEST_DB_USER e TEST_DB_PASSWORD exclusivos de teste.');
+  return {
+    ...base,
+    APP_ENV: "test",
+    PORT: '',
+    DB_HOST: host,
+    DB_PORT: base.TEST_DB_PORT || '3306',
+    DB_USER: base.TEST_DB_USER,
+    DB_PASSWORD: base.TEST_DB_PASSWORD,
+    MIGRATION_DB_USER: '',
+    MIGRATION_DB_PASSWORD: '',
+    LICENSE_CONTROL_ENABLED: 'false',
+    ADMIN_INITIAL_PASSWORD: '',
+    API_HOST: "127.0.0.1",
+    API_PORT: base.TEST_API_PORT || "3334",
+    TRUST_PROXY: "true",
+    DB_NAME: testDatabase,
+    CORS_ORIGIN: `http://127.0.0.1:${base.TEST_WEB_PORT || "4175"}`,
+    PUBLIC_APP_URL: `http://127.0.0.1:${base.TEST_WEB_PORT || "4175"}`,
+    // Mesmo que um deploy antigo ainda injete estas variáveis, a chave estática não
+    // pode voltar a funcionar como uma sessão administrativa.
+    ADMIN_API_TOKEN_ENABLED: "true",
+    ADMIN_API_TOKEN: "token-estatico-de-regressao-com-mais-de-trinta-e-dois-caracteres",
+    UPLOADS_DIR: path.join(os.tmpdir(), "camisaria-mendes-tests", testDatabase, "uploads"),
+    SMTP_HOST: "",
+    SMTP_USER: "",
+    SMTP_PASSWORD: "",
+    SMTP_FROM: "",
+    PAYMENT_PROVIDER: "infinitepay",
+    INFINITEPAY_HANDLE: "smoke-infinitepay",
+    INFINITEPAY_CHECKOUT_ENABLED: "true",
+    INFINITEPAY_API_BASE_URL: `http://127.0.0.1:${base.TEST_INFINITEPAY_PORT || "3335"}`,
+    PAYMENT_RECONCILIATION_INTERVAL_MS: "1000",
+  };
+}
