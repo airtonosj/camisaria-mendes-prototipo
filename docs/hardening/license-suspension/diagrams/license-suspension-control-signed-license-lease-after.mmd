@@ -1,0 +1,12 @@
+flowchart LR
+  B[Cobrança do fornecedor] --> L[Serviço de licenças]
+  L -->|lease assinado| A[Aplicação na host do cliente]
+  U[Usuários] --> A
+  C[Cliente com root] --> A
+  A --> G{Estado contratual local}
+  G -->|ativo/carência| W[Operações normais]
+  G -->|restrito| R[Somente leitura e exportação]
+  A --> D[(Dados do cliente)]
+
+  classDef changed stroke:#176b3a,stroke-width:3px
+  class L,G,R changed

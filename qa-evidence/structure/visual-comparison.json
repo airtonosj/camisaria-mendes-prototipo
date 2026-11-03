@@ -1,0 +1,194 @@
+[
+  {
+    "name": "admin-1440.png",
+    "before": [
+      1440,
+      1178
+    ],
+    "after": [
+      1440,
+      1178
+    ],
+    "changedPercent": 0.044
+  },
+  {
+    "name": "admin-1920.png",
+    "before": [
+      1920,
+      1312
+    ],
+    "after": [
+      1920,
+      1312
+    ],
+    "changedPercent": 0.092
+  },
+  {
+    "name": "admin-390.png",
+    "before": [
+      390,
+      2064
+    ],
+    "after": [
+      390,
+      2064
+    ],
+    "changedPercent": 0.092
+  },
+  {
+    "name": "admin-768.png",
+    "before": [
+      768,
+      1702
+    ],
+    "after": [
+      768,
+      1702
+    ],
+    "changedPercent": 0.057
+  },
+  {
+    "name": "campaign-1440.png",
+    "before": [
+      1440,
+      1335
+    ],
+    "after": [
+      1440,
+      1335
+    ],
+    "changedPercent": 0
+  },
+  {
+    "name": "campaign-1920.png",
+    "before": [
+      1920,
+      1346
+    ],
+    "after": [
+      1920,
+      1346
+    ],
+    "changedPercent": 0
+  },
+  {
+    "name": "campaign-390.png",
+    "before": [
+      390,
+      1294
+    ],
+    "after": [
+      390,
+      1294
+    ],
+    "changedPercent": 0
+  },
+  {
+    "name": "campaign-768.png",
+    "before": [
+      768,
+      1957
+    ],
+    "after": [
+      768,
+      1957
+    ],
+    "changedPercent": 0
+  },
+  {
+    "name": "login-1440.png",
+    "before": [
+      1440,
+      900
+    ],
+    "after": [
+      1440,
+      900
+    ],
+    "changedPercent": 0
+  },
+  {
+    "name": "login-1920.png",
+    "before": [
+      1920,
+      900
+    ],
+    "after": [
+      1920,
+      900
+    ],
+    "changedPercent": 0
+  },
+  {
+    "name": "login-390.png",
+    "before": [
+      390,
+      900
+    ],
+    "after": [
+      390,
+      900
+    ],
+    "changedPercent": 0
+  },
+  {
+    "name": "login-768.png",
+    "before": [
+      768,
+      900
+    ],
+    "after": [
+      768,
+      900
+    ],
+    "changedPercent": 0
+  },
+  {
+    "name": "public-1440.png",
+    "before": [
+      1440,
+      2487
+    ],
+    "after": [
+      1440,
+      2487
+    ],
+    "changedPercent": 0
+  },
+  {
+    "name": "public-1920.png",
+    "before": [
+      1920,
+      2620
+    ],
+    "after": [
+      1920,
+      2620
+    ],
+    "changedPercent": 0
+  },
+  {
+    "name": "public-390.png",
+    "before": [
+      390,
+      4962
+    ],
+    "after": [
+      390,
+      4962
+    ],
+    "changedPercent": 0
+  },
+  {
+    "name": "public-768.png",
+    "before": [
+      768,
+      4009
+    ],
+    "after": [
+      768,
+      4009
+    ],
+    "changedPercent": 0
+  }
+]

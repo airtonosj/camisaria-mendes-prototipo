@@ -1,0 +1,107 @@
+[
+  {
+    "name": "home",
+    "viewport": 390,
+    "width": 362,
+    "left": 14,
+    "overflow": false
+  },
+  {
+    "name": "home",
+    "viewport": 820,
+    "width": 680,
+    "left": 70,
+    "overflow": false
+  },
+  {
+    "name": "home",
+    "viewport": 1366,
+    "width": 1180,
+    "left": 93,
+    "overflow": false
+  },
+  {
+    "name": "home",
+    "viewport": 1920,
+    "width": 1180,
+    "left": 370,
+    "overflow": false
+  },
+  {
+    "name": "home",
+    "viewport": 2560,
+    "width": 1180,
+    "left": 690,
+    "overflow": false
+  },
+  {
+    "name": "campaign",
+    "viewport": 390,
+    "width": 362,
+    "left": 14,
+    "overflow": false
+  },
+  {
+    "name": "campaign",
+    "viewport": 820,
+    "width": 680,
+    "left": 70,
+    "overflow": false
+  },
+  {
+    "name": "campaign",
+    "viewport": 1366,
+    "width": 1180,
+    "left": 93,
+    "overflow": false
+  },
+  {
+    "name": "campaign",
+    "viewport": 1920,
+    "width": 1180,
+    "left": 370,
+    "overflow": false
+  },
+  {
+    "name": "campaign",
+    "viewport": 2560,
+    "width": 1180,
+    "left": 690,
+    "overflow": false
+  },
+  {
+    "name": "admin",
+    "viewport": 390,
+    "width": 390,
+    "left": 0,
+    "overflow": false
+  },
+  {
+    "name": "admin",
+    "viewport": 820,
+    "width": 744,
+    "left": 76,
+    "overflow": false
+  },
+  {
+    "name": "admin",
+    "viewport": 1366,
+    "width": 1290,
+    "left": 76,
+    "overflow": false
+  },
+  {
+    "name": "admin",
+    "viewport": 1920,
+    "width": 1400,
+    "left": 298,
+    "overflow": false
+  },
+  {
+    "name": "admin",
+    "viewport": 2560,
+    "width": 1400,
+    "left": 618,
+    "overflow": false
+  }
+]

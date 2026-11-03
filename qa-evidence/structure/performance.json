@@ -1,0 +1,40 @@
+{
+  "baseline": {
+    "commit": "95a005788b7d53282529b23c44d9c000c7768c63",
+    "mainJavaScriptGzipBytesApproximate": 131410,
+    "iconBytes": 966176
+  },
+  "initialJavaScript": [
+    {
+      "file": "/assets/index-DVBsLk6b.js",
+      "gzipBytes": 63735
+    },
+    {
+      "file": "/assets/rolldown-runtime-hePW80VL.js",
+      "gzipBytes": 428
+    },
+    {
+      "file": "/assets/logo-mendes-4xN_-tlm.js",
+      "gzipBytes": 77
+    },
+    {
+      "file": "/assets/jsx-runtime-DePt1cUq.js",
+      "gzipBytes": 1568
+    },
+    {
+      "file": "/assets/api-DliIfRjU.js",
+      "gzipBytes": 5476
+    },
+    {
+      "file": "/assets/preload-helper-Czpn1I53.js",
+      "gzipBytes": 675
+    }
+  ],
+  "initialJavaScriptGzipBytes": 71959,
+  "images": {
+    "beforeBytes": 20069729,
+    "afterBytes": 1712910
+  },
+  "iconBytes": 47492,
+  "minimumJavaScriptReductionPercent": 45.24
+}

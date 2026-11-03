@@ -1,63 +1,45 @@
-# Camisaria Mendes — Protótipo de campanhas privadas
+# Camisaria Mendes
 
-Protótipo responsivo desenvolvido com React, TypeScript, CSS e Vite.
+Campanhas privadas, pedidos e acompanhamento de produção. React/TypeScript no navegador; Node.js ESM, HTTP nativo e MySQL 8 no servidor. Hospedagem principal: Hostinger Node.js Web App.
 
-## Fluxos demonstrados
+## Começar localmente
 
-- Landing page institucional;
-- Mostruário público apenas com campanhas concluídas;
-- Acesso a campanhas ativas por código, link direto ou QR Code;
-- Página privada para escolha de modelo, tamanho e quantidade;
-- Consulta do andamento do pedido pelo número e WhatsApp;
-- Orientações para representantes criarem campanhas pelo WhatsApp;
-- Área interna reservada em `/acesso-camisaria/`, sem link na navegação pública.
+1. Instale Node 22.12+ e MySQL 8; execute `npm.cmd ci`.
+2. Copie `.env.example` para `.env` e configure um banco de desenvolvimento local. Nunca copie credenciais de produção para testes.
+3. Execute `npm.cmd run db:create` e `npm.cmd run db:migrate`. `npm.cmd run db:seed` cria apenas dados demonstrativos locais.
+4. Em terminais separados: `npm.cmd run api:dev` e `npm.cmd run dev`.
+5. Para servir o build e a API juntos: `npm.cmd run build` e `npm.cmd start`.
 
-Use o código `MENDES-ENG-26` para testar a campanha de Engenharia ou `MENDES-ADS-26` para testar a campanha criada pelo painel.
+No Linux, use `npm` em lugar de `npm.cmd`. A versão publicada nunca usa dados demonstrativos como resposta à indisponibilidade da API.
 
-Cada campanha pode definir preços diferentes para `Comum`, `Oversized` e `Baby Look`. O seletor do aluno atualiza automaticamente o total conforme o modelo escolhido.
+## Verificar
 
-### Imagens da campanha
+Configure `.env.test.local` (ignorado pelo Git) com `TEST_DB_HOST=127.0.0.1`, `TEST_DB_PORT`, `TEST_DB_USER`, `TEST_DB_PASSWORD` e `TEST_DB_NAME=camisaria_local_test`. Use uma instância exclusiva de MySQL; as suítes recriam bancos de teste. O usuário deve poder criar e migrar os bancos de teste derivados, inclusive triggers. Não execute duas integrações sobre o mesmo banco.
 
-No painel, a camisaria configura separadamente a imagem de frente e a imagem de costas de cada modelo (`Comum`, `Oversized` e `Baby Look`). O aluno vê exatamente essas artes durante a escolha e na revisão do pedido.
+| Comando | Verificação |
+|---|---|
+| `npm.cmd test` | Tipos, lint, regras e integração MySQL/API |
+| `npm.cmd run build` | Build, identificação da versão e ausência de demonstração no artefato |
+| `npm.cmd run test:e2e` | Jornadas desktop/celular sobre o build atual, servidor próprio e provedores falsos |
+| `npm.cmd run check:release` | Sequência completa anterior |
 
-- Formatos aceitos: `PNG`, `JPG`/`JPEG` e `WEBP`;
-- Tamanho máximo: `2 MB` por arquivo;
-- Dimensão recomendada: `1200 × 1500 px`;
-- Dimensão mínima aceita: `600 × 800 px`;
-- Proporção recomendada: próxima de `4:5`;
-- Enquadramento: peça centralizada, sem cortar mangas, gola ou barra;
-- Fundo: neutro ou transparente, com boa diferença de cor em relação à camiseta;
-- Arquivos: usar uma imagem para a frente e outra para as costas, sem reunir os dois lados em uma única foto.
+No Windows, as jornadas usam Edge instalado. No Linux: `npx playwright install --with-deps chromium`. O banco das jornadas usa o sufixo `_e2e_test`; migração 024 usa `_pickup_recovery_test`. Nenhuma suíte envia e-mail real ou cobra pagamentos reais. Portas ocupadas causam falha, sem reutilizar servidores desconhecidos.
 
-Neste protótipo, as imagens enviadas ficam salvas apenas no navegador usado pela camisaria. Na versão de produção, o upload deve ser ligado ao armazenamento do sistema para que os arquivos fiquem disponíveis com segurança em qualquer aparelho.
+Detalhes de isolamento e recuperação do ambiente: [testes locais](docs/testes.md).
 
-Para testar o acompanhamento do pedido em `?rota=acompanhar-pedido`:
+## Encontrar o código
 
-- Pedidos: `CM-2026-0147` (aguardando), `CM-2026-0148` (confirmado), `CM-2026-0149` (não aprovado), `CM-2026-0150` (pronto para retirada) e `CM-2026-0151` (entregue)
-- WhatsApp: `(98) 99999-0000`
+- `src/features`: campanhas, conta, pedidos, relatórios e checkout.
+- `src/features/admin/AdminDashboard.tsx`: sessão, navegação e composição do painel.
+- `src/lib/http.ts`: transporte da API no navegador; `src/api.ts`: fachada compatível.
+- `shared`: contratos, contatos e regras puras compartilhadas.
+- `api/http`: roteamento, autenticação HTTP, limites e respostas.
+- `api/modules`: serviços e repositórios por funcionalidade.
+- `api/runtime`: readiness, workers e identificação da versão.
+- `database/migrations`: histórico SQL; `ops`: comandos operacionais.
 
-Para testar o painel interno em `/acesso-camisaria/`:
+## Continuidade e operação
 
-- E-mail: `admin@teste.com`
-- Senha: `123456`
+Leia [estado atual](docs/estado-atual.md), [arquitetura](docs/arquitetura.md) e [validação](docs/refatoracao-validacao.md). Para publicar, siga [Hostinger](docs/deploy-hostinger-business.md) e o [checklist](docs/checklist-release.md). O [runbook VPS](docs/runbook-operacional.md) é uma alternativa. Documentos em `docs/historico` são registros antigos, sem comprovação do estado publicado.
 
-> Este projeto ainda é uma demonstração visual. Não possui backend, banco de dados, autenticação ou pagamentos reais.
-
-## Fundação do backend
-
-A primeira base persistente foi iniciada com API Node.js e MySQL 8. Ela já define campanhas, modelos, cores, pedidos, pagamentos, histórico de mudança de fase e as consultas dos dois relatórios operacionais. O front-end ainda usa os dados de demonstração até a próxima etapa de integração.
-
-Consulte [docs/backend-mysql.md](docs/backend-mysql.md) para preparar o banco e executar a API.
-
-## Executar localmente
-
-```bash
-npm install
-npm run dev
-```
-
-## Gerar a versão de publicação
-
-```bash
-npm run build
-```
+Pagamento só é confirmado no servidor pelo provedor. Commit, push, publicação, compra real e envio real exigem autorização específica.

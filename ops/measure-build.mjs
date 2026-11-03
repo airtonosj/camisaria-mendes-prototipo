@@ -1,0 +1,11 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { gzipSync } from 'node:zlib';
+const html=await fs.readFile('dist/index.html','utf8');
+const files=[...new Set([...html.matchAll(/(?:src|href)="(\/assets\/[^" ]+\.js)"/g)].map(match=>match[1]))];
+const initialJavaScript=await Promise.all(files.map(async file=>({file,gzipBytes:gzipSync(await fs.readFile(path.join('dist',file))).length})));
+const images=JSON.parse(await fs.readFile('qa-evidence/structure/images.json','utf8'));
+const report={baseline:{commit:'95a005788b7d53282529b23c44d9c000c7768c63',mainJavaScriptGzipBytesApproximate:131410,iconBytes:966176},initialJavaScript,initialJavaScriptGzipBytes:initialJavaScript.reduce((n,f)=>n+f.gzipBytes,0),images:{beforeBytes:images.reduce((n,f)=>n+f.beforeBytes,0),afterBytes:images.reduce((n,f)=>n+f.afterBytes,0)},iconBytes:(await fs.stat('src/assets/material-symbols-subset.woff2')).size};
+report.minimumJavaScriptReductionPercent=+(100*(1-report.initialJavaScriptGzipBytes/report.baseline.mainJavaScriptGzipBytesApproximate)).toFixed(2);
+await fs.writeFile('qa-evidence/structure/performance.json',JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify(report,null,2));

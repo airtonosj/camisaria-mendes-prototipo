@@ -1,4 +1,4 @@
-import logo from "../../assets/logo-mendes.png";
+import logo from "../../assets/logo-mendes.webp";
 
 type BrandProps = {
   compact?: boolean;

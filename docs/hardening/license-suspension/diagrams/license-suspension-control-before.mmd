@@ -1,0 +1,8 @@
+flowchart LR
+  U[Usuários do cliente] --> H[Host do cliente]
+  C[Administrador com root] --> H
+  H --> A[Aplicação Node/React]
+  A --> D[(MySQL do cliente)]
+
+  classDef trust stroke:#a33,stroke-width:2px
+  class H,A,D trust
