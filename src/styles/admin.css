@@ -1196,19 +1196,69 @@
 .campaign-size-summary { color: #32785d !important; }
 .campaign-stock-setup { margin-top: 18px; padding: 16px; border: 1px solid #dce4e9; border-radius: 12px; background: #f8fbfd; }
 .campaign-stock-setup > legend { padding: 0 7px; color: #253853; font-size: .72rem; font-weight: 750; }
-.campaign-stock-setup > p { margin: 0 0 14px; color: #697887; font-size: .62rem; line-height: 1.55; }
-.campaign-stock-model + .campaign-stock-model { margin-top: 18px; padding-top: 14px; border-top: 1px solid #e0e7ec; }
-.campaign-stock-model h5 { margin: 0 0 11px; color: #293f55; font-size: .7rem; }
-.campaign-stock-color { display: grid; grid-template-columns: minmax(92px, 1fr) 3fr; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid #e7edf0; }
-.campaign-stock-color > strong { color: #4a5e6e; font-size: .62rem; }
-.campaign-stock-size-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 7px; }
-.campaign-stock-size-grid label { display: grid; gap: 4px; color: #73818b; font-size: .52rem; text-align: center; }
-.campaign-stock-size-grid input { box-sizing: border-box; width: 100%; min-width: 0; height: 34px; border: 1px solid #cfdbe3; border-radius: 7px; padding: 0 6px; color: #243746; background: #fff; text-align: center; font-size: .62rem; }
-.campaign-stock-size-grid input:focus-visible { outline: 2px solid #75caf4; outline-offset: 1px; }
+.campaign-stock-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.campaign-stock-head > p { margin: 0; color: #697887; font-size: .62rem; line-height: 1.55; }
+.campaign-stock-status { flex: none; display: inline-flex; align-items: center; gap: 5px; border: 1px solid; border-radius: 999px; padding: 5px 10px; font-size: .55rem; font-weight: 750; }
+.campaign-stock-status .material-symbols-rounded { font-size: 15px; }
+.campaign-stock-status.is-missing { border-color: #ecd29a; color: #8a6312; background: #fff8e8; }
+.campaign-stock-status.is-complete { border-color: #a9d8c0; color: #23704b; background: #ecf8f1; }
+.campaign-stock-tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); margin-bottom: 12px; border: 1px solid #d7deda; background: #f2f4f3; }
+.campaign-stock-tabs button { position: relative; min-height: 40px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-left: 1px solid #d7deda; color: #687176; background: transparent; cursor: pointer; font-size: .59rem; font-weight: 700; }
+.campaign-stock-tabs button:first-child { border-left: 0; }
+.campaign-stock-tabs button > span { border-radius: 10px; padding: 3px 7px; color: #556066; background: #dfe4e1; font-size: .48rem; }
+.campaign-stock-tabs button.has-missing::after { content: ""; position: absolute; top: 8px; right: 10px; width: 7px; height: 7px; border-radius: 50%; background: #d39b27; }
+.campaign-stock-tabs button.is-active { color: #fff; background: #087fca; }
+.campaign-stock-tabs button.is-active > span { color: #087fca; background: #fff; }
+.campaign-stock-tabs button:focus-visible { position: relative; z-index: 1; outline: 2px solid #75caf4; outline-offset: -3px; }
+.campaign-stock-fill { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; border: 1px dashed #c9d8e2; border-radius: 9px; padding: 9px 12px; background: #fff; }
+.campaign-stock-fill input, .campaign-stock-cells input { appearance: textfield; -moz-appearance: textfield; }
+.campaign-stock-fill input::-webkit-inner-spin-button, .campaign-stock-cells input::-webkit-inner-spin-button { margin: 0; -webkit-appearance: none; }
+.campaign-stock-fill label { display: flex; align-items: center; gap: 7px; color: #52626f; font-size: .58rem; }
+.campaign-stock-fill input { box-sizing: border-box; width: 74px; height: 32px; border: 1px solid #cfdbe3; border-radius: 7px; padding: 0 6px; color: #243746; text-align: center; font-size: .62rem; }
+.campaign-stock-fill > div { display: flex; gap: 6px; margin-left: auto; }
+.campaign-stock-fill button { height: 32px; border: 1px solid #b9d7ea; border-radius: 7px; padding: 0 11px; color: #0a6aa8; background: #f2f9fd; cursor: pointer; font-size: .56rem; font-weight: 750; }
+.campaign-stock-fill button:hover { background: #e3f2fb; }
+.campaign-stock-fill small { flex-basis: 100%; color: #a43d32; font-size: .55rem; }
+.campaign-stock-matrix { overflow: hidden; border: 1px solid #dce4e9; border-radius: 10px; background: #fff; }
+.campaign-stock-row { display: grid; grid-template-columns: 148px repeat(var(--stock-columns), minmax(0, 1fr)) 82px; align-items: center; gap: 6px; padding: 7px 12px; border-top: 1px solid #edf1f4; }
+.campaign-stock-row:first-child { border-top: 0; }
+.campaign-stock-cells { display: contents; }
+.campaign-stock-row--groups { padding-bottom: 0; color: #087fca; font-size: .5rem; font-weight: 750; letter-spacing: .05em; text-align: center; text-transform: uppercase; }
+.campaign-stock-row--groups + .campaign-stock-row--head { border-top: 0; }
+.campaign-stock-row--head { color: #73818b; background: #fff; font-size: .55rem; font-weight: 750; text-align: center; }
+.campaign-stock-row--head > span:first-child { text-align: left; }
+.campaign-stock-row .is-group-start { position: relative; }
+.campaign-stock-row .is-group-start::before { content: ""; position: absolute; top: -7px; bottom: -7px; left: -4px; border-left: 1px dashed #c9d8e2; }
+.campaign-stock-color-name { display: grid; gap: 1px; min-width: 0; }
+.campaign-stock-color-name > span { display: flex; align-items: center; gap: 7px; overflow: hidden; color: #2f4252; font-size: .62rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-stock-color-name i { flex: none; width: 15px; height: 15px; border: 1px solid rgba(20, 40, 55, .22); border-radius: 50%; }
+.campaign-stock-color-name button { justify-self: start; border: 0; padding: 0 0 0 22px; color: #087fca; background: none; cursor: pointer; font-size: .5rem; font-weight: 700; }
+.campaign-stock-color-name button:hover { text-decoration: underline; }
+.campaign-stock-cells label > span { display: none; }
+.campaign-stock-cells input { box-sizing: border-box; width: 100%; min-width: 0; height: 34px; border: 1px solid #cfdbe3; border-radius: 7px; padding: 0 4px; color: #243746; background: #fff; text-align: center; font-size: .64rem; font-weight: 650; }
+.campaign-stock-cells label.is-missing input { border-color: #ecd29a; background: #fffaf0; }
+.campaign-stock-cells input::placeholder { color: #c3a75f; }
+.campaign-stock-cells input:focus-visible { border-color: #087fca; outline: 2px solid #75caf4; outline-offset: 1px; background: #fff; }
+.campaign-stock-total { color: #52626f; font-size: .58rem; text-align: right; white-space: nowrap; }
+.campaign-stock-row--foot { color: #687176; background: #f6f9fb; font-size: .56rem; font-weight: 700; text-align: center; }
+.campaign-stock-row--foot > span:first-child { text-align: left; }
+.campaign-stock-row--foot .campaign-stock-total { color: #1f3346; font-size: .62rem; }
 @media (max-width: 760px) {
   .campaign-stock-setup { padding: 12px; }
-  .campaign-stock-color { grid-template-columns: 1fr; gap: 7px; }
-  .campaign-stock-size-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .campaign-stock-head { flex-direction: column; gap: 9px; }
+  .campaign-stock-fill > div { width: 100%; margin-left: 0; }
+  .campaign-stock-fill > div button { flex: 1; }
+  .campaign-stock-matrix { overflow: visible; border: 0; background: transparent; }
+  .campaign-stock-row--groups, .campaign-stock-row--head { display: none; }
+  .campaign-stock-row { grid-template-columns: minmax(0, 1fr) auto; gap: 9px 8px; margin-top: 8px; border: 1px solid #dce4e9; border-radius: 10px; padding: 11px; background: #fff; }
+  .campaign-stock-row:first-child { border-top: 1px solid #dce4e9; }
+  .campaign-stock-cells { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+  .campaign-stock-cells label { display: grid; gap: 3px; }
+  .campaign-stock-cells label > span { display: block; color: #73818b; font-size: .52rem; font-weight: 700; text-align: center; }
+  .campaign-stock-row .is-group-start::before { display: none; }
+  .campaign-stock-total { grid-row: 1; grid-column: 2; }
+  .campaign-stock-row--foot { background: #f6f9fb; }
+  .campaign-stock-row--foot .campaign-stock-cells { display: none; }
 }
 .campaign-size-error .material-symbols-rounded, .campaign-size-summary .material-symbols-rounded { font-size: 16px; }
 

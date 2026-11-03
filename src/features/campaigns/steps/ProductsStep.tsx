@@ -2,6 +2,7 @@ import { campaignSizesInGroup, shirtColors, shirtModels, sizeGroupLabels } from 
 import type { SizeGroup } from '../../../data';
 
 import { colorKey, validHexColor } from ".././editor-model";
+import { CampaignStockMatrix } from "./CampaignStockMatrix";
 
 import type { useCampaignEditor } from '../useCampaignEditor';
 type Props=Pick<ReturnType<typeof useCampaignEditor>, 'isPublic' | 'skuStockLimits' | 'setSkuStockLimits' | 'variantsLocked' | 'selectedModels' | 'commonPrice' | 'oversizedPrice' | 'setCommonPrice' | 'setOversizedPrice' | 'toggleCampaignModel' | 'setProductConfiguration' | 'setColorModel' | 'setSizeModel' | 'productConfiguration' | 'editing' | 'couponEnabled' | 'setCouponEnabled' | 'setFormError' | 'couponCode' | 'setCouponCode' | 'selectedCampaignModels' | 'couponDiscounts' | 'setCouponDiscounts' | 'couponMinimumQuantity' | 'setCouponMinimumQuantity' | 'couponMaximumQuantity' | 'setCouponMaximumQuantity' | 'couponExpires' | 'setCouponExpires' | 'couponLimit' | 'setCouponLimit' | 'colorModel' | 'setColorError' | 'modelColors' | 'campaignColorOptions' | 'toggleCampaignColor' | 'customColorOpen' | 'setCustomColorOpen' | 'customColorName' | 'setCustomColorName' | 'addCustomCampaignColor' | 'customColorHex' | 'setCustomColorHex' | 'removeCustomCampaignColor' | 'sizeModel' | 'setSizeError' | 'modelSizes' | 'toggleSizeGroup' | 'toggleCampaignSize'>;
@@ -90,11 +91,5 @@ export function ProductsStep({isPublic, skuStockLimits, setSkuStockLimits, varia
               })}
               <p className="campaign-size-summary"><span className="material-symbols-rounded" aria-hidden="true">straighten</span><strong>{modelSizes[sizeModel].length}</strong> {modelSizes[sizeModel].length === 1 ? "tamanho liberado" : "tamanhos liberados"} para {sizeModel === "Comum" ? "Padrão" : sizeModel}.</p>
             </fieldset>
-            {isPublic && <fieldset className="campaign-stock-setup"><legend>Estoque público por corte, cor e tamanho</legend><p>Defina o limite de peças de cada combinação. Os pedidos pendentes também reservam unidades; cancelamentos liberam o estoque.</p>
-              {selectedCampaignModels.map((model) => <section className="campaign-stock-model" key={model.code}><h5>{model.name === "Comum" ? "Padrão" : model.name}</h5>
-                {modelColors[model.name].map((color) => <div className="campaign-stock-color" key={`${model.code}-${color}`}><strong>{color}</strong><div className="campaign-stock-size-grid">
-                  {modelSizes[model.name].map((size) => { const key = `${model.code}\u0000${color}\u0000${size}`; return <label key={key}><span>{size}</span><input type="number" min={1} max={1000000} step={1} inputMode="numeric" aria-label={`Estoque ${model.name}, ${color}, tamanho ${size}`} value={skuStockLimits[key] ?? ""} onChange={(event) => setSkuStockLimits((current) => ({ ...current, [key]: event.target.value }))} required /></label>; })}
-                </div></div>)}
-              </section>)}
-            </fieldset>}
+            {isPublic && <CampaignStockMatrix models={selectedCampaignModels} modelColors={modelColors} modelSizes={modelSizes} colorOptions={campaignColorOptions} limits={skuStockLimits} setLimits={setSkuStockLimits} />}
                 </section>); }
