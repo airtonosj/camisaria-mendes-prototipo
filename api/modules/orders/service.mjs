@@ -76,6 +76,27 @@ export async function createOrder({ idempotencyKey, body }) {
       return { ...item, sizeId };
     });
 
+    for (const item of items) {
+      const [stockRows] = await queries.createOrderSkuStockQuery(connection, [item.variantId, item.size]);
+      if (stockRows.length === 0) {
+        if (campaign.is_public) {
+          throw new ApiError(409, "STOCK_NOT_CONFIGURED", "O estoque desta combinação ainda não foi configurado. Fale com o representante da campanha.");
+        }
+        continue;
+      }
+      const [reservedRows] = await queries.createOrderSkuReservedQuery(connection, [item.size, item.variantId]);
+      const limit = Number(stockRows[0].stock_limit);
+      const reserved = Number(reservedRows[0]?.units_reserved ?? 0);
+      if (reserved + item.quantity > limit) {
+        const remaining = Math.max(0, limit - reserved);
+        throw new ApiError(409, remaining === 0 ? "SKU_SOLD_OUT" : "SKU_STOCK_EXCEEDED",
+          remaining === 0
+            ? "Esta combinação de corte, cor e tamanho está esgotada."
+            : `Restam somente ${remaining} peça(s) para esta combinação.`,
+          { remaining });
+      }
+    }
+
     const subtotalCents = items.reduce((total, item) => total + prices.get(item.variantId) * item.quantity, 0);
     const totalUnits = items.reduce((total, item) => total + item.quantity, 0);
     let coupon = null;

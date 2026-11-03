@@ -53,6 +53,8 @@ export function mapCampaign(campaign: ApiCampaign): PrivateCampaign {
   const deadline = new Date(campaign.deadlineAt);
   return {
     code: campaign.code,
+    isPublic: campaign.isPublic === true,
+    skuStocks: campaign.skuStocks ?? [],
     title: campaign.title,
     subtitle: campaign.subtitle ?? "Campanha exclusiva para os alunos da turma",
     art: {
@@ -87,7 +89,7 @@ export async function fetchCampaignFromApi(code: string) {
   return mapCampaign(payload.campaign);
 }
 
-export type PublicCampaignSummary = { code: string; title: string; subtitle: string | null; deadlineAt: string; imageUrl: string | null };
+export type PublicCampaignSummary = { code: string; title: string; subtitle: string | null; deadlineAt: string; imageUrl: string | null; stockConfigured: boolean; soldOut: boolean };
 export type PublicCampaignCatalog = { campaigns: PublicCampaignSummary[]; total: number; page: number; pageSize: number };
 
 export async function fetchPublicCampaigns(page = 1, search = '') {

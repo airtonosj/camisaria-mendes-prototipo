@@ -116,6 +116,13 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
 
   const art = campaign.art;
   const selectedVariantId = campaign.variantIds?.[activeModel]?.[selectedColor.name] ?? 0;
+  const selectedSkuStock = campaign.skuStocks?.find((stock) => stock.modelCode === selectedModel.code && stock.colorName === selectedColor.name && stock.sizeCode === size);
+  const sameSkuInCart = cart.find((item) => item.variantId === selectedVariantId && item.size === size)?.quantity ?? 0;
+  const stockRemainingForSelection = campaign.isPublic
+    ? selectedSkuStock?.remaining === null || selectedSkuStock?.remaining === undefined
+      ? 0 : Math.max(0, selectedSkuStock.remaining - sameSkuInCart)
+    : null;
+  const canAddSelection = !campaign.isPublic || stockRemainingForSelection !== null && stockRemainingForSelection > 0 && quantity <= stockRemainingForSelection;
   const selectedArtwork = artworkForVariant(campaign, selectedVariantId);
   const selectedRealPhotos = campaign.realPhotos?.[selectedColor.name] ?? [];
   const selectedRealVideo = campaign.realVideos?.[selectedColor.name];
@@ -227,6 +234,12 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
 
   function addSelection() {
     const persistedVariantId = selectedVariantId;
+    if (campaign.isPublic && !canAddSelection) {
+      setCartMessage(selectedSkuStock?.stockLimit == null
+        ? "O estoque desta combinação ainda não foi configurado. Fale com o representante da turma."
+        : "Esta combinação de corte, cor e tamanho está esgotada ou a quantidade escolhida excede o estoque restante.");
+      return false;
+    }
     if (!persistedVariantId && !import.meta.env.DEV) {
       setCartMessage("Esta combinação não está disponível. Escolha outra opção ou fale com o representante da turma.");
       return false;
@@ -263,7 +276,19 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
       setCart((current) => current.filter((item) => itemKey(item) !== key));
       return;
     }
-    setCart((current) => current.map((item) => itemKey(item) === key ? { ...item, quantity: Math.min(20, nextQuantity) } : item));
+    const line = cart.find((item) => itemKey(item) === key);
+    const modelCode = shirtModels.find((item) => item.name === line?.modelName)?.code;
+    const skuStock = campaign.isPublic
+      ? campaign.skuStocks?.find((stock) => stock.modelCode === modelCode && stock.colorName === line?.color.name && stock.sizeCode === line?.size)
+      : null;
+    const maximum = campaign.isPublic ? Math.min(20, skuStock?.remaining ?? 0) : 20;
+    if (nextQuantity > maximum) {
+      setCartMessage(skuStock?.remaining === undefined || skuStock.remaining === null
+        ? "O estoque desta combinação ainda não foi configurado. Fale com o representante da turma."
+        : `Restam somente ${maximum} peça(s) desta combinação.`);
+      return;
+    }
+    setCart((current) => current.map((item) => itemKey(item) === key ? { ...item, quantity: nextQuantity } : item));
   }
 
   function syncCouponInAddress(code?: string) {
@@ -382,7 +407,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
         <div className="campaign-shop-header-inner">
           <a className="campaign-back" href="./" aria-label="Voltar ao site"><span className="material-symbols-rounded" aria-hidden="true">arrow_back</span></a>
           <Brand compact />
-          <div className="campaign-private-meta"><span><span className="material-symbols-rounded" aria-hidden="true">lock</span>Campanha privada</span></div>
+          <div className="campaign-private-meta"><span><span className="material-symbols-rounded" aria-hidden="true">{campaign.isPublic ? "public" : "lock"}</span>Campanha {campaign.isPublic ? "pública" : "privada"}</span></div>
         </div>
       </header>
 
@@ -480,7 +505,9 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
               })}
               <SizeGuide model={activeModel} open={showSizeGuide} onClose={() => setShowSizeGuide(false)} />
             </section>
-            <section className="campaign-choice-stage campaign-quantity-stage"><h2>4. Quantidade</h2><div className="campaign-quantity-picker"><button type="button" aria-label="Diminuir quantidade" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>−</button><output aria-live="polite">{quantity}</output><button type="button" aria-label="Aumentar quantidade" onClick={() => setQuantity((value) => Math.min(20, value + 1))}>+</button></div></section>
+            <section className="campaign-choice-stage campaign-quantity-stage"><h2>4. Quantidade</h2><div className="campaign-quantity-picker"><button type="button" aria-label="Diminuir quantidade" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>−</button><output aria-live="polite">{quantity}</output><button type="button" aria-label="Aumentar quantidade" disabled={campaign.isPublic && quantity >= Math.min(20, stockRemainingForSelection ?? 0)} onClick={() => setQuantity((value) => Math.min(20, value + 1))}>+</button></div>
+              {campaign.isPublic && <p className={`campaign-stock-notice${stockRemainingForSelection === 0 ? " is-sold-out" : ""}`} role="status">{selectedSkuStock?.stockLimit == null ? "Estoque desta combinação ainda não configurado." : stockRemainingForSelection === 0 ? "Esgotado para este corte, cor e tamanho." : `Restam ${stockRemainingForSelection} ${stockRemainingForSelection === 1 ? "peça" : "peças"} desta combinação.`}</p>}
+            </section>
             <section className="campaign-choice-stage campaign-coupon-stage" aria-labelledby="campaign-coupon-title">
               <div className="campaign-stage-heading"><h2 id="campaign-coupon-title">5. Cupom de desconto</h2><span>Opcional · 1 por pedido</span></div>
               {appliedCoupon ? <div className="campaign-coupon-applied"><span className="material-symbols-rounded" aria-hidden="true">sell</span><div><strong>{appliedCoupon.code}</strong><small>A partir de {couponMinimumQuantity} {couponMinimumQuantity === 1 ? "peça" : "peças"}{couponMaximumDiscountQuantity ? ` · desconto em até ${couponMaximumDiscountQuantity} peças` : ""} · {appliedCoupon.discounts.map((discount) => `${discount.modelName === "Comum" ? "Padrão" : discount.modelName}: − ${formatCents(discount.discountCents)}`).join(" · ")}{appliedCoupon.expiresAt ? ` · válido até ${new Date(appliedCoupon.expiresAt).toLocaleDateString("pt-BR")}` : ""}</small></div><button type="button" onClick={removeCoupon}>Remover</button></div> : <div className="campaign-coupon-input"><label><span className="sr-only">Código do cupom</span><input value={couponInput} onChange={(event) => { setCouponInput(event.target.value.toUpperCase()); setCouponMessage(""); }} placeholder="Digite seu cupom" autoCapitalize="characters" spellCheck={false} /></label><button type="button" disabled={checkingCoupon} onClick={() => void applyCoupon()}>{checkingCoupon ? "Verificando..." : "Aplicar"}</button></div>}
@@ -488,7 +515,7 @@ export function PrivateCampaignPage({ campaign, resumePayment, initialCouponCode
             </section>
             {cartMessage && <p className={`campaign-order-notice${cartMessage.includes("adicionado") ? "" : " is-error"}`} role="status" aria-live="polite"><span className="material-symbols-rounded" aria-hidden="true">{cartMessage.includes("adicionado") ? "check_circle" : "error"}</span>{cartMessage}</p>}
             <aside className="campaign-order-bar">
-              <div className="campaign-order-actions"><button type="submit">Adicionar</button></div>
+              <div className="campaign-order-actions"><button type="submit" disabled={!canAddSelection}>Adicionar</button></div>
             </aside>
           </form>
         </main>

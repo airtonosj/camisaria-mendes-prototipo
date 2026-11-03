@@ -10,7 +10,7 @@ function CampaignCard({ campaign }: { campaign: PublicCampaignSummary }) {
       {campaign.imageUrl ? <img src={assetUrl(campaign.imageUrl) ?? undefined} alt={`Camiseta da campanha ${campaign.title}`} loading="lazy" decoding="async" /> : <span>Imagem da campanha</span>}
     </a>
     <div className="public-campaign-info">
-      <div><span className="public-campaign-status">Pedidos abertos</span><h3>{campaign.title}</h3>{campaign.subtitle && <p>{campaign.subtitle}</p>}</div>
+      <div><span className={`public-campaign-status${campaign.soldOut ? " is-sold-out" : campaign.stockConfigured ? "" : " is-unconfigured"}`}>{campaign.soldOut ? "Esgotada" : campaign.stockConfigured ? "Pedidos abertos" : "Estoque em configuração"}</span><h3>{campaign.title}</h3>{campaign.subtitle && <p>{campaign.subtitle}</p>}</div>
       <a href={buildRoute(undefined, campaign.code)}>Ver campanha <span aria-hidden="true">→</span></a>
     </div>
   </article>;
@@ -18,7 +18,7 @@ function CampaignCard({ campaign }: { campaign: PublicCampaignSummary }) {
 
 export function PublicCampaignHome() {
   const [items, setItems] = useState<PublicCampaignSummary[]>([]);
-  useEffect(() => { let active = true; fetchPublicCampaigns().then((result) => { if (active) setItems(result.campaigns.slice(0, 2)); }).catch(() => {}); return () => { active = false; }; }, []);
+  useEffect(() => { let active = true; fetchPublicCampaigns().then((result) => { if (active) setItems(result.campaigns.filter((campaign) => !campaign.soldOut).slice(0, 2)); }).catch(() => {}); return () => { active = false; }; }, []);
   if (!items.length) return null;
   return <section className="public-campaign-home" id="campanhas">
     <div className="container"><div className="public-campaign-heading"><div><span className="kicker">Campanhas abertas</span><h2>Encontre a sua turma.<br />Vista essa história.</h2></div><p>Campanhas que estão recebendo pedidos agora. Escolha a sua para ver a camiseta e participar.</p></div>

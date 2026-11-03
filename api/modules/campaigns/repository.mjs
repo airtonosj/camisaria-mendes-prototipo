@@ -79,6 +79,25 @@ export function getCampaignQuery6(executor, values) {
       ORDER BY co.name, ccv.id`, values);
 }
 
+/** Inventory rows are keyed by campaign variant (model + color) and size. */
+export function getCampaignSkuStockQuery(executor, values) {
+  return executor.execute(`SELECT sm.code AS model_code, sm.name AS model_name, co.name AS color_name,
+            cv.id AS variant_id, sz.code AS size_code, cvs.stock_limit,
+            COALESCE(SUM(CASE WHEN o.status = 'active' THEN oi.quantity ELSE 0 END), 0) AS units_reserved
+       FROM campaign_variants cv
+       JOIN shirt_models sm ON sm.id = cv.shirt_model_id
+       JOIN colors co ON co.id = cv.color_id
+       JOIN campaign_model_sizes cms ON cms.campaign_id = cv.campaign_id AND cms.shirt_model_id = cv.shirt_model_id
+       JOIN sizes sz ON sz.id = cms.size_id AND sz.active = TRUE
+       LEFT JOIN campaign_variant_stock cvs ON cvs.campaign_variant_id = cv.id
+          AND cvs.size_code = sz.code
+       LEFT JOIN order_items oi ON oi.campaign_variant_id = cv.id AND oi.size_id = sz.id
+       LEFT JOIN orders o ON o.id = oi.order_id
+      WHERE cv.campaign_id = ? AND cv.active = TRUE
+      GROUP BY sm.code, sm.name, co.name, cv.id, sz.code, cvs.stock_limit
+      ORDER BY sm.sort_order, co.name, sz.sort_order`, values);
+}
+
 /** Uses the caller's connection; the service owns the transaction.
  * @param {import('mysql2/promise').Pool | import('mysql2/promise').PoolConnection} executor
  * @param {unknown[]} values
@@ -104,6 +123,24 @@ export function listPublicCampaigns(executor, { term, limit, offset }) {
   const search = term ? ' AND (c.title LIKE ? OR c.code LIKE ?)' : '';
   const values = term ? [`%${term}%`, `%${term}%`, limit, offset] : [limit, offset];
   return executor.query(`SELECT c.id, c.code, c.title, c.subtitle, c.deadline_at,
+    (SELECT COUNT(*) FROM campaign_variant_stock cvs
+      JOIN campaign_variants cv ON cv.id = cvs.campaign_variant_id AND cv.active = TRUE
+      JOIN campaign_model_sizes cms ON cms.campaign_id = cv.campaign_id AND cms.shirt_model_id = cv.shirt_model_id
+      JOIN sizes sz ON sz.id = cms.size_id AND sz.code = cvs.size_code AND sz.active = TRUE
+     WHERE cv.campaign_id = c.id AND cv.active = TRUE) AS configured_sku_count,
+    (SELECT COUNT(*) FROM campaign_variant_stock cvs
+      JOIN campaign_variants cv ON cv.id = cvs.campaign_variant_id AND cv.active = TRUE
+      JOIN campaign_model_sizes cms ON cms.campaign_id = cv.campaign_id AND cms.shirt_model_id = cv.shirt_model_id
+      JOIN sizes sz ON sz.id = cms.size_id AND sz.code = cvs.size_code AND sz.active = TRUE
+     WHERE cv.campaign_id = c.id
+       AND (SELECT COALESCE(SUM(oi.quantity), 0)
+              FROM order_items oi JOIN orders o ON o.id = oi.order_id AND o.status = 'active'
+             WHERE oi.campaign_variant_id = cv.id AND oi.size_id = sz.id) >= cvs.stock_limit) AS sold_out_sku_count,
+    (SELECT COUNT(*) FROM campaign_variants cv
+      JOIN campaign_model_sizes cms ON cms.campaign_id = cv.campaign_id
+      JOIN sizes sz ON sz.id = cms.size_id AND sz.active = TRUE
+     WHERE cv.campaign_id = c.id AND cv.active = TRUE
+       AND cms.shirt_model_id = cv.shirt_model_id) AS active_sku_count,
     c.real_photos_enabled, c.mockup_enabled, c.art_front_url
     FROM campaigns c
     WHERE c.is_public = TRUE AND c.phase = 'receiving_orders' AND c.deadline_at >= UTC_TIMESTAMP(3)
@@ -160,6 +197,23 @@ export function listCampaignsQuery1(executor, values) {
           GROUP BY campaign_id
        ) order_totals ON order_totals.campaign_id = c.id
       ORDER BY c.created_at DESC`, values);
+}
+
+export function listCampaignSkuStock(executor) {
+  return executor.execute(`SELECT cv.campaign_id, sm.code AS model_code, sm.name AS model_name,
+            co.name AS color_name, sz.code AS size_code, cvs.stock_limit,
+            COALESCE(SUM(CASE WHEN o.status = 'active' THEN oi.quantity ELSE 0 END), 0) AS units_reserved
+       FROM campaign_variants cv
+       JOIN shirt_models sm ON sm.id = cv.shirt_model_id
+       JOIN colors co ON co.id = cv.color_id
+       JOIN campaign_model_sizes cms ON cms.campaign_id = cv.campaign_id AND cms.shirt_model_id = cv.shirt_model_id
+       JOIN sizes sz ON sz.id = cms.size_id AND sz.active = TRUE
+       LEFT JOIN campaign_variant_stock cvs ON cvs.campaign_variant_id = cv.id AND cvs.size_code = sz.code
+       LEFT JOIN order_items oi ON oi.campaign_variant_id = cv.id AND oi.size_id = sz.id
+       LEFT JOIN orders o ON o.id = oi.order_id
+      WHERE cv.active = TRUE
+      GROUP BY cv.campaign_id, sm.code, sm.name, co.name, sz.code, sz.sort_order, cvs.stock_limit
+      ORDER BY cv.campaign_id, sm.sort_order, co.name, sz.sort_order`);
 }
 
 /** Uses the caller's connection; the service owns the transaction.
@@ -458,6 +512,29 @@ export function createCampaignQuery4(executor, values) {
  */
 export function updateCampaignQuery1(executor, values) {
   return executor.execute("SELECT id, phase, is_public, art_front_url, art_back_url, art_render_mode, mockup_enabled, real_photos_enabled, receiver_id FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE", values);
+}
+
+export function campaignSkuIdsQuery(executor, values) {
+  return executor.execute(`SELECT cv.id AS variant_id, sm.code AS model_code, co.name AS color_name,
+            cms.size_id, sz.code AS size_code
+       FROM campaign_variants cv
+       JOIN shirt_models sm ON sm.id = cv.shirt_model_id
+       JOIN colors co ON co.id = cv.color_id
+       JOIN campaign_model_sizes cms ON cms.campaign_id = cv.campaign_id AND cms.shirt_model_id = cv.shirt_model_id
+       JOIN sizes sz ON sz.id = cms.size_id AND sz.active = TRUE
+      WHERE cv.campaign_id = ? AND cv.active = TRUE ORDER BY sm.sort_order, co.name, sz.sort_order`, values);
+}
+
+export function campaignSkuStockLimitQuery(executor, values) {
+  return executor.execute(`SELECT COALESCE(SUM(oi.quantity), 0) AS units_reserved
+       FROM order_items oi JOIN orders o ON o.id = oi.order_id AND o.status = 'active'
+       JOIN sizes sz ON sz.id = oi.size_id AND sz.code = ?
+      WHERE oi.campaign_variant_id = ?`, values);
+}
+
+export function upsertCampaignSkuStock(executor, values) {
+  return executor.execute(`INSERT INTO campaign_variant_stock (campaign_variant_id, size_code, stock_limit)
+       VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE stock_limit = VALUES(stock_limit)`, values);
 }
 
 /** Uses the caller's connection; the service owns the transaction.

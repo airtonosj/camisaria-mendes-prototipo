@@ -145,6 +145,9 @@ export async function getCampaign(code, { includeCoupon = false, includeReceiver
   const [allArtworkRows] = await queries.getCampaignQuery4(pool, [campaign.id]);
   const [realPhotoRows] = await queries.getCampaignQuery5(pool, [campaign.id]);
   const [realVideoRows] = await queries.getCampaignQuery6(pool, [campaign.id]);
+  const [skuStockRows] = campaign.is_public || includeReceiver
+    ? await queries.getCampaignSkuStockQuery(pool, [campaign.id])
+    : [[]];
   const activeCoupon = includeCoupon ? await activeCampaignCoupon(pool, campaign.id) : undefined;
   const receiver = includeReceiver && campaign.receiver_id
     ? campaignReceiverSummary((await findReceiverQuery(pool, [campaign.receiver_id]))[0][0])
@@ -168,6 +171,16 @@ export async function getCampaign(code, { includeCoupon = false, includeReceiver
     subtitle: campaign.subtitle,
     phase: campaign.phase,
     isPublic: Boolean(campaign.is_public),
+    ...((campaign.is_public || includeReceiver) ? { skuStocks: skuStockRows.filter((row) => row.size_code !== null).map((row) => ({
+      modelCode: row.model_code,
+      modelName: row.model_name,
+      colorName: row.color_name,
+      sizeCode: row.size_code,
+      stockLimit: row.stock_limit === null ? null : Number(row.stock_limit),
+      unitsReserved: Number(row.units_reserved),
+      remaining: row.stock_limit === null ? null : Math.max(0, Number(row.stock_limit) - Number(row.units_reserved)),
+      soldOut: row.stock_limit !== null && Number(row.units_reserved) >= Number(row.stock_limit),
+    })) } : {}),
     deadlineAt: campaign.deadline_at,
     deliveryExpectedOn: campaign.delivery_expected_on,
     deliveryNote: campaign.delivery_note,
@@ -248,6 +261,10 @@ export async function publicCampaignCatalog({ page = 1, search = '', limit = 12 
   return { campaigns: rows.map((row) => ({
     code: row.code, title: row.title, subtitle: row.subtitle,
     deadlineAt: row.deadline_at,
+    stockConfigured: Number(row.configured_sku_count) > 0 && Number(row.configured_sku_count) === Number(row.active_sku_count),
+    soldOut: Number(row.configured_sku_count) > 0
+      && Number(row.configured_sku_count) === Number(row.active_sku_count)
+      && Number(row.sold_out_sku_count) === Number(row.active_sku_count),
     imageUrl: (row.real_photos_enabled && firstPhoto.get(row.id))
       || (row.mockup_enabled && (firstArtwork.get(row.id) || row.art_front_url)) || null,
   })), total: Number(count.total), page: safePage, pageSize: safeLimit };
@@ -262,6 +279,7 @@ export async function listCampaigns() {
   const [rows] = await queries.listCampaignsQuery1(pool, []);
   const [couponRows] = await queries.listCampaignsQuery2(pool, []);
   const [priceRows] = await queries.listCampaignPrices(pool);
+  const [skuStockRows] = await queries.listCampaignSkuStock(pool);
   const pricesByCampaign = new Map();
   for (const price of priceRows) {
     const id = Number(price.campaign_id);
@@ -271,6 +289,21 @@ export async function listCampaigns() {
   }
   const couponsByCampaign = new Map();
   const couponHistoryByCampaign = new Map();
+  const skuStocksByCampaign = new Map();
+  for (const row of skuStockRows) {
+    const stocks = skuStocksByCampaign.get(Number(row.campaign_id)) ?? [];
+    stocks.push({
+      modelCode: row.model_code,
+      modelName: row.model_name,
+      colorName: row.color_name,
+      sizeCode: row.size_code,
+      stockLimit: row.stock_limit === null ? null : Number(row.stock_limit),
+      unitsReserved: Number(row.units_reserved),
+      remaining: row.stock_limit === null ? null : Math.max(0, Number(row.stock_limit) - Number(row.units_reserved)),
+      soldOut: row.stock_limit !== null && Number(row.units_reserved) >= Number(row.stock_limit),
+    });
+    skuStocksByCampaign.set(Number(row.campaign_id), stocks);
+  }
   for (const row of couponRows) {
     const campaignId = Number(row.campaign_id);
     const history = couponHistoryByCampaign.get(campaignId) ?? [];
@@ -294,6 +327,7 @@ export async function listCampaigns() {
     subtitle: row.subtitle,
     phase: row.phase,
     isPublic: Boolean(row.is_public),
+    skuStocks: skuStocksByCampaign.get(Number(row.id)) ?? [],
     deadlineAt: row.deadline_at,
     deliveryExpectedOn: row.delivery_expected_on,
     deliveryNote: row.delivery_note,
@@ -354,6 +388,48 @@ export function parseCampaignModels(value) {
     throw new ApiError(422, "VALIDATION_ERROR", "Há cortes repetidos na campanha.");
   }
   return models;
+}
+
+const skuStockKey = (modelCode, colorName, sizeCode) => `${modelCode}\u0000${colorName}\u0000${sizeCode}`;
+
+function parseSkuStock(value, expectedSkus, { required = false } = {}) {
+  if (!Array.isArray(value)) {
+    if (required) throw new ApiError(422, 'SKU_STOCK_REQUIRED', 'Informe o limite de peças para cada corte, cor e tamanho da campanha pública.');
+    return [];
+  }
+  const expected = new Set(expectedSkus.map((sku) => skuStockKey(sku.modelCode, sku.colorName, sku.sizeCode)));
+  const parsed = new Map();
+  for (const item of value) {
+    const modelCode = requireText(item?.modelCode, 'skuStocks.modelCode', 32);
+    const colorName = requireText(item?.colorName, 'skuStocks.colorName', 80);
+    const sizeCode = requireText(item?.sizeCode, 'skuStocks.sizeCode', 8).toUpperCase();
+    const quantity = Number(item?.quantity);
+    const key = skuStockKey(modelCode, colorName, sizeCode);
+    if (!expected.has(key) || parsed.has(key)) {
+      throw new ApiError(422, 'INVALID_SKU_STOCK', 'O estoque deve corresponder às combinações ativas de corte, cor e tamanho, sem repetições.');
+    }
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1000000) {
+      throw new ApiError(422, 'INVALID_SKU_STOCK', `Informe uma quantidade entre 1 e 1.000.000 para ${modelCode}, ${colorName}, ${sizeCode}.`);
+    }
+    parsed.set(key, { modelCode, colorName, sizeCode, quantity });
+  }
+  if (required && (parsed.size !== expected.size || [...expected].some((sku) => !parsed.has(sku)))) {
+    throw new ApiError(422, 'SKU_STOCK_REQUIRED', 'Informe o limite de peças para cada corte, cor e tamanho da campanha pública.');
+  }
+  return [...parsed.values()];
+}
+
+async function saveCampaignSkuStocks(connection, values, skuRows) {
+  const skuIds = new Map(skuRows.map((sku) => [skuStockKey(sku.model_code, sku.color_name, sku.size_code), Number(sku.variant_id)]));
+  for (const { modelCode, colorName, sizeCode, quantity } of values) {
+    const variantId = skuIds.get(skuStockKey(modelCode, colorName, sizeCode));
+    if (!variantId) throw new ApiError(422, 'INVALID_SKU_STOCK', `A combinação ${modelCode}, ${colorName}, ${sizeCode} não está ativa nesta campanha.`);
+    const [reservedRows] = await queries.campaignSkuStockLimitQuery(connection, [sizeCode, variantId]);
+    if (quantity < Number(reservedRows[0]?.units_reserved ?? 0)) {
+      throw new ApiError(409, 'STOCK_BELOW_RESERVED', `O limite para ${modelCode}, ${colorName}, ${sizeCode} não pode ser menor que as peças já reservadas (${Number(reservedRows[0]?.units_reserved ?? 0)}).`);
+    }
+    await queries.upsertCampaignSkuStock(connection, [variantId, sizeCode, quantity]);
+  }
 }
 
 /** Traduz códigos do catálogo em identificadores, recusando qualquer um desconhecido. */
@@ -665,6 +741,8 @@ export async function createCampaign({ staff, body }) {
   if (body.isPublic !== undefined && typeof body.isPublic !== 'boolean') {
     throw new ApiError(422, 'VALIDATION_ERROR', 'Visibilidade inválida.');
   }
+  const expectedSkus = models.flatMap((model) => model.colors.flatMap((color) => model.sizes.map((sizeCode) => ({ modelCode: model.modelCode, colorName: color.name, sizeCode }))));
+  const skuStocks = parseSkuStock(body.skuStocks, expectedSkus, { required: body.isPublic === true });
 
   await withTransaction(async (connection) => {
     const [existing] = await queries.createCampaignQuery1(connection, [code]);
@@ -681,6 +759,8 @@ export async function createCampaign({ staff, body }) {
         await queries.createCampaignQuery4(connection, [campaignResult.insertId, modelIds.get(model.modelCode), sizeIds.get(size)]);
       }
     }
+    const [skuRows] = await queries.campaignSkuIdsQuery(connection, [campaignResult.insertId]);
+    await saveCampaignSkuStocks(connection, skuStocks, skuRows);
     if (artworkConfig) await applyArtworkConfig(connection, campaignResult.insertId, artworkConfig);
     if (body.realPhotos !== undefined) await applyRealPhotos(connection, campaignResult.insertId, body.realPhotos);
     if (body.realVideos !== undefined) await applyRealVideos(connection, campaignResult.insertId, body.realVideos);
@@ -763,6 +843,18 @@ export async function updateCampaign({ body }, code) {
           await ensureCouponFitsCampaignPrices(connection, campaign.id, await couponDiscounts(connection, couponRows[0].id));
         }
       }
+    }
+
+    if (body.isPublic === true && !campaign.is_public && body.skuStocks === undefined) {
+      throw new ApiError(422, 'SKU_STOCK_REQUIRED', 'Configure o estoque por corte, cor e tamanho antes de tornar a campanha pública.');
+    }
+
+    if (body.skuStocks !== undefined) {
+      const [skuRows] = await queries.campaignSkuIdsQuery(connection, [campaign.id]);
+      const expectedSkus = skuRows.map((row) => ({ modelCode: row.model_code, colorName: row.color_name, sizeCode: row.size_code }));
+      const willBePublic = body.isPublic ?? Boolean(campaign.is_public);
+      const stocks = parseSkuStock(body.skuStocks, expectedSkus, { required: willBePublic });
+      await saveCampaignSkuStocks(connection, stocks, skuRows);
     }
 
     if (body.coupon !== undefined) await applyCampaignCoupon(connection, campaign.id, body.coupon);

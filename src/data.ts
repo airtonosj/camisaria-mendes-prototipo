@@ -49,6 +49,8 @@ export type CampaignArt = {
 
 export type PrivateCampaign = {
   code: string;
+  isPublic?: boolean;
+  skuStocks?: Array<{ modelCode: string; modelName: string; colorName: string; sizeCode: string; stockLimit: number | null; unitsReserved: number; remaining: number | null; soldOut: boolean }>;
   title: string;
   subtitle: string;
   art: CampaignArt;

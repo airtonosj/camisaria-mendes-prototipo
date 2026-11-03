@@ -33,6 +33,7 @@ export function usePanelData(): PanelData {
           list.map((campaign) => ({
             code: campaign.code,
             isPublic: campaign.isPublic === true,
+            skuStocks: campaign.skuStocks ?? [],
             title: campaign.title,
             subtitle: campaign.subtitle,
             phase: campaign.phase,

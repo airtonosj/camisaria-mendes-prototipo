@@ -42,6 +42,12 @@
 .public-campaign-info p { margin:5px 0 0; color:#687075; font-size:.7rem; }
 .public-campaign-status { display:inline-flex; align-items:center; gap:7px; color:#52745f; font-size:.62rem; font-weight:750; }
 .public-campaign-status::before { content:""; width:6px; height:6px; border-radius:50%; background:#16895b; }
+.public-campaign-status.is-sold-out { color:#9b4a40; }
+.public-campaign-status.is-sold-out::before { background:#b94d42; }
+.public-campaign-status.is-unconfigured { color:#826a30; }
+.public-campaign-status.is-unconfigured::before { background:#c49c37; }
+.campaign-stock-notice { margin:10px 0 0; color:#52745f; font-size:.68rem; line-height:1.5; }
+.campaign-stock-notice.is-sold-out { color:#9b4a40; }
 .public-campaign-info > a,.public-campaign-all { color:#0077b5; border-bottom:1px solid #0077b5; padding-bottom:4px; font-size:.68rem; font-weight:800; white-space:nowrap; }
 .public-campaign-all { display:table; margin-top:26px; }
 .public-campaign-list { min-height:calc(100vh - 78px); padding-top:30px; padding-bottom:82px; }

@@ -75,12 +75,24 @@ export type ApiCampaignSize = {
   group: "standard" | "baby_look";
 };
 
+export type ApiCampaignSkuStock = {
+  modelCode: string;
+  modelName: string;
+  colorName: string;
+  sizeCode: string;
+  stockLimit: number | null;
+  unitsReserved: number;
+  remaining: number | null;
+  soldOut: boolean;
+};
+
 export type ApiCampaign = {
   code: string;
   isPublic?: boolean;
   title: string;
   subtitle: string | null;
   phase: string;
+  skuStocks?: ApiCampaignSkuStock[];
   deadlineAt: string;
   deliveryExpectedOn?: string | null;
   deliveryNote?: string | null;
@@ -202,6 +214,7 @@ export type ApiAdminCampaign = {
   basePrices?: Array<{ modelName: string; minPriceCents: number; maxPriceCents: number }>;
   code: string;
   isPublic?: boolean;
+  skuStocks?: ApiCampaignSkuStock[];
   title: string;
   subtitle: string | null;
   phase: CampaignPhaseCode;
@@ -295,10 +308,12 @@ export type ApiDeliveryRow = {
 export type CampaignColorPayload = { name: string; hex: string };
 
 export type CampaignModelPayload = { modelCode: string; unitPriceCents: number; colors: CampaignColorPayload[]; sizes: string[] };
+export type CampaignSkuStockPayload = { modelCode: string; colorName: string; sizeCode: string; quantity: number };
 
 export type CreateCampaignPayload = {
   code?: string;
   isPublic?: boolean;
+  skuStocks?: CampaignSkuStockPayload[];
   title: string;
   subtitle?: string;
   deadlineAt: string;
@@ -325,6 +340,7 @@ export type CreateCampaignPayload = {
 export type UpdateCampaignPayload = {
   title?: string;
   isPublic?: boolean;
+  skuStocks?: CampaignSkuStockPayload[];
   subtitle?: string | null;
   deadlineAt?: string;
   deliveryExpectedOn?: string | null;

@@ -11,7 +11,19 @@ export function createOrderQuery1(executor, values) {
  * @param {unknown[]} values
  */
 export function createOrderQuery2(executor, values) {
-  return executor.execute("SELECT id, phase, DATE_FORMAT(delivery_expected_on, '%Y-%m-%d') AS delivery_expected_on, delivery_note FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE", values);
+  return executor.execute("SELECT id, phase, is_public, DATE_FORMAT(delivery_expected_on, '%Y-%m-%d') AS delivery_expected_on, delivery_note FROM campaigns WHERE code = ? LIMIT 1 FOR UPDATE", values);
+}
+
+export function createOrderSkuStockQuery(executor, values) {
+  return executor.execute(`SELECT stock_limit FROM campaign_variant_stock
+      WHERE campaign_variant_id = ? AND size_code = ? LIMIT 1`, values);
+}
+
+export function createOrderSkuReservedQuery(executor, values) {
+  return executor.execute(`SELECT COALESCE(SUM(oi.quantity), 0) AS units_reserved
+       FROM order_items oi JOIN orders o ON o.id = oi.order_id AND o.status = 'active'
+       JOIN sizes sz ON sz.id = oi.size_id AND sz.code = ?
+      WHERE oi.campaign_variant_id = ?`, values);
 }
 
 /** Uses the caller's connection; the service owns the transaction.
