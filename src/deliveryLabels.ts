@@ -3,24 +3,24 @@ import type { ApiDeliveryRow } from './api';
 
 export const deliveryLabelBrand = { instagram: '@camisariamendes', phone: '(98) 98778-0960' };
 
-// Folha A5 retrato com duas etiquetas de 145 × 100 mm, separadas por linha tracejada de corte.
-// Medidas em mm.
+// Folha A5 retrato com duas etiquetas de 136 × 93 mm, separadas por linha tracejada de corte.
+// Margem de 6 mm até a borda do papel, fora da área que as impressoras não alcançam. Medidas em mm.
 const labelHeight = 105;
-const card = { x: 1.5, y: 2.5, width: 145, height: 100, radius: 5 };
-const badge = { x: 86, y: 2, width: 54, height: 10, radius: 3 };
-const logoBox = { x: 9, y: 4.5, width: 8.1, height: 12.5 };
-const left = 8;
-const right = 140;
-const columns = [44.88, 31.68, 26.4, 29.04];
+const card = { x: 6, y: 6, width: 136, height: 93, radius: 5 };
+const badge = { x: 86, y: 5.5, width: 50, height: 9, radius: 3 };
+const logoBox = { x: 12, y: 7.8, width: 7.1, height: 11 };
+const left = 12;
+const right = 136;
+const columns = [42.16, 29.76, 24.8, 27.28];
 const headerHeight = 8.5;
 const rowHeight = 9.5;
 const compactRowHeight = 7.5;
 const cellLineHeight = 4;
 const nameLineHeight = 7.5;
 const lineWidth = .282;
-const footer = { lineY: 94, lineLeft: 22, lineRight: 126, textY: 99.3 };
+const footer = { lineY: 90.5, lineLeft: 24, lineRight: 124, textY: 95.6 };
 // Último ponto em que a tabela pode terminar para "TOTAL" caber acima do rodapé.
-const maxTableEnd = 81;
+const maxTableEnd = 79;
 
 type Row = { cells: string[][]; lines: number; height: number };
 type Label = { order: ApiDeliveryRow; name: string[]; rows: Row[]; total: number; part: string };
@@ -33,7 +33,7 @@ export function selectedDeliveryOrders(allRows: ApiDeliveryRow[], filteredRows: 
 }
 
 function tableTop(nameLines: number) {
-  return 40 + (nameLines - 1) * nameLineHeight;
+  return 36.5 + (nameLines - 1) * nameLineHeight;
 }
 
 function rowsHeight(rows: Row[], base: number) {
@@ -87,17 +87,17 @@ function drawLabel(doc: jsPDF, label: Label, logo: LogoSource, oy: number) {
   doc.addImage(logo, 'PNG', logoBox.x, oy + logoBox.y, logoBox.width, logoBox.height, 'mendes-logo');
 
   doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(25);
-  doc.text('ENTREGA DE CAMISAS', 20, oy + 10.5);
+  doc.text('ENTREGA DE CAMISAS', 21.5, oy + 13);
   doc.setFont('helvetica', 'normal').setFontSize(10).setTextColor(45);
-  doc.text('Camisaria Mendes', 20, oy + 16);
+  doc.text('Camisaria Mendes', 21.5, oy + 18.2);
   doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(90);
-  doc.text(label.order.orderNumber + label.part, badge.x + badge.width / 2, oy + 8.6, { align: 'center' });
+  doc.text(label.order.orderNumber + label.part, badge.x + badge.width / 2, oy + 11.1, { align: 'center' });
 
   doc.setFontSize(18).setTextColor(17);
-  label.name.forEach((line, index) => doc.text(line, left, oy + 26.5 + index * nameLineHeight));
+  label.name.forEach((line, index) => doc.text(line, left, oy + 27.5 + index * nameLineHeight));
   const shift = (label.name.length - 1) * nameLineHeight;
   doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(70);
-  doc.text('Confira os itens abaixo', left, oy + 32 + shift);
+  doc.text('Confira os itens abaixo', left, oy + 32.5 + shift);
 
   const top = oy + tableTop(label.name.length);
   const tableWidth = right - left;
@@ -128,7 +128,7 @@ function drawLabel(doc: jsPDF, label: Label, logo: LogoSource, oy: number) {
   });
 
   doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(32);
-  doc.text(`TOTAL: ${label.total} ${label.total === 1 ? 'peça' : 'peças'}`, left, rowY + 9);
+  doc.text(`TOTAL: ${label.total} ${label.total === 1 ? 'peça' : 'peças'}`, left, rowY + 8);
 
   doc.setDrawColor(215).line(footer.lineLeft, oy + footer.lineY, footer.lineRight, oy + footer.lineY);
   doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(45);
@@ -137,7 +137,7 @@ function drawLabel(doc: jsPDF, label: Label, logo: LogoSource, oy: number) {
 
 function drawCutLine(doc: jsPDF) {
   doc.setLineWidth(lineWidth).setDrawColor(187).setLineDashPattern([1.411, 1.058], 0);
-  doc.line(5, labelHeight, 143, labelHeight);
+  doc.line(8, labelHeight, 140, labelHeight);
   doc.setLineDashPattern([], 0);
 }
 
