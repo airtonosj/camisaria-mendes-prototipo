@@ -10,9 +10,11 @@ export const pool = mysql.createPool({
   namedPlaceholders: false,
 });
 
-export async function withTransaction(work) {
+export async function withTransaction(work, { readCommitted = false } = {}) {
   const connection = await pool.getConnection();
   try {
+    // Applies only to this transaction; pooled connections keep their default.
+    if (readCommitted) await connection.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
     await connection.beginTransaction();
     const result = await work(connection);
     await connection.commit();

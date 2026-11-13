@@ -1,0 +1,11 @@
+[Unit]
+Description=Backup diário da Camisaria Mendes
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=camisaria-backup.service
+
+[Install]
+WantedBy=timers.target

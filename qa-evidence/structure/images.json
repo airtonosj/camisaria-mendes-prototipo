@@ -1,0 +1,114 @@
+[
+  {
+    "source": "campaign-admin-v2.png",
+    "output": "campaign-admin-v2.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 2435465,
+    "afterBytes": 287518
+  },
+  {
+    "source": "campaign-engineering-v2.png",
+    "output": "campaign-engineering-v2.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 2396279,
+    "afterBytes": 281832
+  },
+  {
+    "source": "campaign-law.png",
+    "output": "campaign-law.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 2558810,
+    "afterBytes": 319696
+  },
+  {
+    "source": "campaign-nursing-v2.png",
+    "output": "campaign-nursing-v2.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 2436920,
+    "afterBytes": 279534
+  },
+  {
+    "source": "logo-mendes.png",
+    "output": "logo-mendes.webp",
+    "width": 472,
+    "height": 472,
+    "beforeBytes": 100708,
+    "afterBytes": 9102
+  },
+  {
+    "source": "shirt-babylook.png",
+    "output": "shirt-babylook.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 1125418,
+    "afterBytes": 83594
+  },
+  {
+    "source": "shirt-common.png",
+    "output": "shirt-common.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 884209,
+    "afterBytes": 27562
+  },
+  {
+    "source": "shirt-common-back.png",
+    "output": "shirt-common-back.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 1071691,
+    "afterBytes": 61324
+  },
+  {
+    "source": "shirt-oversized.png",
+    "output": "shirt-oversized.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 1168887,
+    "afterBytes": 44320
+  },
+  {
+    "source": "shirt-oversized-back.png",
+    "output": "shirt-oversized-back.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 1268919,
+    "afterBytes": 80836
+  },
+  {
+    "source": "mockups/standard-front-v1.png",
+    "output": "mockups/standard-front-v1.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 975802,
+    "afterBytes": 35512
+  },
+  {
+    "source": "mockups/standard-back-v1.png",
+    "output": "mockups/standard-back-v1.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 1115572,
+    "afterBytes": 55670
+  },
+  {
+    "source": "mockups/oversized-front-v1.png",
+    "output": "mockups/oversized-front-v1.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 1316223,
+    "afterBytes": 81728
+  },
+  {
+    "source": "mockups/oversized-back-v1.png",
+    "output": "mockups/oversized-back-v1.webp",
+    "width": 1254,
+    "height": 1254,
+    "beforeBytes": 1214826,
+    "afterBytes": 64682
+  }
+]

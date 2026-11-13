@@ -1,10 +1,15 @@
-import { FormEvent, useState } from "react";
-import { trackOrderInApi } from "../api";
-import { buildRoute } from "../App";
-import { privateCampaigns, shirtModels } from "../data";
+import { FormEvent, useEffect, useState } from "react";
+import { ApiRequestError, assetUrl, createInfinitePayCheckout, requestInfinitePayReconciliation, trackOrderInApi } from "../api";
+import { buildRoute } from '../navigation';
+import { shirtModels } from "../data";
+import type { CampaignArtMode, VariantArtwork } from "../data";
+import { CampaignDeliveryInfo } from "./CampaignDeliveryInfo";
 import { Brand } from "./Brand";
+import { ContactInput } from './ContactInput';
+import { ShirtMockupPreview } from "./ShirtMockupPreview";
+import { paymentMethodLabel } from "../payment";
 
-type DemoOrderStatus = "pending" | "confirmed" | "failed" | "ready" | "delivered";
+type DemoOrderStatus = "pending" | "confirmed" | "production" | "failed" | "ready" | "delivered" | "cancelled";
 
 type DemoOrder = {
   number: string;
@@ -14,14 +19,31 @@ type DemoOrder = {
   statusLabel: string;
   statusIcon: string;
   paymentLabel: string;
+  cancellationReason?: string | null;
   campaignCode?: string;
   campaignTitle?: string;
   representative?: string;
+  deliveryExpectedOn?: string | null;
+  deliveryNote?: string | null;
+  deliveryForecastAtPurchase?: { expectedOn: string | null; note: string | null } | null;
   modelName?: string;
   colorName?: string;
   size?: string;
   quantity?: number;
+  items?: Array<{
+    modelName: string;
+    colorName: string;
+    colorHex: string;
+    size: string;
+    quantity: number;
+    unitPriceCents: number;
+    lineTotalCents: number;
+    artwork?: VariantArtwork;
+  }>;
   totalCents?: number;
+  artFront?: string | null;
+  artBack?: string | null;
+  artMode?: CampaignArtMode;
 };
 
 const demoPhone = "98999990000";
@@ -71,11 +93,21 @@ const demoOrders: Record<string, DemoOrder> = {
     statusIcon: "task_alt",
     paymentLabel: "Pix · Confirmado",
   },
+  "CM-2026-0152": {
+    number: "CM-2026-0152",
+    status: "cancelled",
+    headline: "Este pedido foi cancelado.",
+    description: "Ele continua disponível para consulta, mas não seguirá para produção.",
+    statusLabel: "Pedido cancelado",
+    statusIcon: "cancel",
+    paymentLabel: "Pagamento não confirmado",
+    cancellationReason: "Pedido duplicado informado pelo cliente.",
+  },
 };
 
 const timeline = [
   { icon: "check", title: "Pedido criado", description: "Dados e camiseta registrados." },
-  { icon: "hourglass_top", title: "Confirmação do pagamento", description: "Aguardando o retorno do provedor." },
+  { icon: "hourglass_top", title: "Confirmação do pagamento", description: "Aguardando a conferência da camisaria." },
   { icon: "inventory_2", title: "Em produção", description: "Começa após a confirmação." },
   { icon: "redeem", title: "Pronto para retirada", description: "O representante recebe os pedidos." },
   { icon: "task_alt", title: "Entregue", description: "Pedido finalizado." },
@@ -90,8 +122,10 @@ function onlyDigits(value: string) {
 }
 
 function timelineClass(status: DemoOrderStatus, index: number) {
+  if (status === "cancelled") return index === 0 ? "is-complete" : index === 1 ? "is-failed" : "";
   if (status === "pending") return index === 0 ? "is-complete" : index === 1 ? "is-current" : "";
-  if (status === "confirmed") return index < 2 ? "is-complete" : index === 2 ? "is-current" : "";
+  if (status === "confirmed") return index < 1 ? "is-complete" : index === 1 ? "is-current" : "";
+  if (status === "production") return index < 2 ? "is-complete" : index === 2 ? "is-current" : "";
   if (status === "ready") return index < 3 ? "is-complete" : index === 3 ? "is-current" : "";
   if (status === "delivered") return index < 4 ? "is-complete" : index === 4 ? "is-current" : "";
   return index === 0 ? "is-complete" : index === 1 ? "is-failed" : "";
@@ -105,8 +139,35 @@ export function OrderTrackingPage() {
   const [error, setError] = useState("");
   const [searching, setSearching] = useState(false);
   const [orderCopied, setOrderCopied] = useState(false);
-  const campaign = privateCampaigns["MENDES-ENG-26"];
-  const shirt = shirtModels[0];
+  const [paymentReturnMessage, setPaymentReturnMessage] = useState("");
+  const [retryingPayment, setRetryingPayment] = useState(false);
+
+  useEffect(() => {
+    const returnedOrder = params.get("order_nsu");
+    const transactionNsu = params.get("transaction_nsu");
+    const invoiceSlug = params.get("slug");
+    if (!returnedOrder || !transactionNsu || !invoiceSlug) return;
+    setOrderNumber(returnedOrder);
+    setPaymentReturnMessage("Pagamento recebido pela InfinitePay. Estamos confirmando a transação com segurança.");
+    requestInfinitePayReconciliation({
+      orderNsu: returnedOrder,
+      transactionNsu,
+      invoiceSlug,
+      receiptUrl: params.get("receipt_url") ?? undefined,
+      captureMethod: params.get("capture_method") ?? undefined,
+    }).catch(() => {
+      setPaymentReturnMessage("Seu pedido continua salvo. A confirmação automática seguirá pelo servidor da InfinitePay.");
+    }).finally(() => {
+      const cleanUrl = new URL(window.location.href);
+      for (const key of ["order_nsu", "transaction_nsu", "slug", "receipt_url", "capture_method"]) {
+        cleanUrl.searchParams.delete(key);
+      }
+      cleanUrl.searchParams.set("pedido", returnedOrder);
+      window.history.replaceState({}, "", cleanUrl);
+    });
+  // Os parâmetros do retorno são consumidos uma única vez ao abrir a página.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function findOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -114,13 +175,14 @@ export function OrderTrackingPage() {
     setSearching(true);
     try {
       const persisted = await trackOrderInApi(normalizedNumber, phone);
-      const item = persisted.items[0];
       const copyByStatus = {
         pending: ["Seu pedido está em análise.", "Acompanhe cada etapa até a retirada com o representante.", "Aguardando confirmação", "hourglass_top"],
-        confirmed: ["Pagamento confirmado!", "Seu pedido já foi liberado e está seguindo para produção.", "Pagamento confirmado", "verified"],
+        confirmed: ["Pagamento confirmado!", "Seu pedido está confirmado e aguarda o avanço da campanha para produção.", "Pagamento confirmado", "verified"],
+        production: ["Seu pedido está em produção.", "A campanha avançou e sua camiseta está sendo produzida.", "Em produção", "precision_manufacturing"],
         failed: ["O pagamento não foi aprovado.", "Seu pedido continua salvo e você pode tentar novamente com segurança.", "Pagamento não aprovado", "error"],
         ready: ["Seu pedido está pronto para retirada.", "Leve o número do pedido e procure o representante da sua turma.", "Pronto para retirada", "redeem"],
         delivered: ["Pedido entregue!", "A retirada foi registrada e este pedido está finalizado.", "Entregue", "task_alt"],
+        cancelled: ["Este pedido foi cancelado.", "Ele continua disponível para consulta, mas não seguirá para produção.", "Pedido cancelado", "cancel"],
       } as const;
       const copy = copyByStatus[persisted.status];
       setOrder({
@@ -130,24 +192,57 @@ export function OrderTrackingPage() {
         description: copy[1],
         statusLabel: copy[2],
         statusIcon: copy[3],
-        paymentLabel: persisted.paymentStatus === "paid" ? "Pagamento confirmado" : "Aguardando confirmação",
+        paymentLabel: persisted.paymentStatus === "paid"
+          ? `${paymentMethodLabel(persisted.paymentMethod)} · Pagamento confirmado`
+          : persisted.paymentStatus === "refunded" || persisted.paymentStatus === "partially_refunded"
+            ? `${paymentMethodLabel(persisted.paymentMethod)} · Pagamento reembolsado`
+            : persisted.paymentStatus === "failed"
+              ? "Pagamento não confirmado"
+              : "Aguardando confirmação",
+        cancellationReason: persisted.cancellationReason,
         campaignCode: persisted.campaign.code,
         campaignTitle: persisted.campaign.title,
         representative: persisted.campaign.representativeName,
-        modelName: item?.modelName,
-        colorName: item?.color.name,
-        size: item?.size,
-        quantity: item?.quantity,
+        deliveryExpectedOn: persisted.campaign.deliveryExpectedOn,
+        deliveryNote: persisted.campaign.deliveryNote,
+        deliveryForecastAtPurchase: persisted.deliveryForecastAtPurchase,
+        items: persisted.items.map((item) => ({
+          modelName: item.modelName,
+          colorName: item.color.name,
+          colorHex: item.color.hex,
+          size: item.size,
+          quantity: item.quantity,
+          unitPriceCents: item.unitPriceCents,
+          lineTotalCents: item.lineTotalCents,
+          artwork: {
+            front: item.artwork.front ? { ...item.artwork.front, url: assetUrl(item.artwork.front.url) ?? item.artwork.front.url } : null,
+            back: item.artwork.back ? { ...item.artwork.back, url: assetUrl(item.artwork.back.url) ?? item.artwork.back.url } : null,
+          },
+        })),
         totalCents: persisted.totalCents,
+        artFront: assetUrl(persisted.campaign.artFrontUrl),
+        artBack: assetUrl(persisted.campaign.artBackUrl),
+        artMode: persisted.campaign.artRenderMode,
       });
       setError("");
       setOrderCopied(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch {
-      const matchedOrder = demoOrders[normalizedNumber];
+    } catch (lookupError) {
+      // Os pedidos fictícios existem só em desenvolvimento. No site publicado, um erro
+      // do servidor precisa aparecer como erro — nunca como um pedido que não existe.
+      const matchedOrder = import.meta.env.DEV ? demoOrders[normalizedNumber] : undefined;
       if (!matchedOrder || onlyDigits(phone) !== demoPhone) {
         setOrder(null);
-        setError("Não encontramos esse pedido. Confira o número e o WhatsApp informado na compra.");
+        // Um WhatsApp com dígitos a mais ou DDD inexistente não é "pedido não encontrado":
+        // a API já diz o que corrigir, e essa frase precisa chegar ao cliente.
+        const apiError = lookupError instanceof ApiRequestError ? lookupError : null;
+        setError(
+          apiError?.code === "API_UNAVAILABLE"
+            ? "Não foi possível falar com o servidor agora. Tente novamente em alguns instantes."
+            : apiError?.status === 422
+              ? apiError.message
+              : "Não encontramos esse pedido. Confira o número e o WhatsApp informado na compra.",
+        );
         return;
       }
       setError("");
@@ -176,8 +271,26 @@ export function OrderTrackingPage() {
     }
   }
 
+  async function retryPayment() {
+    if (!order) return;
+    setRetryingPayment(true);
+    setError("");
+    try {
+      const checkout = await createInfinitePayCheckout(order.number, phone);
+      window.location.assign(checkout.url);
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : "Não foi possível abrir o checkout agora.");
+    } finally {
+      setRetryingPayment(false);
+    }
+  }
+
   const headingIcon = order?.status === "confirmed"
     ? "verified"
+    : order?.status === "production"
+      ? "precision_manufacturing"
+    : order?.status === "cancelled"
+      ? "cancel"
     : order?.status === "failed"
       ? "error"
       : order?.status === "ready"
@@ -187,15 +300,28 @@ export function OrderTrackingPage() {
           : order
             ? "schedule"
             : "search";
-  const displayedRepresentative = order?.representative ?? campaign.representative;
-  const displayedCampaignTitle = order?.campaignTitle ?? campaign.title;
-  const displayedCampaignCode = order?.campaignCode ?? campaign.code;
-  const displayedShirt = shirtModels.find((item) => item.name === order?.modelName) ?? shirt;
-  const displayedModel = order?.modelName ?? "Comum";
-  const displayedColor = order?.colorName ? ` · ${order.colorName}` : "";
-  const displayedSize = order?.size ?? "M";
+  // Reservas neutras: quando o pedido não traz o dado, a tela usa a foto de catálogo
+  // e um traço, em vez de repetir números de uma campanha de demonstração.
+  const displayedRepresentative = order?.representative ?? "o representante da turma";
+  const displayedCampaignTitle = order?.campaignTitle ?? "Campanha da turma";
+  const trackedArt = { front: order?.artFront ?? shirtModels[0].image, back: order?.artBack ?? null };
+  const trackedCampaignArt = { ...trackedArt, mode: order?.artMode ?? "legacy_mockup" } as const;
+  const displayedModel = order?.modelName ?? "—";
+  const displayedSize = order?.size ?? "—";
   const displayedQuantity = order?.quantity ?? 1;
-  const displayedTotal = ((order?.totalCents ?? 5990) / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const displayedItems = order?.items?.length ? order.items : [{
+    modelName: displayedModel,
+    colorName: order?.colorName ?? "",
+    colorHex: "#777f83",
+    size: displayedSize,
+    quantity: displayedQuantity,
+    unitPriceCents: order?.totalCents ? Math.round(order.totalCents / displayedQuantity) : 0,
+    lineTotalCents: order?.totalCents ?? 0,
+  }];
+  const displayedUnits = displayedItems.reduce((total, item) => total + item.quantity, 0);
+  const displayedTotal = order?.totalCents === undefined
+    ? "—"
+    : (order.totalCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   return (
     <div className="tracking-page">
@@ -222,11 +348,12 @@ export function OrderTrackingPage() {
 
         {!order ? (
           <form className="tracking-form" onSubmit={findOrder}>
+            {paymentReturnMessage && <p className="tracking-order-notice"><span className="material-symbols-rounded" aria-hidden="true">verified_user</span>{paymentReturnMessage}</p>}
             <label htmlFor="tracking-order">Número do pedido</label>
             <input
               id="tracking-order"
               name="order"
-              placeholder="Ex.: CM-2026-0147"
+              placeholder="Ex.: CM-2026-A1B2C3D4"
               value={orderNumber}
               onChange={(event) => { setOrderNumber(event.target.value); setError(""); }}
               autoComplete="off"
@@ -234,28 +361,19 @@ export function OrderTrackingPage() {
             />
 
             <label htmlFor="tracking-phone">WhatsApp usado na compra</label>
-            <input
-              id="tracking-phone"
-              name="phone"
-              type="tel"
-              inputMode="tel"
-              placeholder="(98) 99999-0000"
-              value={phone}
-              onChange={(event) => { setPhone(event.target.value); setError(""); }}
-              autoComplete="tel"
-              minLength={10}
-              required
-            />
+            <ContactInput id="tracking-phone" name="phone" kind="phone" placeholder="(98) 99999-0000" value={phone} onChange={value => { setPhone(value); setError(''); }} />
 
             {error && <p className="tracking-error" role="alert"><span className="material-symbols-rounded" aria-hidden="true">error</span>{error}</p>}
             <button type="submit" disabled={searching}>{searching ? "Consultando..." : "Consultar pedido"}<span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span></button>
             <p className="tracking-privacy"><span className="material-symbols-rounded" aria-hidden="true">lock</span>Seus dados são usados somente para localizar o pedido.</p>
-            <div className="tracking-demo">
-              <strong>Pedidos de teste</strong>
-              <span>0147 aguardando · 0148 confirmado · 0149 não aprovado</span>
-              <span>0150 pronto · 0151 entregue</span>
-              <small>Use o WhatsApp (98) 99999-0000.</small>
-            </div>
+            {import.meta.env.DEV && (
+              <div className="tracking-demo">
+                <strong>Pedidos de teste (só em desenvolvimento)</strong>
+                <span>0147 aguardando · 0148 confirmado · 0149 não aprovado</span>
+                <span>0150 pronto · 0151 entregue · 0152 cancelado</span>
+                <small>Use o WhatsApp (98) 99999-0000.</small>
+              </div>
+            )}
           </form>
         ) : (
           <div className={`tracking-result tracking-result--${order.status}`}>
@@ -266,6 +384,13 @@ export function OrderTrackingPage() {
 
             {order.status === "failed" && (
               <p className="tracking-payment-alert"><span className="material-symbols-rounded" aria-hidden="true">info</span>O pedido foi preservado. Nenhum valor confirmado será cobrado duas vezes.</p>
+            )}
+
+            {order.status === "cancelled" && (
+              <p className="tracking-order-notice is-cancelled">
+                <span className="material-symbols-rounded" aria-hidden="true">cancel</span>
+                <span><strong>Motivo:</strong> {order.cancellationReason || "Cancelamento registrado pela camisaria."}</span>
+              </p>
             )}
 
             {order.status === "ready" && (
@@ -286,21 +411,33 @@ export function OrderTrackingPage() {
                 </header>
 
                 <div className="received-product-row">
-                  <div className="received-shirt-pair" aria-label="Camiseta vista de frente e costas">
-                    <img src={displayedShirt.image} alt={`Camiseta ${displayedModel} — frente`} />
-                    <img src={displayedShirt.backImage} alt={`Camiseta ${displayedModel} — costas`} />
+                  <div className={`campaign-art-thumbs ${displayedItems.length === 1 ? "is-single" : ""}`} aria-label="Camisas do pedido">
+                    {displayedItems.map((item, index) => {
+                      const model = shirtModels.find((candidate) => candidate.name === item.modelName) ?? shirtModels[0];
+                      const artwork = item.artwork;
+                      const side = artwork?.front ? "front" : artwork?.back ? "back" : "front";
+                      return <ShirtMockupPreview key={`${item.modelName}-${item.colorName}-${item.size}-${index}`} model={model.name} color={{ name: item.colorName, hex: item.colorHex }} art={trackedCampaignArt} artwork={artwork} side={side} label={`${displayedCampaignTitle} — ${item.modelName}, ${item.colorName}`} compact />;
+                    })}
                   </div>
                   <div className="received-product-copy">
-                    <strong>{displayedModel}{displayedColor} · {displayedSize}</strong>
-                    <span>{displayedQuantity} {displayedQuantity === 1 ? "unidade" : "unidades"} · Arte fixa frente e costas</span>
+                    <div className="tracking-item-list">
+                      {displayedItems.map((item, index) => (
+                        <article key={`${item.modelName}-${item.colorName}-${item.size}-${index}`}>
+                          <i style={{ backgroundColor: item.colorHex }} />
+                          <div><strong>{item.modelName}{item.colorName ? ` · ${item.colorName}` : ""} · {item.size}</strong><span>{item.quantity} {item.quantity === 1 ? "unidade" : "unidades"}</span></div>
+                          <b>{(item.lineTotalCents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</b>
+                        </article>
+                      ))}
+                    </div>
                     <dl>
                       <div><dt>Pagamento</dt><dd>{order.paymentLabel}</dd></div>
+                      <div><dt>Peças</dt><dd>{displayedUnits}</dd></div>
                       <div><dt>Total</dt><dd>{displayedTotal}</dd></div>
                     </dl>
                   </div>
                 </div>
 
-                <p className="received-pickup"><span className="material-symbols-rounded" aria-hidden="true">person</span>Retirada com <strong>{displayedRepresentative}</strong></p>
+                <CampaignDeliveryInfo representative={displayedRepresentative} expectedOn={order.deliveryExpectedOn} note={order.deliveryNote} previous={order.deliveryForecastAtPurchase} />
               </section>
 
               <aside className="received-next-steps tracking-timeline" aria-labelledby="tracking-status-title">
@@ -308,18 +445,26 @@ export function OrderTrackingPage() {
                 <ol>
                   {timeline.map((item, index) => {
                     const itemClass = timelineClass(order.status, index);
-                    const paidOrder = order.status === "confirmed" || order.status === "ready" || order.status === "delivered";
-                    const icon = order.status === "failed" && index === 1
+                    const paidOrder = order.status === "confirmed" || order.status === "production" || order.status === "ready" || order.status === "delivered";
+                    const cancelledStep = order.status === "cancelled" && index === 1;
+                    const icon = cancelledStep
+                      ? "cancel"
+                      : order.status === "failed" && index === 1
                       ? "error"
                       : paidOrder && index === 1
                         ? "check"
                         : item.icon;
-                    const description = order.status === "failed" && index === 1
+                    const title = cancelledStep ? "Pedido cancelado" : item.title;
+                    const description = cancelledStep
+                      ? (order.cancellationReason || "Cancelamento registrado pela camisaria.")
+                      : order.status === "failed" && index === 1
                       ? "A transação não foi confirmada."
                       : paidOrder && index === 1
                         ? "Pagamento validado com segurança."
                       : order.status === "confirmed" && index === 2
-                          ? "Seu pedido foi liberado para produção."
+                          ? "Aguardando a campanha entrar em produção."
+                          : order.status === "production" && index === 2
+                            ? "Sua camiseta está sendo produzida."
                           : (order.status === "ready" || order.status === "delivered") && index === 2
                             ? "Produção concluída."
                             : order.status === "ready" && index === 3
@@ -329,7 +474,7 @@ export function OrderTrackingPage() {
                                 : order.status === "delivered" && index === 4
                                   ? "Pedido entregue ao aluno."
                           : item.description;
-                    return <li className={itemClass} key={item.title}><span className="material-symbols-rounded" aria-hidden="true">{icon}</span><div><strong>{item.title}</strong><small>{description}</small></div></li>;
+                    return <li className={itemClass} key={item.title}><span className="material-symbols-rounded" aria-hidden="true">{icon}</span><div><strong>{title}</strong><small>{description}</small></div></li>;
                   })}
                 </ol>
                 <p className="received-production-note"><span className="material-symbols-rounded" aria-hidden="true">lock</span>Somente pedidos confirmados seguem para produção.</p>
@@ -337,7 +482,7 @@ export function OrderTrackingPage() {
             </div>
 
             <div className="tracking-actions">
-              {order.status === "failed" && <a className="is-primary" href={buildRoute(undefined, displayedCampaignCode, undefined, order.number)}>Tentar pagamento novamente</a>}
+              {order.status === "failed" && <button className="is-primary" type="button" onClick={retryPayment} disabled={retryingPayment}>{retryingPayment ? "Abrindo checkout..." : "Tentar pagamento novamente"}</button>}
               {order.status === "ready" && <button className="is-primary" type="button" onClick={copyOrderNumber}>Copiar número para retirada<span className="material-symbols-rounded" aria-hidden="true">content_copy</span></button>}
               <button className={order.status === "failed" || order.status === "ready" ? "is-secondary" : ""} type="button" onClick={resetSearch}>Consultar outro pedido</button>
               <a href={buildRoute()}>Voltar ao site</a>

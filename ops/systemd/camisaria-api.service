@@ -1,0 +1,26 @@
+[Unit]
+Description=API da Camisaria Mendes
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=camisaria
+Group=camisaria
+WorkingDirectory=/var/www/camisaria/current
+EnvironmentFile=/etc/camisaria-mendes/api.env
+ExecStart=/usr/bin/node api/server.mjs
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=30
+TimeoutStopSec=20
+KillSignal=SIGTERM
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/camisaria-mendes/uploads
+
+[Install]
+WantedBy=multi-user.target
